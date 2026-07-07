@@ -193,7 +193,10 @@ Dependencias se materializan en `pyproject.toml` en la **Fase 1 (Scaffold)**.
 ```
 Avisador v2/
 ├─ README.md                  # este archivo (documento vivo)
-├─ AGENTS.md                  # guía rápida para LLMs (a crear en Fase 0)
+├─ AGENTS.md                  # chuleta ejecutable para LLMs
+├─ memoria/                   # docs de sesión y arquitectura
+│  ├─ handoff.md              # estado actual + próximo paso
+│  └─ arquitectura.md         # snapshot del diseño (diagrama, flujo, stack)
 ├─ pyproject.toml
 ├─ .env.example
 ├─ docker-compose.yml
@@ -301,7 +304,7 @@ Avisador v2/
 
 ## Estado actual
 
-**Última actualización**: Sesión 2 (decisiones + Fase 1 scaffold completada)
+**Última actualización**: Sesión 3 (directorio `memoria/` creado)
 
 - [x] Visión y captura de requisitos del usuario (Sesión 1).
 - [x] Investigación de fuentes de datos y **verificación en vivo de ESPN Core API** (Sesión 2).
@@ -325,14 +328,15 @@ Avisador v2/
 
 Si eres un LLM o persona que retoma el proyecto:
 
-1. **Lee este README completo** antes de tocar nada.
-2. Revisa [Estado actual](#estado-actual) y los checkboxes de cada fase.
-3. Comprueba la [Bitácora de sesiones](#bitácora-de-sesiones) más reciente para ver dónde se quedó.
+1. **Lee `memoria/handoff.md`** — es el punto de entrada más rápido: estado, último avance, próximo paso.
+2. **Lee este README completo** para entender decisiones, fases y contexto.
+3. Revisa [Estado actual](#estado-actual) y los checkboxes de cada fase.
 4. **Pregunta al usuario** por las [Decisiones pendientes](#decisiones-pendientes) si alguna queda abierta y bloquea tu siguiente paso.
-5. Trabaja de sliced: completa un sub-item de la fase activa, ejecuta tests/lint, y actualiza este README:
+5. Trabaja de sliced: completa un sub-item de la fase activa, ejecuta tests/lint, y actualiza:
    - Marca el checkbox completado.
    - Añade entrada en la [Bitácora](#bitácora-de-sesiones) con fecha, qué se hizo y qué queda.
-6. **No asumas** decisiones ya tomadas (tabla Decisiones); si necesitas cambiar una, añade decisión nueva (`D9`, `D10`...) con justificación, **no edites** la histórica.
+   - Actualiza `memoria/handoff.md` con el nuevo estado.
+6. **No asumas** decisiones ya tomadas (tabla Decisiones); si necesitas cambiar una, añade decisión nueva (`D24`, `D25`...) con justificación, **no edites** la histórica.
 7. Mantén el README conciso y accionable; evita bloques de texto largo sin propósito.
 
 ---
@@ -360,7 +364,17 @@ Si eres un LLM o persona que retoma el proyecto:
 - Creación de este README como documento vivo (D8).
 - **Pendiente para próxima sesión**: confirmar Fase 1 y arrancar trabajo.
 
-### Sesión 2 — _Decisiones de diseño + Fase 1 scaffold completada_
+### Sesión 3 — _Handoff y directorio memoria_
+
+- Clonado el repo desde `https://github.com/theni55/DespertarME.git` en `C:\Users\javier.romero\Personal\DespertarME`.
+- Creado directorio `memoria/` con:
+  - `arquitectura.md` — snapshot del diseño (diagrama, flujo, entidades, stack, decisiones).
+  - `handoff.md` — estado actual de la sesión, próximo paso, notas de entorno, comandos quick-start.
+- Actualizado `AGENTS.md`: nuevas reglas de lectura (handoff → README → arquitectura) y obligación de actualizar `handoff.md` al final de cada sesión.
+- Actualizado `README.md`: añadido `memoria/` a estructura de carpetas y `handoff.md` como punto de entrada en "Cómo continuar".
+- **Pendiente para próxima sesión**: Fase 0 — Providers ESPN + tests.
+
+
 - **Verificación en vivo de APIs**: ESPN `site.api.espn.com` devolvía 404; ESPN `sports.core.api.espn.com/v2` funciona con datos reales (UFC 329, 14 combates, statuses). TheSportsDB sin tarjeta útil. ufcstats.com no conecta desde este entorno.
 - Nuevas decisiones **D9–D23**:
   - Fuente de datos: ESPN Core API única (D9-D14). TheSportsDB y scraping fuera del MVP (D10-D12).
