@@ -1,0 +1,12 @@
+# Normaliza finales de línea para scripts multiplataforma.
+* text=auto
+
+# El hook debe ir siempre con LF o /bin/sh falla en Linux/Mac.
+.githooks/pre-commit text eol=lf
+*.sh text eol=lf
+
+# Scripts Python en LF (consistencia).
+*.py text eol=lf
+
+# PowerShell en CRLF (nativo Windows).
+*.ps1 text eol=crlf
