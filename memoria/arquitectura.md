@@ -1,7 +1,9 @@
-# Arquitectura — Avisador de alertas deportivas
+# Arquitectura
 
-Extraído del README (fuente de verdad). Este archivo es un snapshot rápido para
-entender el diseño sin releer el README completo. Si hay conflicto, gana el README.
+> Snapshot del diseño: diagrama de componentes, flujo de alerta, entidades y stack.
+
+Snapshot rápido para entender el diseño sin releer todos los módulos. El detalle
+de decisiones vive en `decisiones.md`; las fuentes de datos en `fuentes-datos.md`.
 
 ---
 
@@ -95,41 +97,8 @@ entender el diseño sin releer el README completo. Si hay conflicto, gana el REA
 
 ---
 
-## Proveedores de datos
+## Ver también
 
-| Deporte | Fuente | Auth | ¿Estado en vivo? | Fase |
-|---------|--------|------|------------------|------|
-| MMA — UFC | ESPN Core API `sports.core.api.espn.com/v2/sports/mma/leagues/ufc/` | No | Sí (state + clock + period) | MVP (Fase 0) |
-| MMA — Bellator/PFL | TheSportsDB (D12) | API key gratuita | Limitado | Fase 4 |
-| Boxeo | Por decidir | — | — | Fase 4 |
-| Tenis ATP/WTA | Scraping flashscore/tennistemple (D6) | No | Parcial | Fase 4 |
-
----
-
-## Resumen de decisiones (D1–D23)
-
-| # | Tema | Decisión |
-|---|------|----------|
-| D1 | Stack | Python + FastAPI + APScheduler + asyncio |
-| D2 | Persistencia | Postgres + Redis |
-| D3 | Providers | Pluggables por deporte (interfaz `Provider`) |
-| D4 | MMA fuente | ESPN UFC (no-oficial) |
-| D5 | MMA/Boxeo secundario | TheSportsDB |
-| D6 | Tenis | Scraping |
-| D7 | Notificaciones | `VoiceNotifier` como interfaz plug-in |
-| D8 | Documentación | README como documento vivo |
-| D9 | ESPN endpoint | ESPN Core API como única fuente UFC (sin auth) |
-| D10 | TheSportsDB/UFC | Excluido del MVP |
-| D11 | Scraping UFC | Fuera del MVP |
-| D12 | TheSportsDB futuro | Bellator/PFL cuando se amplíe |
-| D13 | Endpoints ESPN | `/events`, `/events/{id}`, `/events/{id}/competitions/{cId}/status` |
-| D14 | Coste polling | ~2 req/suscripción/poll |
-| D15 | Cadencia | 60/10/5 s adaptativa por estado |
-| D16 | Idempotencia | Redis TTL 7200 s + UNIQUE constraint BD |
-| D17 | Reintentos | 3 intentos 1/5/30 s backoff exponencial |
-| D18 | Buffer | 5 min inter-combates |
-| D19 | Zona horaria | UTC interno, tz usuario configurable |
-| D20 | Fallos ESPN | Backoff+jitter+circuit breaker |
-| D21 | Web admin | Jinja2 + HTMX monolítico |
-| D22 | Postgres | docker-compose |
-| D23 | Proveedor SIM | Twilio (Fase 5) |
+- **Proveedores de datos** (ESPN, TheSportsDB, scraping) → `fuentes-datos.md`
+- **Decisiones de diseño D1–D23** → `decisiones.md`
+- **Roadmap por fases** → `fases.md`
