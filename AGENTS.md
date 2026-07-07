@@ -3,10 +3,28 @@
 **Antes de empezar a trabajar**, lee en este orden:
 
 1. `memoria/handoff.md` — estado actual, qué se hizo en la última sesión, próximo paso.
-2. `README.md` — fuente de verdad del proyecto (decisiones, fases, bitácora).
-3. `memoria/arquitectura.md` — snapshot del diseño (diagrama, flujo, entidades, stack).
+2. `README.md` — contexto de la aplicación (qué resuelve, para quién).
+3. `memoria/` — documentación viva del proyecto (índice abajo).
 
 Este archivo (`AGENTS.md`) es la chuleta ejecutable: comandos, prerequisitos, reglas.
+
+## Índice de memoria/
+
+> Generado automáticamente por `scripts/gen_memoria_index.py`. **No editar a mano**
+> entre los marcadores: el hook `pre-commit` lo regenera en cada commit.
+
+<!-- MEMORIA-INDEX:START -->
+| Documento | Descripción |
+|-----------|-------------|
+| [Handoff](memoria/handoff.md) | Punto de entrada de cada sesión: estado actual, último avance y próximo paso. Actualízalo al final de cada sesión. |
+| [Contexto de la aplicación](memoria/contexto.md) | Visión del producto, caso de uso y alcance del avisador de alertas deportivas. |
+| [Arquitectura](memoria/arquitectura.md) | Snapshot del diseño: diagrama de componentes, flujo de alerta, entidades y stack. |
+| [Decisiones tomadas](memoria/decisiones.md) | Registro histórico de decisiones de diseño (D1–D23) y decisiones pendientes. No editar las históricas; añadir nuevas con justificación. |
+| [Fuentes de datos (investigación)](memoria/fuentes-datos.md) | Fuentes por deporte, hallazgos verificados de ESPN Core API y tareas de validación pendientes. |
+| [Fases de implementación](memoria/fases.md) | Roadmap por fases con checkboxes. Marca los sub-items al completarlos y refleja el avance en handoff.md. |
+| [Convenciones del proyecto](memoria/convenciones.md) | Reglas de código, commits, testing y estilo que todo continuador debe respetar. |
+| [Bitácora de sesiones](memoria/bitacora.md) | Registro cronológico de cada sesión de trabajo: qué se hizo y qué quedó pendiente. |
+<!-- MEMORIA-INDEX:END -->
 
 ## Prerequisitos
 
@@ -51,6 +69,9 @@ alembic upgrade head
 | Aplicar migraciones | `alembic upgrade head` |
 | Bajar migración | `alembic downgrade -1` |
 | Smoke ESPN (Fase 0) | `python scripts/probe_espn.py` |
+| Regenerar índice memoria | `python scripts/gen_memoria_index.py` |
+| Verificar índice (CI/hook) | `python scripts/gen_memoria_index.py --check` |
+| Activar hooks git | `pwsh scripts/setup-hooks.ps1` |
 | Logs Postgres | `docker compose logs -f postgres` |
 | Logs Redis | `docker compose logs -f redis` |
 | Parar infra | `docker compose down` |
@@ -64,16 +85,42 @@ alembic upgrade head
 
 ## Estructura de carpetas
 
-Ver sección "Estructura de carpetas prevista" del README.
+```
+DespertarME/
+├─ README.md              # contexto de la aplicación (qué + por qué)
+├─ AGENTS.md              # esta chuleta (comandos + índice de memoria/)
+├─ memoria/               # documentación viva (ver índice arriba)
+├─ scripts/               # utilidades (índice de memoria, hooks, probe ESPN)
+├─ .githooks/             # hooks git versionados (pre-commit)
+├─ pyproject.toml · .env.example · docker-compose.yml · Dockerfile
+├─ alembic/               # migraciones
+├─ src/app/               # código (main, config, db, providers, engine, notifiers, api, web)
+└─ tests/                 # pytest + fixtures
+```
+
+## Memoria viva y hooks
+
+La documentación de proyecto vive en `memoria/` (índice arriba). Reglas:
+
+- **Cada `memoria/*.md`** empieza con un `# Título` y una línea `> descripción`
+  (usada por el generador del índice).
+- **El índice de arriba se autogenera**: no lo edites a mano. Corre
+  `python scripts/gen_memoria_index.py` o deja que el hook lo haga.
+- **Hook `pre-commit`** (`.githooks/pre-commit`), se activa con
+  `pwsh scripts/setup-hooks.ps1` (una vez por clon). En cada commit:
+  1. Regenera el índice de `memoria/` en `AGENTS.md` y lo re-stagea.
+  2. Si detecta **cambios significativos** (en `src/`, `alembic/`, `pyproject.toml`,
+     `docker-compose.yml`) sin tocar `memoria/handoff.md`, **aborta el commit**
+     con un aviso. Salta el aviso puntualmente con `git commit --no-verify`.
 
 ## Reglas al continuar el trabajo
 
 1. Lee `memoria/handoff.md` primero para saber dónde se quedó y qué sigue.
-2. Lee el README completo (estado actual + decisiones + bitácora).
-3. **No modifiques** decisiones ya tomadas (D1-D23...). Si necesitas cambiar
-   una, añade una nueva decisión `D{n}` con justificación.
-4. Marca los checkboxes al completar sub-items de una fase.
-5. Añade entrada en la bitácora del README al final de cada sesión.
+2. Lee el README (contexto) y los módulos de `memoria/` relevantes.
+3. **No modifiques** decisiones ya tomadas en `memoria/decisiones.md` (D1-D23...).
+   Si necesitas cambiar una, añade una nueva `D{n}` con justificación.
+4. Marca los checkboxes en `memoria/fases.md` al completar sub-items.
+5. Añade entrada en `memoria/bitacora.md` al final de cada sesión.
 6. Actualiza `memoria/handoff.md` con el nuevo estado al final de cada sesión.
 7. Código en inglés, docs y comentarios en español.
 8. Type hints obligatorios. Solo comentarios "por qué" no-trivial.

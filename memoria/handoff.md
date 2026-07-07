@@ -1,21 +1,20 @@
-# Handoff — Sesión 3
+# Handoff
 
-> **Actualizar al final de cada sesión.** Este archivo es el punto de entrada para
-> cualquier LLM o persona que retome el proyecto. Complementa al README (fuente de
-> verdad) con el estado operativo actual.
-
----
+> Punto de entrada de cada sesión: estado actual, último avance y próximo paso. Actualízalo al final de cada sesión.
 
 ## Última sesión
 
-**Fecha:** 2026-07-07
+**Fecha:** 2026-07-07 · **Sesión 3**
 
 **Qué se hizo:**
-- Clonado el repo en `C:\Users\javier.romero\Personal\DespertarME`.
-- Creado directorio `memoria/` con `arquitectura.md` (snapshot de diseño) y este `handoff.md`.
-- Actualizados `AGENTS.md` y `README.md` para referenciar `memoria/`.
+- Modularizada la documentación en `memoria/` (contexto, arquitectura, decisiones,
+  fuentes-datos, fases, convenciones, bitácora, handoff).
+- README simplificado a solo el contexto de la aplicación.
+- Índice de `memoria/` auto-generado en `AGENTS.md` vía `scripts/gen_memoria_index.py`.
+- Hook `pre-commit` que regenera el índice y avisa si hay cambios significativos
+  sin actualizar este `handoff.md`.
 
-**Commits:** _pendiente de commit_
+**Commits/ramas:** rama `dev` en `theni55/DespertarME`.
 
 ---
 
@@ -31,58 +30,40 @@
 | Fase 4 — Boxeo/Tenis reales | Pendiente (fuera del MVP) |
 | Fase 5 — VoiceNotifier real (Twilio) | Pendiente (fuera del MVP) |
 
+Detalle de checkboxes en `fases.md`.
+
 ---
 
-## Próximo paso
+## Próximo paso — Fase 0 (Providers ESPN + tests)
 
-**Fase 0 — Providers ESPN + tests:**
-
-1. Crear interfaz `Provider` (`src/app/providers/base.py`):
-   - `list_upcoming_events`, `get_event_card`, `get_competition_status`
-2. Implementar `espn_ufc.py` con httpx async + backoff + circuit breaker (D20).
-3. Grabar fixtures JSON en `tests/fixtures/espn_ufc/`:
-   - `event_list.json`, `event_600059148.json`, `competition_status_pre.json`,
-     `competition_status_in.json`, `competition_status_post.json`
-4. Tests unitarios con `respx` en `tests/test_espn_ufc.py`.
+1. Interfaz `Provider` (`src/app/providers/base.py`):
+   `list_upcoming_events`, `get_event_card`, `get_competition_status`.
+2. `espn_ufc.py` con httpx async + backoff + circuit breaker (D20).
+3. Fixtures JSON en `tests/fixtures/espn_ufc/`.
+4. Tests con `respx` en `tests/test_espn_ufc.py`.
 5. Script `scripts/probe_espn.py` (smoke manual).
 
 ---
 
 ## Notas de entorno
 
-- **Python**: 3.12.10 en `C:\Users\pacor\AppData\Local\Programs\Python\Python312\`
-- **venv**: `.venv` ya creado. Activar: `.\.venv\Scripts\Activate.ps1`
-- **Docker Desktop**: instalado pero puede requerir reinicio de Windows para
-  arrancar el daemon. No es bloqueante para Fase 0 (solo tests unitarios con
-  respx, sin BD/Redis).
-- **Postgres + Redis**: no arrancados aún. `docker compose up -d` + `alembic
-  upgrade head` pendientes para Fase 2b+.
+- **Python**: 3.12.10. venv en `.venv` → activar `.\.venv\Scripts\Activate.ps1`.
+- **Docker Desktop**: instalado; puede requerir reinicio de Windows. No bloqueante
+  para Fase 0 (tests con respx, sin BD/Redis).
+- **Postgres + Redis**: no arrancados aún (`docker compose up -d` + `alembic
+  upgrade head` para Fase 2b+).
 - **FastAPI**: `uvicorn app.main:app --reload` funciona sin BD/Redis.
-  `/health` responde `{"status":"ok","env":"development"}`.
+- **Hooks git**: activar una vez con `pwsh scripts/setup-hooks.ps1` (o
+  `git config core.hooksPath .githooks`).
 
 ---
 
 ## Comandos quick-start
 
 ```powershell
-# Activar venv
-.\.venv\Scripts\Activate.ps1
-
-# Servidor dev
-uvicorn app.main:app --reload
-
-# Tests
-pytest -v
-
-# Lint + formato
-ruff check src tests
-black --check src tests
-mypy src/app
-
-# Infraestructura (cuando Docker esté listo)
-docker compose up -d
-alembic upgrade head
-
-# Smoke ESPN (Fase 0)
-python scripts/probe_espn.py
+.\.venv\Scripts\Activate.ps1     # activar venv
+uvicorn app.main:app --reload     # servidor dev
+pytest -v                          # tests
+ruff check src tests               # lint
+python scripts/gen_memoria_index.py  # regenerar índice en AGENTS.md
 ```
