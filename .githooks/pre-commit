@@ -1,0 +1,42 @@
+#!/bin/sh
+# Hook pre-commit: mantiene la memoria del proyecto al día.
+#   1. Regenera el índice de memoria/ en AGENTS.md y lo re-stagea.
+#   2. Avisa (y aborta) si hay cambios significativos sin actualizar handoff.md.
+# Saltar puntualmente con:  git commit --no-verify
+
+set -e
+
+# --- localizar interprete de Python ---------------------------------------
+PY=""
+for candidate in python python3; do
+    if command -v "$candidate" >/dev/null 2>&1; then
+        PY="$candidate"
+        break
+    fi
+done
+
+# --- 1. regenerar indice de memoria ---------------------------------------
+if [ -n "$PY" ] && [ -f scripts/gen_memoria_index.py ]; then
+    "$PY" scripts/gen_memoria_index.py || true
+    git add AGENTS.md
+else
+    echo "pre-commit: aviso, no se pudo regenerar el indice (Python no encontrado)." >&2
+fi
+
+# --- 2. recordatorio de handoff en cambios significativos ------------------
+staged=$(git diff --cached --name-only)
+
+significant=$(printf "%s\n" "$staged" | grep -E '^(src/|alembic/|pyproject\.toml|docker-compose\.yml|Dockerfile)' || true)
+handoff_touched=$(printf "%s\n" "$staged" | grep -E '^memoria/handoff\.md$' || true)
+
+if [ -n "$significant" ] && [ -z "$handoff_touched" ]; then
+    echo "" >&2
+    echo "pre-commit: cambios significativos detectados sin actualizar memoria/handoff.md:" >&2
+    printf "%s\n" "$significant" | sed 's/^/    - /' >&2
+    echo "" >&2
+    echo "Actualiza 'memoria/handoff.md' (estado + proximo paso) y 'memoria/bitacora.md'." >&2
+    echo "Si es intencionado, repite con:  git commit --no-verify" >&2
+    exit 1
+fi
+
+exit 0
