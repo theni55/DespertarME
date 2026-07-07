@@ -1,7 +1,12 @@
 # Guía para LLMs y continuadores
 
-Léete también `README.md` — es la **fuente de verdad** del proyecto. Este archivo
-es solo una chuleta ejecutable.
+**Antes de empezar a trabajar**, lee en este orden:
+
+1. `memoria/handoff.md` — estado actual, qué se hizo en la última sesión, próximo paso.
+2. `README.md` — fuente de verdad del proyecto (decisiones, fases, bitácora).
+3. `memoria/arquitectura.md` — snapshot del diseño (diagrama, flujo, entidades, stack).
+
+Este archivo (`AGENTS.md`) es la chuleta ejecutable: comandos, prerequisitos, reglas.
 
 ## Prerequisitos
 
@@ -63,13 +68,15 @@ Ver sección "Estructura de carpetas prevista" del README.
 
 ## Reglas al continuar el trabajo
 
-1. Lee el README completo primero (estado actual + bitácora).
-2.**No modifiques** decisiones ya tomadas (D1-D23...). Si necesitas cambiar
+1. Lee `memoria/handoff.md` primero para saber dónde se quedó y qué sigue.
+2. Lee el README completo (estado actual + decisiones + bitácora).
+3. **No modifiques** decisiones ya tomadas (D1-D23...). Si necesitas cambiar
    una, añade una nueva decisión `D{n}` con justificación.
-3. Marca los checkboxes al completar sub-items de una fase.
-4. Añade entrada en la bitácora del README al final de cada sesión.
-5. Código en inglés, docs y comentarios en español.
-6. Type hints obligatorios. Solo comentarios "por qué" no-trivial.
-7. Antes de cada commit pasa: `ruff check`, `black --check`, `pytest`.
-8. Si necesidades de red te bloquean (API no accesible, sin Python/Docker),
-   pregunta al usuario antes de inventar o saltarte pasos.
+4. Marca los checkboxes al completar sub-items de una fase.
+5. Añade entrada en la bitácora del README al final de cada sesión.
+6. Actualiza `memoria/handoff.md` con el nuevo estado al final de cada sesión.
+7. Código en inglés, docs y comentarios en español.
+8. Type hints obligatorios. Solo comentarios "por qué" no-trivial.
+9. Antes de cada commit pasa: `ruff check`, `black --check`, `pytest`.
+10. Si necesidades de red te bloquean (API no accesible, sin Python/Docker),
+    pregunta al usuario antes de inventar o saltarte pasos.
