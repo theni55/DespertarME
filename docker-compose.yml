@@ -1,0 +1,61 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-avisador}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      POSTGRES_DB: ${POSTGRES_DB:-avisador}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-avisador} -d ${POSTGRES_DB:-avisador}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - avisador_net
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - avisador_net
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-avisador}:${POSTGRES_PASSWORD:-changeme}@postgres:5432/${POSTGRES_DB:-avisador}
+      REDIS_URL: redis://redis:6379/0
+      ESPN_BASE_URL: ${ESPN_BASE_URL:-https://sports.core.api.espn.com/v2}
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    networks:
+      - avisador_net
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  avisador_net:
+    driver: bridge
