@@ -128,9 +128,12 @@ src/app/
 ├─ api/                 # Fase 3: REST
 │  ├─ schemas.py        # pydantic request/response DTOs
 │  └─ routes/           # auth, users, subscriptions, alert_log
-└─ web/                 # Fase 3: admin web
-   ├─ admin.py          # router Jinja2 + HTMX
+└─ web/                 # Fase 3: admin + usuario
+   ├─ admin.py          # router /admin/* (Jinja2 + HTMX)
+   ├─ user.py           # router /app/* (vista funcional de usuario)
    └─ templates/        # base, login, dashboard, users, alerts
+                       # + user_register, user_login, user_dashboard,
+                       #   event_list, event_detail, my_alerts
 ```
 
 ---
