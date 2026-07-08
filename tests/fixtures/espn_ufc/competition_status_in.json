@@ -1,0 +1,16 @@
+{
+  "$ref": "http://sports.core.api.espn.com/v2/sports/mma/leagues/ufc/events/600059148/competitions/401883599/status?lang=en&region=us",
+  "clock": 120.0,
+  "displayClock": "2:00",
+  "period": 2,
+  "type": {
+    "id": "2",
+    "name": "STATUS_IN_PROGRESS",
+    "state": "in",
+    "completed": false,
+    "description": "In Progress",
+    "detail": "Round 2 - 2:00",
+    "shortDetail": "R2 - 2:00"
+  },
+  "result": {}
+}

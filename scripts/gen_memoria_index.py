@@ -92,8 +92,11 @@ def main() -> int:
         return 0
 
     if args.check:
-        print("El índice de memoria/ está desactualizado. Ejecuta "
-              "`python scripts/gen_memoria_index.py`.", file=sys.stderr)
+        print(
+            "El índice de memoria/ está desactualizado. Ejecuta "
+            "`python scripts/gen_memoria_index.py`.",
+            file=sys.stderr,
+        )
         return 1
 
     AGENTS_FILE.write_text(new_text, encoding="utf-8", newline="\n")

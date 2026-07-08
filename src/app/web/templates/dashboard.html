@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — DespertarME Admin{% endblock %}
+{% block body %}
+<nav class="nav">
+    <h1>DespertarME Admin</h1>
+    <a href="/admin">Dashboard</a>
+    <a href="/admin/users">Usuarios</a>
+    <a href="/admin/alerts">Alertas</a>
+    <a href="/docs">API Docs</a>
+    <form method="post" action="/admin/logout" style="max-width: none; margin: 0; background: none; padding: 0;">
+        <button type="submit" style="width: auto; background: var(--danger);">Salir</button>
+    </form>
+</nav>
+
+<div class="grid">
+    <div class="card">
+        <h3>Usuarios</h3>
+        <div class="num">{{ users_count }}</div>
+    </div>
+    <div class="card">
+        <h3>Suscripciones activas</h3>
+        <div class="num">{{ subs_count }}</div>
+    </div>
+    <div class="card">
+        <h3>Alertas disparadas</h3>
+        <div class="num">{{ alerts_count }}</div>
+    </div>
+</div>
+
+<h2 style="margin-bottom: 12px;">Alertas recientes</h2>
+<table>
+    <thead>
+        <tr>
+            <th>Hora</th>
+            <th>Usuario</th>
+            <th>Combate</th>
+            <th>Estado</th>
+            <th>Intentos</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for a in recent_alerts %}
+        <tr>
+            <td>{{ a.fired_at.strftime("%Y-%m-%d %H:%M") }}</td>
+            <td>{{ a.user_id[:8] }}</td>
+            <td>{{ a.bout_id }}</td>
+            <td><span class="badge {{ a.status }}">{{ a.status }}</span></td>
+            <td>{{ a.attempts }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" style="text-align: center; color: #666;">Sin alertas todavía</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

@@ -1,0 +1,16 @@
+{
+  "$ref": "http://sports.core.api.espn.com/v2/sports/mma/leagues/ufc/events/600059148/competitions/401883599/status?lang=en&region=us",
+  "clock": 0.0,
+  "displayClock": "-",
+  "period": 0,
+  "type": {
+    "id": "1",
+    "name": "STATUS_SCHEDULED",
+    "state": "pre",
+    "completed": false,
+    "description": "Scheduled",
+    "detail": "Sat, July 11th at 5:00 PM EDT",
+    "shortDetail": "7/11 - 5:00 PM EDT"
+  },
+  "result": {}
+}
