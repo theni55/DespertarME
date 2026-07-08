@@ -34,6 +34,12 @@ nueva (`D24`, `D25`...) con su justificación y referencia a la que sustituye.
 | D21 | Web admin: **Jinja2 + HTMX** monolítico en el mismo proceso FastAPI. | Sesión 2 | Simple, un solo servicio, curva baja. |
 | D22 | Postgres local: **docker-compose**. | Sesión 2 | Reproducible, sin instalar en host, fácil para cualquiera que retome el proyecto. |
 | D23 | Proveedor SIM (Fase 5): **Twilio** por defecto. | Sesión 2 | API más madura, capa free inicial, doc excelente, TTS estándar. |
+| D24 | Resiliencia ESPN implementada con **`tenacity`** (backoff exponencial con jitter, cap 60 s) + **circuit breaker manual** (N fallos consecutivos → open). | Sesión 4 | Cumple D20 sin reinventar backoff; tenacity es estándar y async. El CB es ~20 líneas (counter + `open_until` con `clock` inyectable para tests). |
+| D25 | Entidades de dominio (`domain/entities.py`) como **dataclasses frozen** separadas de los DTOs de parsing (`providers/models.py`). | Sesión 4 | Las entidades de negocio (Bout, Card, EstimatedStart) son inmutables y sin I/O; los DTOs de ESPN son pydantic con alias. Mapeo explícito en el Poller. |
+| D26 | BD de desarrollo con **SQLite + aiosqlite** (no Postgres) mientras Docker Desktop no arranca. | Sesión 4 | Permite avanzar Fase 2b y 3 sin Docker. `DATABASE_URL=sqlite+aiosqlite:///./avisador.db` en `.env`. Para producción basta cambiar la URL a `asyncpg`. Dep dev `aiosqlite` añadida. |
+| D27 | Redis de tests con **`fakeredis`** en vez de Redis real. | Sesión 4 | Tests sin Docker. Dep dev `fakeredis` añadida. `AlertState` acepta un `redis.Redis` inyectado, compatible con fakeredis. |
+| D28 | Auth con **passlib[bcrypt] + PyJWT** (no OAuth2 completo). | Sesión 4 | MVP suficiente: registro/login con JWT, `get_current_user`/`require_admin` como dependencias FastAPI. bcrypt pinned `<5.0` por incompatibilidad con passlib 1.7.4. |
+| D29 | Poller sin APScheduler todavía: `Poller.poll_once()` es invocable manualmente. | Sesión 4 | La cadencia adaptativa (D15) ya está en `EstimatorEngine.poll_interval()`. Falta el scheduler real (APScheduler) que llame a `poll_once` periódicamente; se añade al integrar el proceso completo. Tests E2E validan el flujo sin scheduler. |
 
 ## Decisiones pendientes
 

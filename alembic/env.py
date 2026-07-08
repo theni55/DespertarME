@@ -22,10 +22,11 @@ config.set_main_option("sqlalchemy.url", settings.database_url)
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Import models here when they exist so autogenerate detects them.
-# from app.db import models  # noqa: F401
+# Import models here so autogenerate detects them.
+from app.db.models import Base
+import app.db.models  # noqa: F401  (register all models)
 
-target_metadata = None
+target_metadata = Base.metadata
 
 
 def run_migrations_offline() -> None:

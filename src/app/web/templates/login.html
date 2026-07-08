@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Login — DespertarME Admin{% endblock %}
+{% block body %}
+<form method="post" action="/admin/login">
+    <h2 style="margin-bottom: 20px;">DespertarME Admin</h2>
+    <input type="email" name="email" placeholder="email" required>
+    <input type="password" name="password" placeholder="contraseña" required>
+    <button type="submit">Entrar</button>
+    {% if detail %}<p class="error">{{ detail }}</p>{% endif %}
+</form>
+{% endblock %}

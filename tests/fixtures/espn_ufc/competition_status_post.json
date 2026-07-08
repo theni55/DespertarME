@@ -1,0 +1,21 @@
+{
+  "$ref": "http://sports.core.api.espn.com/v2/sports/mma/leagues/ufc/events/600059148/competitions/401883599/status?lang=en&region=us",
+  "clock": 0.0,
+  "displayClock": "0:00",
+  "period": 3,
+  "type": {
+    "id": "3",
+    "name": "STATUS_FINAL",
+    "state": "post",
+    "completed": true,
+    "description": "Final",
+    "detail": "Def. - Round 3",
+    "shortDetail": "Def. R3"
+  },
+  "result": {
+    "winner": {
+      "id": "4686725",
+      "$ref": "http://sports.core.api.espn.com/v2/sports/mma/athletes/4686725?lang=en&region=us"
+    }
+  }
+}
