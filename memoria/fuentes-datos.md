@@ -36,4 +36,13 @@
 ## Tareas pendientes de validación (Fase 0)
 
 - [ ] Confirmar campos de atleta (`/athletes/{id}`) para mostrar nombre en alerta.
-- [ ] Validar behavior del status endpoint durante combate en vivo (cuando `state:"in"`).
+  **Estado (Sesión 4):** los `competitors[].athlete` del event detail vienen como
+  `$ref` (URL), no inline. Habrá que seguir la ref para obtener el nombre del
+  atleta cuando se necesite en el mensaje de la llamada (Fase 5) o en el admin
+  web (Fase 3). No bloquea Fase 2.
+- [x] Validar behavior del status endpoint durante combate en vivo (cuando `state:"in"`).
+  **Estado (Sesión 4):** no había eventos `in`/`post` en la temporada 2026 al
+  grabar (solo UFC 329 con 14 combates en `pre`). Se sintetizaron fixtures
+  `competition_status_in.json` y `_post.json` a partir del esquema verificado
+  del `pre` real. Validación en vivo queda pendiente para cuando haya un
+  combate en curso.

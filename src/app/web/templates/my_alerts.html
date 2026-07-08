@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Mis alertas — DespertarME{% endblock %}
+{% block body %}
+<nav class="nav">
+    <h1>DespertarME</h1>
+    <a href="/app">Inicio</a>
+    <a href="/app/events">Eventos</a>
+    <a href="/app/my-alerts">Mis alertas</a>
+    <span style="margin-left: auto; color: #888; font-size: 0.85rem;">{{ user.email }}</span>
+    <form method="post" action="/app/logout" style="max-width: none; margin: 0; background: none; padding: 0;">
+        <button type="submit" style="width: auto; background: var(--danger);">Salir</button>
+    </form>
+</nav>
+
+<h2 style="margin-bottom: 16px;">Historial de alertas</h2>
+
+{% if alerts %}
+<table>
+    <thead>
+        <tr>
+            <th>Fecha y hora</th>
+            <th>Evento</th>
+            <th>Combate</th>
+            <th>Estado</th>
+            <th>Intentos</th>
+            <th>Respuesta</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for a in alerts %}
+        <tr>
+            <td>{{ a.fired_at.strftime("%Y-%m-%d %H:%M:%S") }}</td>
+            <td>{{ a.subscription_id[:8] }}…</td>
+            <td>{{ a.bout_id }}</td>
+            <td><span class="badge {{ a.status }}">{{ a.status }}</span></td>
+            <td>{{ a.attempts }}</td>
+            <td style="font-size: 0.8rem; color: #888;">{{ a.notifier_response or "—" }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<div class="card">
+    <p style="color: #888;">No tienes alertas todavía.</p>
+    <p style="margin-top: 12px;"><a href="/app/events">Explora eventos</a> para crear una alerta.</p>
+</div>
+{% endif %}
+{% endblock %}

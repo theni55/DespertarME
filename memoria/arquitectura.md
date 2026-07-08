@@ -62,7 +62,7 @@ de decisiones vive en `decisiones.md`; las fuentes de datos en `fuentes-datos.md
 
 - **Idempotencia** (D16): clave Redis `alert:{sub_id}:{bout_id}:{status}` TTL 7200 s + UNIQUE `(subscription_id, bout_id, fired_at_hour)` en `alert_log`.
 - **Reintentos de llamada** (D17): 3 intentos con backoff exponencial 1 s / 5 s / 30 s. Si todos fallan → log `error` + marcar `failed`.
-- **Resiliencia ESPN** (D20): backoff exponencial con jitter (1→60 s cap) + circuit breaker (5 fallos/min → 60 s open).
+- **Resiliencia ESPN** (D20, D24): backoff exponencial con jitter (1→60 s cap) vía `tenacity` + circuit breaker manual (5 fallos consecutivos → 60 s open). El CB acepta un `clock` inyectable para tests.
 
 ---
 
@@ -85,20 +85,58 @@ de decisiones vive en `decisiones.md`; las fuentes de datos en `fuentes-datos.md
 |------|-----------|---------|
 | Lenguaje | Python | 3.12+ |
 | Framework | FastAPI (async) | última |
-| Scheduler | APScheduler | 3.x |
+| Scheduler | APScheduler (pendiente integrar, D29) | 3.x |
 | ORM | SQLAlchemy 2.x async + Alembic | 2.x |
-| BD | PostgreSQL 16 (docker-compose) | 16 |
-| Cache/state | Redis 7 (docker-compose) | 7 |
+| BD | PostgreSQL 16 (prod) / SQLite+aiosqlite (dev, D26) | 16 / — |
+| Cache/state | Redis 7 (prod) / fakeredis (tests, D27) | 7 / — |
 | HTTP client | httpx (async) | última |
+| Resiliencia | tenacity (backoff) + circuit breaker manual (D24) | 9.x |
+| Auth | passlib[bcrypt] + PyJWT (D28) | — |
 | Web admin | Jinja2 + HTMX (D21) | — |
 | Proveedor SIM | Twilio (D23, Fase 5) | — |
-| Tests | pytest + pytest-asyncio + respx + freezegun | — |
+| Tests | pytest + pytest-asyncio + respx + freezegun + fakeredis | — |
 | Lint/format | ruff + black + mypy | — |
+
+---
+
+## Estructura de módulos (Fase 0–3)
+
+```
+src/app/
+├─ main.py              # FastAPI app + routers
+├─ config.py            # pydantic-settings
+├─ db/
+│  ├─ session.py        # engine async SQLAlchemy
+│  └─ models/           # User, SportSubscription, EventSubscription,
+│                       # BoutSubscription, AlertLog (UNIQUE D16)
+├─ providers/           # Fase 0: ESPN UFC
+│  ├─ base.py           # ABC Provider
+│  ├─ models.py         # DTOs pydantic (parsing ESPN)
+│  └─ espn_ufc.py       # EspnUfcProvider + tenacity + CB (D24)
+├─ domain/
+│  └─ entities.py       # dataclasses frozen (Bout, Card, EstimatedStart...) (D25)
+├─ engine/
+│  ├─ estimator.py      # EstimatorEngine (recálculo puro, D15/D18)
+│  ├─ state.py          # AlertState (Redis idempotencia, D16)
+│  └─ poller.py         # Poller (orquestación + reintentos D17, D29)
+├─ notifiers/
+│  ├─ base.py           # VoiceNotifier + AlertPayload/CallResult
+│  └─ dummy.py          # DummyNotifier (log-only)
+├─ auth/                # Fase 3: JWT
+│  ├─ security.py       # hash/verify + create/decode token
+│  └─ dependencies.py   # get_current_user / require_admin
+├─ api/                 # Fase 3: REST
+│  ├─ schemas.py        # pydantic request/response DTOs
+│  └─ routes/           # auth, users, subscriptions, alert_log
+└─ web/                 # Fase 3: admin web
+   ├─ admin.py          # router Jinja2 + HTMX
+   └─ templates/        # base, login, dashboard, users, alerts
+```
 
 ---
 
 ## Ver también
 
 - **Proveedores de datos** (ESPN, TheSportsDB, scraping) → `fuentes-datos.md`
-- **Decisiones de diseño D1–D23** → `decisiones.md`
+- **Decisiones de diseño D1–D29** → `decisiones.md`
 - **Roadmap por fases** → `fases.md`
