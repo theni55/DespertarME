@@ -20,10 +20,11 @@
 - **Infra**: Docker Desktop no arranca → SQLite+aiosqlite (dev) + fakeredis
   (tests). Decisiones **D25–D29** registradas.
 
-**Verificación:** `pytest` 46/46 ✅ · `ruff` ✅ · `black --check` ✅ · `mypy` ✅ ·
-servidor levanta OK (`/health`, `/admin/login`, `/docs` responden).
+**Verificación:** `pytest` 50/50 ✅ · `ruff` ✅ · `black --check` ✅ · `mypy` ✅ ·
+servidor levanta OK (`/health`, `/app`, `/admin/login`, `/docs` responden).
 
-**Commits/ramas:** rama `dev` en `theni55/DespertarME` (sin commitear aún).
+**Commits/ramas:** rama `dev` en `theni55/DespertarME`. Commit `70709f3` pusheado
+y mergeado vía PR #2 (`91f19e8`).
 
 ---
 
@@ -48,11 +49,13 @@ Detalle de checkboxes en `fases.md`.
 1. **APScheduler real**: integrar `poll_once` con un scheduler que respete la
    cadencia adaptativa D15 (`EstimatorEngine.poll_interval()`). D29 lo dejó
    pendiente.
-2. **Seed de usuario admin** para poder entrar al panel web (`/admin/login`).
-3. **Resolver `$ref` de atleta**: seguir la URL de `AthleteRef` para obtener
-   el nombre y mostrarlo en el mensaje de alerta.
-4. **Commit** de todo el trabajo de Fases 2a/2b/3 (sin commitear todavía).
-5. (Opcional) CI de GitHub Actions (lint + tests).
+2. **Resolver `$ref` de atleta**: seguir la URL de `AthleteRef` para obtener
+   el nombre y mostrarlo en el mensaje de alerta y la web.
+3. **Migrar a Postgres** para producción (`docker compose up -d` + cambiar
+   `DATABASE_URL` a `asyncpg`). SQLite no soporta el UNIQUE de idempotencia
+   en concurrencia real (D16).
+4. (Opcional) CI de GitHub Actions (lint + tests).
+5. (Opcional) TwilioNotifier real (Fase 5).
 
 Ver detalle en `fases.md` → Fase 4 y 5.
 
@@ -99,7 +102,7 @@ uvicorn app.main:app --reload
 .\.venv\Scripts\Activate.ps1        # activar venv
 alembic upgrade head                # aplicar migraciones (SQLite)
 uvicorn app.main:app --reload        # servidor dev (API + admin web)
-pytest -v                            # tests (46)
+pytest -v                            # tests (50)
 python scripts/probe_espn.py          # smoke ESPN en vivo
 ruff check src tests                  # lint
 black --check src tests scripts       # formato
