@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Login — DespertarME{% endblock %}
+{% block body %}
+<form method="post" action="/app/login">
+    <h2 style="margin-bottom: 20px;">DespertarME</h2>
+    <p style="text-align: center; color: #888; margin-bottom: 20px;">Avisador de alertas deportivas</p>
+    <input type="email" name="email" placeholder="email" required>
+    <input type="password" name="password" placeholder="contraseña" required>
+    <button type="submit">Entrar</button>
+    <p style="text-align: center; margin-top: 16px;">
+        ¿No tienes cuenta? <a href="/app/register">Registrarme</a>
+    </p>
+</form>
+{% endblock %}

@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}{{ event.name if event else "Evento" }} — DespertarME{% endblock %}
+{% block body %}
+<nav class="nav">
+    <h1>DespertarME</h1>
+    <a href="/app">Inicio</a>
+    <a href="/app/events">Eventos</a>
+    <a href="/app/my-alerts">Mis alertas</a>
+    <span style="margin-left: auto; color: #888; font-size: 0.85rem;">{{ user.email }}</span>
+    <form method="post" action="/app/logout" style="max-width: none; margin: 0; background: none; padding: 0;">
+        <button type="submit" style="width: auto; background: var(--danger);">Salir</button>
+    </form>
+</nav>
+
+{% if error %}
+<div class="card" style="border-left: 4px solid var(--danger);">
+    <p style="color: var(--danger);">{{ error }}</p>
+    <p style="margin-top: 12px;"><a href="/app/events">← Volver a eventos</a></p>
+</div>
+{% elif event %}
+
+<div style="margin-bottom: 24px;">
+    <a href="/app/events" style="font-size: 0.85rem;">← Volver a eventos</a>
+    <h2 style="margin-top: 8px;">{{ event.name }}</h2>
+    <p style="color: #888;">📅 {{ event.date }} · {{ bouts|length }} combates</p>
+</div>
+
+<table>
+    <thead>
+        <tr>
+            <th>Orden</th>
+            <th>Segmento</th>
+            <th>Categoría</th>
+            <th>Rounds</th>
+            <th>Alerta</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for b in bouts %}
+        <tr>
+            <td style="font-weight: 600;">#{{ b.match_number }}{% if b.match_number == 1 %} ⭐{% endif %}</td>
+            <td>
+                {% if b.card_segment %}
+                <span class="badge {% if b.card_segment.name == 'main' %}active{% else %}user{% endif %}">
+                    {{ b.card_segment.description or b.card_segment.name }}
+                </span>
+                {% endif %}
+            </td>
+            <td>{{ b.weight_class.text if b.weight_class else "—" }}</td>
+            <td>{{ b.format.regulation.periods if b.format else "—" }}</td>
+            <td>
+                {% if b.id in existing_bout_ids %}
+                <span class="badge active" style="background: #1a4a3a;">✓ Alerta activa</span>
+                {% else %}
+                <form method="post" action="/app/subscriptions/create" style="max-width: none; margin: 0; background: none; padding: 0; display: flex; gap: 8px; align-items: center;">
+                    <input type="hidden" name="event_id" value="{{ event.id }}">
+                    <input type="hidden" name="event_name" value="{{ event.name }}">
+                    <input type="hidden" name="bout_id" value="{{ b.id }}">
+                    <input type="hidden" name="target_match_number" value="{{ b.match_number }}">
+                    <input type="number" name="lead_minutes" value="15" min="1" max="120" style="width: 60px; padding: 4px 8px; margin: 0;">
+                    <span style="font-size: 0.8rem; color: #888;">min</span>
+                    <button type="submit" style="width: auto; padding: 4px 12px; font-size: 0.8rem; background: var(--ok);">Avisar</button>
+                </form>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+{% else %}
+<div class="card">
+    <p style="color: #888;">Evento no encontrado.</p>
+</div>
+{% endif %}
+{% endblock %}
