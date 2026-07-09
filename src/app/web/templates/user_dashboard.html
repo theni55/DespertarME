@@ -6,12 +6,13 @@
     <a href="/app">Inicio</a>
     <a href="/app/events">Eventos</a>
     <a href="/app/my-alerts">Mis alertas</a>
-    <span style="margin-left: auto; color: #888; font-size: 0.85rem;">{{ user.email }}</span>
-    <form method="post" action="/app/logout" style="max-width: none; margin: 0; background: none; padding: 0;">
-        <button type="submit" style="width: auto; background: var(--danger);">Salir</button>
+    <span class="nav-user">{{ user.email }}</span>
+    <form method="post" action="/app/logout" class="inline-form">
+        <button type="submit" class="btn-sm btn-danger">Salir</button>
     </form>
 </nav>
 
+<main id="main-content">
 <div class="grid">
     <div class="card">
         <h3>Eventos próximos</h3>
@@ -27,26 +28,27 @@
     </div>
 </div>
 
-<h2 style="margin-bottom: 12px;">Eventos próximos</h2>
+<h2 class="section-title">Eventos próximos</h2>
 {% if events %}
-<div style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 32px;">
+<div class="list-links">
     {% for ev in events %}
-    <a href="/app/events/{{ ev.id }}" class="card" style="text-decoration: none; display: flex; justify-content: space-between; align-items: center;">
+    <a href="/app/events/{{ ev.id }}" class="card event-row">
         <div>
-            <div style="font-size: 1.1rem; font-weight: 600;">{{ ev.name }}</div>
-            <div style="color: #888; font-size: 0.85rem;">{{ ev.date }}</div>
+            <div class="event-name">{{ ev.name }}</div>
+            <div class="event-date">{{ ev.date }}</div>
         </div>
-        <div style="color: var(--accent);">Ver combates →</div>
+        <div class="event-cta">Ver combates →</div>
     </a>
     {% endfor %}
 </div>
 {% else %}
-<p style="color: #888; margin-bottom: 32px;">No hay eventos próximos o no se pudieron cargar.</p>
+<p class="empty-state">No hay eventos próximos o no se pudieron cargar.</p>
 {% endif %}
 
-<h2 style="margin-bottom: 12px;">Mis alertas activas</h2>
+<h2 class="section-title">Mis alertas activas</h2>
 {% if subscriptions %}
-<table style="margin-bottom: 32px;">
+<div class="table-wrap" style="margin-bottom: 32px;">
+<table>
     <thead>
         <tr>
             <th>Evento</th>
@@ -62,20 +64,22 @@
             <td>#{{ s.target_match_number }} ({{ s.bout_id }})</td>
             <td>{{ s.lead_minutes }} min</td>
             <td>
-                <form method="post" action="/app/subscriptions/{{ s.id }}/delete" style="max-width: none; margin: 0; background: none; padding: 0;">
-                    <button type="submit" style="width: auto; background: var(--danger); padding: 4px 12px; font-size: 0.8rem;">Cancelar</button>
+                <form method="post" action="/app/subscriptions/{{ s.id }}/delete" class="inline-form">
+                    <button type="submit" class="btn-sm btn-danger">Cancelar</button>
                 </form>
             </td>
         </tr>
         {% endfor %}
     </tbody>
 </table>
+</div>
 {% else %}
-<p style="color: #888; margin-bottom: 32px;">No tienes alertas activas. <a href="/app/events">Explora eventos</a> para crear una.</p>
+<p class="empty-state">No tienes alertas activas. <a href="/app/events">Explora eventos</a> para crear una.</p>
 {% endif %}
 
-<h2 style="margin-bottom: 12px;">Alertas recientes</h2>
+<h2 class="section-title">Alertas recientes</h2>
 {% if recent_alerts %}
+<div class="table-wrap">
 <table>
     <thead>
         <tr><th>Hora</th><th>Combate</th><th>Estado</th><th>Intentos</th></tr>
@@ -91,7 +95,9 @@
         {% endfor %}
     </tbody>
 </table>
+</div>
 {% else %}
-<p style="color: #888;">Sin alertas todavía.</p>
+<p class="empty-state">Sin alertas todavía.</p>
 {% endif %}
+</main>
 {% endblock %}

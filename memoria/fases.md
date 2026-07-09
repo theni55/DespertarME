@@ -97,3 +97,57 @@ llamadas en el momento adecuado.
 - [x] Plantilla TTS del mensaje: "El combate X contra Y de UFC XXX empieza en unos N minutos".
 - [x] Tests con mocks de la API de Twilio.
 - [ ] Verificación con llamada real (pendiente de cuenta Twilio del owner).
+
+## Fase 6 — Rediseño visual + landing dinámica (Sesión 6, D35) 🔶 en curso
+
+Objetivo del owner: dar un lavado de cara vistoso/llamativo a la web y añadir
+una landing pública dinámica en `/`. Construido **sobre Jinja2** (sin migrar a
+SPA — ver D35), sin build step.
+
+- [x] Skills de agente: subset frontend de `addyosmani/agent-skills` instalado
+      en `.opencode/skills/` (`frontend-ui-engineering`, `performance-optimization`,
+      `code-review-and-quality` + `references/accessibility-checklist.md`).
+- [x] `StaticFiles` montado en `/static` (`main.py`); antes no existía carpeta `static/`.
+- [x] Tipografía **Inter Variable** auto-hospedada en `static/fonts/inter-var-latin.woff2`
+      (~48KB, vía `@font-face` con eje de peso, `font-display: swap`).
+- [x] CSS extraído de `base.html` a `static/css/app.css`: design tokens (color,
+      spacing, radios, tipografía, motion, sombras) + refresco de todos los
+      componentes existentes (nav, card, table responsive con `.table-wrap`,
+      badge, fight/fighter, form/input/button) + utilidades para eliminar el
+      CSS inline repetido (`.nav-user`, `.inline-form`, `.btn-sm`, `.event-row`,
+      `.card-error`, `.empty-state`...).
+- [x] Accesibilidad: skip-link, foco visible, `prefers-reduced-motion`, labels
+      visibles en los 3 formularios de auth (antes solo placeholder).
+- [x] `landing.html` **rediseñada a pantalla única (D36, reemplaza el diseño
+      multi-sección inicial)**: `.hero-screen` a `100svh` sin scroll, póster
+      oficial del evento (`static/img/hero.webp`/`hero.jpg`, generados con
+      `ffmpeg` desde `imagen landing.jpeg`, ~160-200KB) como fondo full-bleed +
+      overlay degradado + capa de partículas dinámicas (**tsparticles 2.12.0
+      vía CDN**, guardado tras `prefers-reduced-motion`). Único CTA
+      "Avísame" → `/app/register` con glow animado; enlace "Entrar" discreto
+      arriba para usuarios existentes. `imagen landing.jpeg` suelta de la
+      raíz eliminada (ya incorporada como `static/img/hero.*`).
+- [x] `main.py`: `GET /` sirve la landing siempre (antes: 302 a `/app`, incluso
+      con sesión activa se sigue mostrando la landing — decisión explícita).
+- [x] Partial `templates/partials/_alert_cell.html` extraído de `event_detail.html`
+      con atributos `hx-post`/`hx-target` ya preparados para HTMX.
+- [ ] **Backend HTMX pendiente**: los endpoints `create_alert`/`delete_alert` en
+      `src/app/web/user.py` aún no detectan la cabecera `HX-Request` para
+      devolver el partial en vez del `RedirectResponse` 303 clásico — el HTML
+      del partial ya tiene los atributos `hx-*` pero el submit todavía cae al
+      fallback de recarga completa (funciona, pero sin el "sin recargar" real).
+- [x] **Tests actualizados**: `test_root_redirects_to_app` (esperaba 302) en
+      `tests/test_health.py` y `tests/test_api.py` reescritos como
+      `test_root_serves_landing` (200 + contiene "Avísame"). **72/72 tests
+      verdes**, `ruff`/`black`/`mypy` limpios.
+- [ ] Smoke visual manual completo (landing de pantalla única + auth +
+      dashboard + event_detail con fotos, responsive 320/768/1024/1440,
+      contraste de texto sobre imagen, foco de teclado, comportamiento de
+      partículas en pantallas pequeñas) — solo verificado parcialmente vía
+      `curl`/`Invoke-WebRequest` (200 OK en `/`, contiene "Avísame" y script
+      de tsparticles, imágenes hero sirven con el tamaño esperado).
+- [x] `reveal.js` y `data-reveal`/`reveal-init` (de la landing multi-sección
+      original) eliminados por dead code — ya no queda ninguna plantilla que
+      los use.
+
+
