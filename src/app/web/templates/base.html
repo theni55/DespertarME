@@ -27,6 +27,14 @@
         .badge.active { background: #1a3a4a; color: var(--accent); }
         .badge.admin { background: #4a3a1a; color: #ffd700; }
         .badge.user { background: #2a2d3a; color: var(--text); }
+        .fight { display: flex; align-items: center; gap: 12px; }
+        .fighter { display: flex; align-items: center; gap: 8px; min-width: 150px; }
+        .fighter.blue { flex-direction: row-reverse; text-align: right; }
+        .fighter img { width: 48px; height: 48px; border-radius: 50%; object-fit: cover; object-position: top; background: #2a2d3a; border: 2px solid #2a2d3a; flex-shrink: 0; }
+        .fighter.red img { border-color: #b3423f; }
+        .fighter.blue img { border-color: #3f6cb3; }
+        .fighter .name { font-weight: 600; font-size: 0.9rem; }
+        .vs { color: #888; font-size: 0.75rem; font-weight: 700; }
         form { max-width: 360px; margin: 40px auto; background: var(--card); padding: 32px; border-radius: 8px; }
         input { width: 100%; padding: 10px; margin: 8px 0; border: 1px solid #333; border-radius: 4px; background: var(--bg); color: var(--text); }
         button { width: 100%; padding: 10px; border: none; border-radius: 4px; background: var(--accent); color: white; font-weight: 600; cursor: pointer; }

@@ -1,10 +1,13 @@
 import logging
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.responses import RedirectResponse
 
 from app.api.routes import alert_log, auth, subscriptions, users
 from app.config import settings
+from app.scheduler import poller_scheduler
 from app.web.admin import router as admin_router
 from app.web.user import router as user_router
 
@@ -14,10 +17,22 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    """Arranca/para el scheduler del Poller junto con la app (D31)."""
+    poller_scheduler.start()
+    try:
+        yield
+    finally:
+        await poller_scheduler.stop()
+
+
 app = FastAPI(
     title="Avisador",
     description="Avisador de alertas deportivas en tiempo real (MMA/Boxeo/Tenis)",
     version="0.1.0",
+    lifespan=lifespan,
 )
 
 # API REST

@@ -63,6 +63,27 @@
       del combate previo), mis suscripciones, historial de alertas.
 - [x] Tests de integración API + BD test (SQLite en memoria + TestClient).
 
+## Fase MVP-launch — Lanzamiento (Sesión 5) ✅ (código listo; deploy pendiente de ejecutar)
+
+Objetivos del owner: (1) ver próximas peleas con cara y nombre de cada peleador,
+(2) login/logout de usuario + acceso a sus datos desde admin, (3) Twilio y
+llamadas en el momento adecuado.
+
+- [x] `get_athlete()` en `Provider`/`EspnUfcProvider` + `AthleteRef.athlete_id` + DTO `AthleteDetail` (nombre + headshot con fallback CDN).
+- [x] `AthleteResolver` con caché Redis (TTL 7 días) + memoria compartida + lote limitado a 4 concurrentes (D32). Degrada a "TBD" sin cachear fallos.
+- [x] `event_detail.html` rediseñada: foto de cara + nombre por esquina (rojo/azul) con placeholder SVG si falta imagen. Verificado en vivo: 28 headshots + nombres reales.
+- [x] `TwilioNotifier` con TwiML inline `<Say es-ES>` ×2 + `asyncio.to_thread` (D30).
+- [x] Factory `build_notifier()` gated por env-vars Twilio → Dummy si faltan (D30).
+- [x] Poller cableado con datos reales: carga `User` (teléfono E.164), nombres de peleadores y nombre del evento en el payload. Salta usuarios sin teléfono/inactivos. Bugfix: usaba el id del competitor en vez del id del atleta.
+- [x] Scheduler APScheduler in-process en `lifespan` (D31), `SCHEDULER_ENABLED` para desactivar.
+- [x] Teléfono obligatorio + validación E.164 en registro web y API (D34).
+- [x] Admin: `/admin/users/{id}` (detalle con teléfono, suscripciones, alertas) + activar/desactivar usuario.
+- [x] Config producción: normalización `DATABASE_URL` de PaaS a asyncpg, guard de `JWT_SECRET` en producción.
+- [x] `railway.json` + Dockerfile producción (migraciones + uvicorn `--workers 1`).
+- [x] Tests: 72/72 (22 nuevos) · ruff · black · mypy ✅. Smoke E2E en vivo verificado.
+- [ ] **Deploy real en Railway** (crear proyecto, add-ons PG+Redis, env-vars) — requiere cuenta del owner.
+- [ ] Credenciales Twilio (cuando el owner tenga cuenta) → set env-vars y listo.
+
 ## Fase 4 — Boxeo/Tenis reales (fuera del MVP)
 
 - [ ] Implementar `scrap_tennis.py` (flashscore/tennistemple) si ampliamos a tenis.
@@ -70,8 +91,9 @@
 - [ ] Bellator/PFL: usar TheSportsDB (D12).
 - [ ] Tests con HTML fixtures grabados.
 
-## Fase 5 — VoiceNotifier real
+## Fase 5 — VoiceNotifier real ✅ (adelantada en Sesión 5, D30)
 
-- [ ] Implementar `TwilioNotifier` (D23) con `twilio` SDK.
-- [ ] Plantilla TTS del mensaje: "Tu combate X vs Y comenzará en breve, por la tarjeta de UFC XXX".
-- [ ] Tests con mocks de la API de Twilio.
+- [x] Implementar `TwilioNotifier` (D23) con `twilio` SDK — gated por config (D30).
+- [x] Plantilla TTS del mensaje: "El combate X contra Y de UFC XXX empieza en unos N minutos".
+- [x] Tests con mocks de la API de Twilio.
+- [ ] Verificación con llamada real (pendiente de cuenta Twilio del owner).

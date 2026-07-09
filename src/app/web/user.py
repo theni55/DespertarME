@@ -15,6 +15,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+import redis.asyncio as aioredis
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
@@ -28,8 +29,11 @@ from app.auth.security import (
     hash_password,
     verify_password,
 )
+from app.auth.validators import normalize_phone_e164
+from app.config import settings
 from app.db.models import AlertLog, BoutSubscription, User
 from app.db.session import get_session
+from app.providers.athletes import AthleteResolver, ResolvedAthlete
 from app.providers.espn_ufc import EspnUfcProvider
 from app.providers.models import EventSummary
 
@@ -37,6 +41,22 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/app", tags=["web-user"])
 templates = Jinja2Templates(directory="src/app/web/templates")
+
+# Caché L1 de atletas compartida entre requests (el TTL lo gestiona el resolver).
+_athlete_memory: dict[str, tuple[float, ResolvedAthlete]] = {}
+_redis_client: aioredis.Redis | None = None
+
+
+def _get_redis() -> aioredis.Redis:
+    """Cliente Redis lazy (no conecta hasta el primer comando)."""
+    global _redis_client
+    if _redis_client is None:
+        _redis_client = aioredis.from_url(settings.redis_url, decode_responses=True)
+    return _redis_client
+
+
+def _athlete_resolver(provider: EspnUfcProvider) -> AthleteResolver:
+    return AthleteResolver(provider, redis_client=_get_redis(), memory_cache=_athlete_memory)
 
 
 # --- Auth helpers (cookie-based, iguales que admin pero sin requerir role) ---
@@ -82,9 +102,13 @@ async def user_register_page(request: Request) -> HTMLResponse:
 async def user_register(
     email: str = Form(...),
     password: str = Form(...),
-    phone: str = Form(default=""),
+    phone: str = Form(...),
     session: AsyncSession = Depends(get_session),
 ) -> RedirectResponse:
+    try:
+        phone_normalized = normalize_phone_e164(phone)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     existing = await session.execute(select(User).where(User.email == email))
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=409, detail="Email ya registrado")
@@ -92,7 +116,7 @@ async def user_register(
         id=new_uuid(),
         email=email,
         hashed_password=hash_password(password),
-        phone_normalized=phone or None,
+        phone_normalized=phone_normalized,
         timezone="Europe/Madrid",
         role="user",
         is_active=True,
@@ -227,11 +251,33 @@ async def user_event_detail(
 
     event = None
     bouts: list[Any] = []
+    fighters: dict[str, dict[str, ResolvedAthlete | None]] = {}
     error: str | None = None
     try:
         async with _provider() as provider:
             event = await provider.get_event_card(event_id)
             bouts = sorted(event.bouts, key=lambda b: b.match_number, reverse=True)
+            resolver = _athlete_resolver(provider)
+            athlete_ids = [
+                corner.athlete.athlete_id
+                for b in bouts
+                for corner in (b.red_corner, b.blue_corner)
+                if corner and corner.athlete and corner.athlete.athlete_id
+            ]
+            resolved = await resolver.resolve_many(athlete_ids)
+            for b in bouts:
+                red = b.red_corner
+                blue = b.blue_corner
+                fighters[b.id] = {
+                    "red": (
+                        resolved.get(red.athlete.athlete_id or "") if red and red.athlete else None
+                    ),
+                    "blue": (
+                        resolved.get(blue.athlete.athlete_id or "")
+                        if blue and blue.athlete
+                        else None
+                    ),
+                }
     except Exception as exc:
         logger.warning("ESPN event detail falló: %s", exc)
         error = "No se pudo cargar la tarjeta del evento."
@@ -258,6 +304,7 @@ async def user_event_detail(
             "user": user,
             "event": event,
             "bouts": bouts,
+            "fighters": fighters,
             "error": error,
             "existing_bout_ids": existing_bout_ids,
         },
