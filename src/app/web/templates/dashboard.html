@@ -7,11 +7,12 @@
     <a href="/admin/users">Usuarios</a>
     <a href="/admin/alerts">Alertas</a>
     <a href="/docs">API Docs</a>
-    <form method="post" action="/admin/logout" style="max-width: none; margin: 0; background: none; padding: 0;">
-        <button type="submit" style="width: auto; background: var(--danger);">Salir</button>
+    <form method="post" action="/admin/logout" class="inline-form">
+        <button type="submit" class="btn-sm btn-danger">Salir</button>
     </form>
 </nav>
 
+<main id="main-content">
 <div class="grid">
     <div class="card">
         <h3>Usuarios</h3>
@@ -27,7 +28,8 @@
     </div>
 </div>
 
-<h2 style="margin-bottom: 12px;">Alertas recientes</h2>
+<h2 class="section-title">Alertas recientes</h2>
+<div class="table-wrap">
 <table>
     <thead>
         <tr>
@@ -48,8 +50,10 @@
             <td>{{ a.attempts }}</td>
         </tr>
         {% else %}
-        <tr><td colspan="5" style="text-align: center; color: #666;">Sin alertas todavía</td></tr>
+        <tr><td colspan="5" class="text-muted" style="text-align: center;">Sin alertas todavía</td></tr>
         {% endfor %}
     </tbody>
 </table>
+</div>
+</main>
 {% endblock %}

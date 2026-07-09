@@ -1,14 +1,21 @@
 {% extends "base.html" %}
-{% block title %}Registro — DespertarME{% endblock %}
+{% block title %}Crear cuenta — DespertarME{% endblock %}
 {% block body %}
+<main id="main-content">
 <form method="post" action="/app/register">
-    <h2 style="margin-bottom: 20px;">Crear cuenta</h2>
-    <input type="email" name="email" placeholder="email" required>
-    <input type="password" name="password" placeholder="contraseña (mín 8 caracteres)" minlength="8" required>
-    <input type="tel" name="phone" placeholder="teléfono (ej: +34600000000)">
+    <h2>Crear cuenta</h2>
+    <p class="subtitle">Recibe una llamada justo antes de tu combate</p>
+    <label for="register-email">Email</label>
+    <input id="register-email" type="email" name="email" autocomplete="email" required>
+    <label for="register-password">Contraseña</label>
+    <input id="register-password" type="password" name="password" autocomplete="new-password" minlength="8" required>
+    <label for="register-phone">Teléfono (formato internacional)</label>
+    <input id="register-phone" type="tel" name="phone" placeholder="+34600000000" autocomplete="tel" pattern="\+[1-9][0-9\s\-]{7,17}" title="Formato internacional: +34600111222" required>
+    <p class="text-muted" style="font-size: 0.75rem; margin-top: 4px;">Te llamaremos a este número cuando tu combate esté a punto de empezar.</p>
     <button type="submit">Registrarme</button>
     <p style="text-align: center; margin-top: 16px;">
         ¿Ya tienes cuenta? <a href="/app/login">Entrar</a>
     </p>
 </form>
+</main>
 {% endblock %}

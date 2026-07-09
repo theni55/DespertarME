@@ -63,6 +63,27 @@
       del combate previo), mis suscripciones, historial de alertas.
 - [x] Tests de integración API + BD test (SQLite en memoria + TestClient).
 
+## Fase MVP-launch — Lanzamiento (Sesión 5) ✅ (código listo; deploy pendiente de ejecutar)
+
+Objetivos del owner: (1) ver próximas peleas con cara y nombre de cada peleador,
+(2) login/logout de usuario + acceso a sus datos desde admin, (3) Twilio y
+llamadas en el momento adecuado.
+
+- [x] `get_athlete()` en `Provider`/`EspnUfcProvider` + `AthleteRef.athlete_id` + DTO `AthleteDetail` (nombre + headshot con fallback CDN).
+- [x] `AthleteResolver` con caché Redis (TTL 7 días) + memoria compartida + lote limitado a 4 concurrentes (D32). Degrada a "TBD" sin cachear fallos.
+- [x] `event_detail.html` rediseñada: foto de cara + nombre por esquina (rojo/azul) con placeholder SVG si falta imagen. Verificado en vivo: 28 headshots + nombres reales.
+- [x] `TwilioNotifier` con TwiML inline `<Say es-ES>` ×2 + `asyncio.to_thread` (D30).
+- [x] Factory `build_notifier()` gated por env-vars Twilio → Dummy si faltan (D30).
+- [x] Poller cableado con datos reales: carga `User` (teléfono E.164), nombres de peleadores y nombre del evento en el payload. Salta usuarios sin teléfono/inactivos. Bugfix: usaba el id del competitor en vez del id del atleta.
+- [x] Scheduler APScheduler in-process en `lifespan` (D31), `SCHEDULER_ENABLED` para desactivar.
+- [x] Teléfono obligatorio + validación E.164 en registro web y API (D34).
+- [x] Admin: `/admin/users/{id}` (detalle con teléfono, suscripciones, alertas) + activar/desactivar usuario.
+- [x] Config producción: normalización `DATABASE_URL` de PaaS a asyncpg, guard de `JWT_SECRET` en producción.
+- [x] `railway.json` + Dockerfile producción (migraciones + uvicorn `--workers 1`).
+- [x] Tests: 72/72 (22 nuevos) · ruff · black · mypy ✅. Smoke E2E en vivo verificado.
+- [ ] **Deploy real en Railway** (crear proyecto, add-ons PG+Redis, env-vars) — requiere cuenta del owner.
+- [ ] Credenciales Twilio (cuando el owner tenga cuenta) → set env-vars y listo.
+
 ## Fase 4 — Boxeo/Tenis reales (fuera del MVP)
 
 - [ ] Implementar `scrap_tennis.py` (flashscore/tennistemple) si ampliamos a tenis.
@@ -70,8 +91,63 @@
 - [ ] Bellator/PFL: usar TheSportsDB (D12).
 - [ ] Tests con HTML fixtures grabados.
 
-## Fase 5 — VoiceNotifier real
+## Fase 5 — VoiceNotifier real ✅ (adelantada en Sesión 5, D30)
 
-- [ ] Implementar `TwilioNotifier` (D23) con `twilio` SDK.
-- [ ] Plantilla TTS del mensaje: "Tu combate X vs Y comenzará en breve, por la tarjeta de UFC XXX".
-- [ ] Tests con mocks de la API de Twilio.
+- [x] Implementar `TwilioNotifier` (D23) con `twilio` SDK — gated por config (D30).
+- [x] Plantilla TTS del mensaje: "El combate X contra Y de UFC XXX empieza en unos N minutos".
+- [x] Tests con mocks de la API de Twilio.
+- [ ] Verificación con llamada real (pendiente de cuenta Twilio del owner).
+
+## Fase 6 — Rediseño visual + landing dinámica (Sesión 6, D35) 🔶 en curso
+
+Objetivo del owner: dar un lavado de cara vistoso/llamativo a la web y añadir
+una landing pública dinámica en `/`. Construido **sobre Jinja2** (sin migrar a
+SPA — ver D35), sin build step.
+
+- [x] Skills de agente: subset frontend de `addyosmani/agent-skills` instalado
+      en `.opencode/skills/` (`frontend-ui-engineering`, `performance-optimization`,
+      `code-review-and-quality` + `references/accessibility-checklist.md`).
+- [x] `StaticFiles` montado en `/static` (`main.py`); antes no existía carpeta `static/`.
+- [x] Tipografía **Inter Variable** auto-hospedada en `static/fonts/inter-var-latin.woff2`
+      (~48KB, vía `@font-face` con eje de peso, `font-display: swap`).
+- [x] CSS extraído de `base.html` a `static/css/app.css`: design tokens (color,
+      spacing, radios, tipografía, motion, sombras) + refresco de todos los
+      componentes existentes (nav, card, table responsive con `.table-wrap`,
+      badge, fight/fighter, form/input/button) + utilidades para eliminar el
+      CSS inline repetido (`.nav-user`, `.inline-form`, `.btn-sm`, `.event-row`,
+      `.card-error`, `.empty-state`...).
+- [x] Accesibilidad: skip-link, foco visible, `prefers-reduced-motion`, labels
+      visibles en los 3 formularios de auth (antes solo placeholder).
+- [x] `landing.html` **rediseñada a pantalla única (D36, reemplaza el diseño
+      multi-sección inicial)**: `.hero-screen` a `100svh` sin scroll, póster
+      oficial del evento (`static/img/hero.webp`/`hero.jpg`, generados con
+      `ffmpeg` desde `imagen landing.jpeg`, ~160-200KB) como fondo full-bleed +
+      overlay degradado + capa de partículas dinámicas (**tsparticles 2.12.0
+      vía CDN**, guardado tras `prefers-reduced-motion`). Único CTA
+      "Avísame" → `/app/register` con glow animado; enlace "Entrar" discreto
+      arriba para usuarios existentes. `imagen landing.jpeg` suelta de la
+      raíz eliminada (ya incorporada como `static/img/hero.*`).
+- [x] `main.py`: `GET /` sirve la landing siempre (antes: 302 a `/app`, incluso
+      con sesión activa se sigue mostrando la landing — decisión explícita).
+- [x] Partial `templates/partials/_alert_cell.html` extraído de `event_detail.html`
+      con atributos `hx-post`/`hx-target` ya preparados para HTMX.
+- [ ] **Backend HTMX pendiente**: los endpoints `create_alert`/`delete_alert` en
+      `src/app/web/user.py` aún no detectan la cabecera `HX-Request` para
+      devolver el partial en vez del `RedirectResponse` 303 clásico — el HTML
+      del partial ya tiene los atributos `hx-*` pero el submit todavía cae al
+      fallback de recarga completa (funciona, pero sin el "sin recargar" real).
+- [x] **Tests actualizados**: `test_root_redirects_to_app` (esperaba 302) en
+      `tests/test_health.py` y `tests/test_api.py` reescritos como
+      `test_root_serves_landing` (200 + contiene "Avísame"). **72/72 tests
+      verdes**, `ruff`/`black`/`mypy` limpios.
+- [ ] Smoke visual manual completo (landing de pantalla única + auth +
+      dashboard + event_detail con fotos, responsive 320/768/1024/1440,
+      contraste de texto sobre imagen, foco de teclado, comportamiento de
+      partículas en pantallas pequeñas) — solo verificado parcialmente vía
+      `curl`/`Invoke-WebRequest` (200 OK en `/`, contiene "Avísame" y script
+      de tsparticles, imágenes hero sirven con el tamaño esperado).
+- [x] `reveal.js` y `data-reveal`/`reveal-init` (de la landing multi-sección
+      original) eliminados por dead code — ya no queda ninguna plantilla que
+      los use.
+
+

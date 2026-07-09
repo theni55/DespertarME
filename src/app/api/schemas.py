@@ -4,14 +4,21 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
+
+from app.auth.validators import normalize_phone_e164
 
 
 class UserCreate(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8, max_length=128)
-    phone: str | None = None
+    phone: str
     timezone: str = "Europe/Madrid"
+
+    @field_validator("phone")
+    @classmethod
+    def _validate_phone(cls, v: str) -> str:
+        return normalize_phone_e164(v)
 
 
 class UserOut(BaseModel):

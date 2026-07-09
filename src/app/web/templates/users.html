@@ -7,12 +7,14 @@
     <a href="/admin/users">Usuarios</a>
     <a href="/admin/alerts">Alertas</a>
     <a href="/docs">API Docs</a>
-    <form method="post" action="/admin/logout" style="max-width: none; margin: 0; background: none; padding: 0;">
-        <button type="submit" style="width: auto; background: var(--danger);">Salir</button>
+    <form method="post" action="/admin/logout" class="inline-form">
+        <button type="submit" class="btn-sm btn-danger">Salir</button>
     </form>
 </nav>
 
-<h2 style="margin-bottom: 12px;">Usuarios ({{ users|length }})</h2>
+<main id="main-content">
+<h2 class="section-title">Usuarios ({{ users|length }})</h2>
+<div class="table-wrap">
 <table>
     <thead>
         <tr>
@@ -27,7 +29,7 @@
     <tbody>
         {% for u in users %}
         <tr>
-            <td>{{ u.email }}</td>
+            <td><a href="/admin/users/{{ u.id }}">{{ u.email }}</a></td>
             <td>{{ u.phone_normalized or "—" }}</td>
             <td>{{ u.timezone }}</td>
             <td><span class="badge {{ u.role }}">{{ u.role }}</span></td>
@@ -37,4 +39,6 @@
         {% endfor %}
     </tbody>
 </table>
+</div>
+</main>
 {% endblock %}
