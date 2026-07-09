@@ -7,14 +7,15 @@
     <a href="/admin/users">Usuarios</a>
     <a href="/admin/alerts">Alertas</a>
     <a href="/docs">API Docs</a>
-    <form method="post" action="/admin/logout" style="max-width: none; margin: 0; background: none; padding: 0;">
-        <button type="submit" style="width: auto; background: var(--danger);">Salir</button>
+    <form method="post" action="/admin/logout" class="inline-form">
+        <button type="submit" class="btn-sm btn-danger">Salir</button>
     </form>
 </nav>
 
-<div style="margin-bottom: 24px;">
-    <a href="/admin/users" style="font-size: 0.85rem;">← Volver a usuarios</a>
-    <h2 style="margin-top: 8px;">{{ user.email }}</h2>
+<main id="main-content">
+<div class="page-header">
+    <a href="/admin/users" class="back-link">← Volver a usuarios</a>
+    <h2>{{ user.email }}</h2>
 </div>
 
 <div class="grid">
@@ -30,9 +31,8 @@
             </span>
             <span class="badge {{ user.role }}" style="margin-left: 8px;">{{ user.role }}</span>
         </p>
-        <form method="post" action="/admin/users/{{ user.id }}/toggle-active"
-              style="max-width: none; margin: 12px 0 0; background: none; padding: 0;">
-            <button type="submit" style="width: auto; padding: 6px 14px; font-size: 0.8rem; background: {{ 'var(--danger)' if user.is_active else 'var(--ok)' }};">
+        <form method="post" action="/admin/users/{{ user.id }}/toggle-active" class="inline-form" style="margin-top: 12px;">
+            <button type="submit" class="btn-sm {{ 'btn-danger' if user.is_active else 'btn-ok' }}">
                 {{ "Desactivar" if user.is_active else "Activar" }}
             </button>
         </form>
@@ -47,8 +47,9 @@
     </div>
 </div>
 
-<h3 style="margin: 24px 0 12px;">Suscripciones ({{ subscriptions|length }})</h3>
+<h3 class="section-title" style="margin-top: 24px;">Suscripciones ({{ subscriptions|length }})</h3>
 {% if subscriptions %}
+<div class="table-wrap">
 <table>
     <thead>
         <tr>
@@ -73,12 +74,14 @@
         {% endfor %}
     </tbody>
 </table>
+</div>
 {% else %}
-<div class="card"><p style="color: #888;">Sin suscripciones.</p></div>
+<div class="card"><p class="text-muted">Sin suscripciones.</p></div>
 {% endif %}
 
-<h3 style="margin: 24px 0 12px;">Alertas ({{ alerts|length }})</h3>
+<h3 class="section-title" style="margin-top: 24px;">Alertas ({{ alerts|length }})</h3>
 {% if alerts %}
+<div class="table-wrap">
 <table>
     <thead>
         <tr>
@@ -96,12 +99,14 @@
             <td>{{ a.bout_id }}</td>
             <td><span class="badge {{ a.status }}">{{ a.status }}</span></td>
             <td>{{ a.attempts }}</td>
-            <td style="font-size: 0.8rem; color: #888;">{{ a.notifier_response or "—" }}</td>
+            <td class="text-muted" style="font-size: 0.8rem;">{{ a.notifier_response or "—" }}</td>
         </tr>
         {% endfor %}
     </tbody>
 </table>
+</div>
 {% else %}
-<div class="card"><p style="color: #888;">Sin alertas.</p></div>
+<div class="card"><p class="text-muted">Sin alertas.</p></div>
 {% endif %}
+</main>
 {% endblock %}

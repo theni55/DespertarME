@@ -2,8 +2,10 @@ import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
-from fastapi.responses import RedirectResponse
+from fastapi import FastAPI, Request
+from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 
 from app.api.routes import alert_log, auth, subscriptions, users
 from app.config import settings
@@ -45,6 +47,11 @@ app.include_router(alert_log.router)
 app.include_router(admin_router)
 app.include_router(user_router)
 
+# Assets estáticos (CSS/JS/fuentes propios, sin build step — D35)
+app.mount("/static", StaticFiles(directory="src/app/web/static"), name="static")
+
+_landing_templates = Jinja2Templates(directory="src/app/web/templates")
+
 
 @app.get("/health", tags=["meta"])
 async def health() -> dict[str, str]:
@@ -52,6 +59,7 @@ async def health() -> dict[str, str]:
     return {"status": "ok", "env": settings.app_env}
 
 
-@app.get("/", tags=["meta"])
-async def root() -> RedirectResponse:
-    return RedirectResponse(url="/app", status_code=302)
+@app.get("/", tags=["meta"], response_class=HTMLResponse)
+async def root(request: Request) -> HTMLResponse:
+    """Landing pública (D35): siempre se muestra, incluso con sesión activa."""
+    return _landing_templates.TemplateResponse(request, "landing.html", {})

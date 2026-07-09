@@ -221,7 +221,8 @@ def test_health_still_ok(app_client: TestClient) -> None:
     assert resp.json()["status"] == "ok"
 
 
-def test_root_redirects_to_app(app_client: TestClient) -> None:
+def test_root_serves_landing(app_client: TestClient) -> None:
+    """La landing pública (D35/D36) se sirve siempre en `/`, sin redirigir."""
     resp = app_client.get("/", follow_redirects=False)
-    assert resp.status_code == 302
-    assert resp.headers["location"] == "/app"
+    assert resp.status_code == 200
+    assert "Avísame" in resp.text
