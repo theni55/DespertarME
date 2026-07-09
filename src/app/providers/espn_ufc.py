@@ -37,7 +37,7 @@ from tenacity import (
 
 from app.config import settings
 from app.providers.base import Provider
-from app.providers.models import CompetitionStatus, Event, EventSummary
+from app.providers.models import AthleteDetail, CompetitionStatus, Event, EventSummary
 
 logger = logging.getLogger(__name__)
 
@@ -207,3 +207,10 @@ class EspnUfcProvider(Provider):
         )
         data = await self._request(url)
         return CompetitionStatus.model_validate(data)
+
+    async def get_athlete(self, athlete_id: str) -> AthleteDetail:
+        # El endpoint de atletas cuelga de /sports/mma directamente (sin liga),
+        # verificado en vivo: /v2/sports/mma/athletes/{id}.
+        url = self._url(f"/sports/mma/athletes/{athlete_id}")
+        data = await self._request(url)
+        return AthleteDetail.model_validate(data)

@@ -146,6 +146,74 @@ async def admin_users(
     )
 
 
+@router.get("/users/{user_id}", response_class=HTMLResponse)
+async def admin_user_detail(
+    request: Request,
+    user_id: str,
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    """Detalle de un usuario: datos, suscripciones e historial de alertas."""
+    admin = await _get_admin_from_cookie(request, session)
+    if admin is None:
+        return RedirectResponse(url="/admin/login", status_code=303)
+
+    user = await session.get(User, user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+    subs = (
+        (
+            await session.execute(
+                select(BoutSubscription)
+                .where(BoutSubscription.user_id == user_id)
+                .order_by(BoutSubscription.created_at.desc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+    alerts = (
+        (
+            await session.execute(
+                select(AlertLog)
+                .where(AlertLog.user_id == user_id)
+                .order_by(AlertLog.fired_at.desc())
+                .limit(50)
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    return templates.TemplateResponse(
+        request,
+        "user_detail.html",
+        {"admin": admin, "user": user, "subscriptions": subs, "alerts": alerts},
+    )
+
+
+@router.post("/users/{user_id}/toggle-active")
+async def admin_toggle_user_active(
+    request: Request,
+    user_id: str,
+    session: AsyncSession = Depends(get_session),
+) -> RedirectResponse:
+    """Activa/desactiva un usuario (un usuario inactivo no recibe llamadas)."""
+    admin = await _get_admin_from_cookie(request, session)
+    if admin is None:
+        return RedirectResponse(url="/admin/login", status_code=303)
+
+    user = await session.get(User, user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    if user.id == admin.id:
+        raise HTTPException(status_code=400, detail="No puedes desactivarte a ti mismo")
+
+    user.is_active = not user.is_active
+    await session.commit()
+    return RedirectResponse(url=f"/admin/users/{user_id}", status_code=303)
+
+
 # --- Alertas ---
 
 
