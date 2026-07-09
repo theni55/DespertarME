@@ -138,3 +138,41 @@
 - **Verificación**: 50/50 tests ✅ · ruff ✅ · black ✅ · mypy ✅ ·
   flujo completo verificado con httpx (registro → dashboard → eventos →
   detalle → crear alerta → verla activa → cancelar).
+
+## Sesión 5 — MVP launch (fotos de peleadores + Twilio + scheduler + Railway)
+
+Objetivos del owner para dejar el MVP lanzado: peleas con cara/nombre de cada
+peleador, sesión de usuario + datos desde admin, y llamadas Twilio en el
+momento adecuado. Decisiones de alcance tomadas con el owner: Railway como
+plataforma (Vercel/CF Pages descartados: serverless no soporta el scheduler
+24/7), Postgres + Redis add-ons, scheduler in-process 1 worker, Twilio gated
+(aún sin cuenta), teléfono obligatorio E.164.
+
+- **WS1 Peleadores**: `get_athlete()` + `AthleteDetail` (verificado en vivo:
+  `displayName` + `headshot.href`); `AthleteRef.athlete_id` (regex sobre
+  `$ref`); `AthleteResolver` (D32) con caché Redis TTL 7d + memoria compartida
+  + lote de 4 concurrentes, degradación a "TBD"; `event_detail.html` con
+  headshots (borde rojo/azul por esquina) y placeholder SVG.
+- **WS3 Twilio + scheduler**: `TwilioNotifier` (TwiML inline es-ES ×2,
+  `asyncio.to_thread`); `build_notifier()` gated por las 3 env-vars (D30);
+  Poller cableado con datos reales (User.phone_normalized, nombres, evento) y
+  skip de usuarios sin teléfono/inactivos — **bugfix**: el mapeo usaba el id
+  del competitor como id de atleta; `scheduler.py` con `AsyncIOScheduler` en
+  lifespan (D31), `SCHEDULER_ENABLED` flag; teléfono obligatorio E.164 en
+  registro web y API (`auth/validators.py`, D34).
+- **WS2 Admin**: `/admin/users/{id}` (teléfono, suscripciones, historial de
+  alertas) + toggle activar/desactivar (con guard anti-auto-desactivación) +
+  link desde la lista.
+- **WS4 Deploy**: `railway.json` (healthcheck `/health`, migraciones en start);
+  Dockerfile prod (sin deps dev, `--workers 1`); normalización de
+  `DATABASE_URL` PaaS → asyncpg; guard `JWT_SECRET` en producción;
+  `.env.example` actualizado.
+- **Entorno**: este clon no tenía venv; creado con `py -3.12` (el `python` del
+  PATH es 3.11).
+- **Verificación**: `pytest` 72/72 ✅ (22 nuevos: notifiers, athletes, poller
+  payload/skip, get_athlete, teléfono API) · ruff ✅ · black ✅ · mypy ✅ ·
+  smoke server (health, login user/admin, scheduler arranca con Dummy gated) ·
+  smoke E2E en vivo contra ESPN: registro + eventos + detalle con **28
+  headshots y nombres reales**.
+- **Pendiente**: ejecutar el deploy en Railway (cuenta owner); credenciales
+  Twilio; rotar el token GitHub embebido en el remote (aviso de seguridad).

@@ -27,7 +27,7 @@
     <tbody>
         {% for u in users %}
         <tr>
-            <td>{{ u.email }}</td>
+            <td><a href="/admin/users/{{ u.id }}">{{ u.email }}</a></td>
             <td>{{ u.phone_normalized or "—" }}</td>
             <td>{{ u.timezone }}</td>
             <td><span class="badge {{ u.role }}">{{ u.role }}</span></td>

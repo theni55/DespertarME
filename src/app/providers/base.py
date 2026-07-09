@@ -10,7 +10,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
 
-from app.providers.models import CompetitionStatus, Event, EventSummary
+from app.providers.models import AthleteDetail, CompetitionStatus, Event, EventSummary
 
 
 class Provider(ABC):
@@ -42,4 +42,13 @@ class Provider(ABC):
 
         Usado por el Poller para detectar transiciones `pre -> in -> post` del
         combate inmediatamente anterior al combate objetivo (D15).
+        """
+
+    @abstractmethod
+    async def get_athlete(self, athlete_id: str) -> AthleteDetail:
+        """Devuelve el detalle de un atleta (nombre + foto).
+
+        Usado para enriquecer la tarjeta (nombres/headshots en la web) y el
+        mensaje de la llamada. Las implementaciones deberían cachear el
+        resultado (los atletas cambian rara vez).
         """

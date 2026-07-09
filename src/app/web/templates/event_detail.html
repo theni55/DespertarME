@@ -29,6 +29,7 @@
     <thead>
         <tr>
             <th>Orden</th>
+            <th>Combate</th>
             <th>Segmento</th>
             <th>Categoría</th>
             <th>Rounds</th>
@@ -36,9 +37,32 @@
         </tr>
     </thead>
     <tbody>
+        {% set placeholder = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Ccircle cx='24' cy='18' r='8' fill='%23555'/%3E%3Cpath d='M8 44c0-9 7-14 16-14s16 5 16 14' fill='%23555'/%3E%3C/svg%3E" %}
         {% for b in bouts %}
+        {% set pair = fighters.get(b.id, {}) %}
+        {% set red = pair.get("red") %}
+        {% set blue = pair.get("blue") %}
         <tr>
             <td style="font-weight: 600;">#{{ b.match_number }}{% if b.match_number == 1 %} ⭐{% endif %}</td>
+            <td>
+                <div class="fight">
+                    <div class="fighter red">
+                        <img src="{{ red.headshot_url if red and red.headshot_url else placeholder }}"
+                             alt="{{ red.display if red else 'TBD' }}"
+                             loading="lazy"
+                             onerror="this.onerror=null;this.src=&quot;{{ placeholder }}&quot;;">
+                        <span class="name">{{ red.display if red else "TBD" }}</span>
+                    </div>
+                    <span class="vs">VS</span>
+                    <div class="fighter blue">
+                        <img src="{{ blue.headshot_url if blue and blue.headshot_url else placeholder }}"
+                             alt="{{ blue.display if blue else 'TBD' }}"
+                             loading="lazy"
+                             onerror="this.onerror=null;this.src=&quot;{{ placeholder }}&quot;;">
+                        <span class="name">{{ blue.display if blue else "TBD" }}</span>
+                    </div>
+                </div>
+            </td>
             <td>
                 {% if b.card_segment %}
                 <span class="badge {% if b.card_segment.name == 'main' %}active{% else %}user{% endif %}">

@@ -5,7 +5,8 @@
     <h2 style="margin-bottom: 20px;">Crear cuenta</h2>
     <input type="email" name="email" placeholder="email" required>
     <input type="password" name="password" placeholder="contraseña (mín 8 caracteres)" minlength="8" required>
-    <input type="tel" name="phone" placeholder="teléfono (ej: +34600000000)">
+    <input type="tel" name="phone" placeholder="teléfono E.164 (ej: +34600000000)" pattern="\+[1-9][0-9\s\-]{7,17}" title="Formato internacional: +34600111222" required>
+    <p style="font-size: 0.75rem; color: #888; margin: 4px 0 0;">Te llamaremos a este número cuando tu combate esté a punto de empezar.</p>
     <button type="submit">Registrarme</button>
     <p style="text-align: center; margin-top: 16px;">
         ¿Ya tienes cuenta? <a href="/app/login">Entrar</a>
