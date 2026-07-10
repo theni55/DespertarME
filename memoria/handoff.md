@@ -2,6 +2,113 @@
 
 > Punto de entrada de cada sesión: estado actual, último avance y próximo paso. Actualízalo al final de cada sesión.
 
+## ⚠️ Tarea pendiente al iniciar la próxima sesión: crear skill `ship-polished-ui`
+
+**Contexto:** en la sesión anterior el owner pidió leer el artículo
+["The 10 rules to ship truly polished UI with Claude"](https://x.com/kvnkld/status/2066863634949779464)
+de Kevin (@kvnkld) y convertirlo en una skill de OpenCode. Se leyó el
+artículo completo (vía mirror, ya que x.com requiere JS) y se acordó el
+plan con el owner mediante preguntas de clarificación. **No se llegó a
+crear el archivo** — la sesión terminó en modo plan justo antes de
+ejecutarlo. Esta es la primera tarea de la próxima sesión.
+
+**Decisiones ya confirmadas por el owner:**
+- Nombre de la skill: **`ship-polished-ui`**
+- Idioma del contenido: **inglés** (consistente con las demás skills del repo)
+- Incluir subcarpeta `references/` con `motion-library.md` (patrón ya usado
+  por `frontend-ui-engineering`)
+
+**Archivos a crear:**
+
+```
+.opencode/skills/ship-polished-ui/
+├─ SKILL.md
+└─ references/
+   └─ motion-library.md
+```
+
+### `SKILL.md` — contenido a incluir
+
+Frontmatter:
+```yaml
+---
+name: ship-polished-ui
+description: Adds premium polish and micro-interactions to UIs. Use when animations feel stiff or generic, when building interactive components (sliders, drag, expand/collapse), or when UI needs to look hand-crafted rather than AI-generated. Complements frontend-ui-engineering.
+---
+```
+
+Secciones:
+- **Overview** — la meta-regla que subyace a las 10: cambiar adjetivos por
+  números ("smooth" no es un valor; `cubic-bezier(...)` a 280ms sí).
+- **When to Use** — al añadir animación/motion, micro-interacciones,
+  componentes interactivos, o cuando algo "se siente AI".
+- **The house easing set** — bloque CSS con las 4 variables:
+  ```css
+  :root {
+    --ease-smooth: cubic-bezier(0.22, 1, 0.36, 1);    /* default */
+    --ease-out:    cubic-bezier(0.17, 1, 0.32, 1);    /* entradas decorativas */
+    --ease-spring: cubic-bezier(0.35, 1.55, 0.65, 1); /* badges, pops, overshoot */
+    --ease-in-out: cubic-bezier(0.66, 0, 0.34, 1);    /* movimientos simétricos */
+  }
+  ```
+- **The 10 rules**, cada una con su snippet:
+  1. Easing propio, nunca defaults nativos (`ease`, `ease-in-out`).
+  2. Definir design tokens antes de construir ("usa solo estos tokens, sin
+     valores one-off").
+  3. Draggables con física real: momentum, fricción, resistencia; overscroll
+     que estira y rebota en vez de parar en seco.
+  4. Snap points magnéticos: dos zonas (pull-in estrecha + release amplia) +
+     flash del label al enganchar.
+  5. Entradas con blur, nunca solo fade: `opacity 0→1` + `translateY 6px→0`
+     + `blur(2px)→0`, ~280ms sobre `--ease-smooth`.
+  6. Sombras en capas, no una sola: hairline ring of light en vez de borde;
+     opacidad por capa 2–8%; varios blurs apilados de distinto tamaño.
+  7. Press response en todo clickable: encoger a **98%** (no 95%, que se
+     lee como "colapso" en vez de "presión firme").
+  8. Expand/collapse con `grid-template-rows: 0fr → 1fr` (nunca el hack
+     `max-height: 9999px`, que da saltos).
+  9. Respetar `prefers-reduced-motion`: colapsar a instantáneo, parar loops
+     decorativos.
+  10. Un componente es un **set de estados**, no una imagen: idle / hover /
+      pressed / loading / disabled / success — se descubren usándolo, no
+      se especifican completos en Figma de antemano.
+- **Prompting patterns** — describir el *feeling*, no la jerga técnica;
+  entregar el bloque de tokens primero ("mata el 80% del look AI-slop").
+- **Red Flags** — fades planos sin blur, sombra única, press al 95%,
+  `max-height:9999px`, curvas de easing nativas del navegador, valores
+  fuera de la escala de tokens.
+- **Verification checklist** — easing tokenizado y no nativo, entradas con
+  blur, press feedback en clickables, `prefers-reduced-motion` honrado,
+  estados completos del componente (no solo idle/hover).
+- **Cierre** — "el prompt te da el 90%; el 10% final (el taste, las
+  micro-decisiones de 2px/98%) es tuyo". Atribución al artículo original y
+  link al tweet.
+
+### `references/motion-library.md` — contenido a incluir
+- Catálogo de curvas de easing con su intención de uso (default / entradas
+  decorativas / overshoot / simétrico) — las mismas 4 del bloque CSS de
+  arriba, con explicación ampliada.
+- Duraciones sugeridas por intención (press ~120ms, entrada ~280ms, drag
+  release variable según velocidad).
+- Reglas de asimetría enter/exit (las entradas suelen ser más lentas que
+  las salidas).
+- Snippets copy-paste: hover lift, staggered reveal, modal entry, shimmer
+  loading.
+- Bloque completo de `@media (prefers-reduced-motion: reduce)` con el
+  patrón de fallback a instantáneo.
+
+**Fuente original completa del artículo** (para no tener que volver a
+buscarla): mirror legible en
+`https://gu-log.vercel.app/en/posts/en-sp-233-20260617-polished-ui-rules`
+(x.com/i/article/... requiere JavaScript y no es fetcheable directamente).
+
+**Próximo paso inmediato:** crear ambos ficheros tal cual el plan de
+arriba, luego verificar que OpenCode reconoce la skill nueva (puede
+requerir reiniciar OpenCode, ver nota en "Notas de entorno" sobre
+`.opencode/skills/` no siendo hot-reload).
+
+---
+
 ## Última sesión
 
 **Fecha:** 2026-07-09 · **Sesión 6 (cont.) — Landing rediseñada a pantalla única (D36)**
