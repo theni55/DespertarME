@@ -1,11 +1,13 @@
 import logging
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import Response
 
 from app.api.routes import alert_log, auth, subscriptions, users
 from app.config import settings
@@ -30,12 +32,29 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         await poller_scheduler.stop()
 
 
+class StaticCacheMiddleware(BaseHTTPMiddleware):
+    """Añade cabeceras Cache-Control a los assets estáticos (D35)."""
+
+    async def dispatch(
+        self, request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
+        response = await call_next(request)
+        path = request.url.path
+        if path.startswith("/static/fonts/"):
+            response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        elif path.startswith("/static/"):
+            response.headers["Cache-Control"] = "public, max-age=86400"
+        return response
+
+
 app = FastAPI(
     title="Avisador",
     description="Avisador de alertas deportivas en tiempo real (MMA/Boxeo/Tenis)",
     version="0.1.0",
     lifespan=lifespan,
 )
+
+app.add_middleware(StaticCacheMiddleware)
 
 # API REST
 app.include_router(auth.router)
