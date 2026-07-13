@@ -296,3 +296,6 @@ plataforma (Vercel/CF Pages descartados: serverless no soporta el scheduler
   payload FCM, tipo de sonido de alarma, persistencia de device_id, navegación).
 - **Pendiente tras grilling**: crear skill `ship-polished-ui` (pospuesta de
   Sesión 6), arrancar Fase 7a (backend device model + JSON endpoints + FCM).
+- **Verificación en vivo**: rama `web` verificada como auto-contenida — todos
+  los endpoints (landing, admin, user, static) responden 200. Se levanta sola
+  con checkout + pip install + alembic + uvicorn.
