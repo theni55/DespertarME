@@ -299,3 +299,17 @@ plataforma (Vercel/CF Pages descartados: serverless no soporta el scheduler
 - **Verificación en vivo**: rama `web` verificada como auto-contenida — todos
   los endpoints (landing, admin, user, static) responden 200. Se levanta sola
   con checkout + pip install + alembic + uvicorn.
+- **Grilling completado**: 17 decisiones de implementación resueltas una a
+  una vía `grilling` skill (`mattpocock/skills`). Plan de Fase 7 consolidado:
+  estructura proyecto (`mobile/` en raíz), auth device (header `X-Device-Id` +
+  `expo-secure-store`), eliminación de User/Twilio/teléfono/auth JWT, payload
+  FCM descriptivo, sonido custom embebido, Expo Router Tabs, selector minutos
+  fijo (5/10/15/30/60), design tokens reusados de la web, Home con póster +
+  botón "Avísame" + "Eventos", admin diferido, Firebase en Fase 7a, desarrollo
+  Android con emulador (Android Studio gratuito), spike Expo Go en iPhone para
+  validar plomería push, API mínima (8 endpoints) + test-alarm, Device schema
+  mínimo viable. PR #5 creado para sync `main` → `dev`.
+- **Memorias actualizadas**: `decisiones.md` (D37 ampliado con 17 decisiones +
+  pendientes post-MVP), `fases.md` (Fase 7 reescrita con Spike + 7a + 7b + 7c
+  + 7d detallado), `handoff.md` (grilling completado, próximo paso: spike Expo
+  Go), `bitacora.md` (esta entrada).

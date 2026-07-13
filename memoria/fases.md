@@ -154,52 +154,75 @@ SPA — ver D35), sin build step.
 
 ---
 
-## Fase 7 — App móvil Android (React Native + Expo) 🔶 en planificación
+## Fase 7 — App móvil Android (React Native + Expo) 🔶 plan detallado (17 decisiones vía grilling, D37)
+
+### Fase 7-Spike — Validación plomería push (Expo Go iPhone, gratis)
+
+Validar que el push llega al dispositivo real y la app puede reaccionar. El bypass-silent se valida después con hardware Android.
+
+- [ ] Crear proyecto Expo mínimo en `mobile/` (TypeScript + Expo Router).
+- [ ] Pantalla con botón "simular alarma" → muestra AlarmScreen UI.
+- [ ] Configurar `expo-notifications` + Expo push tokens.
+- [ ] Enviar push de prueba desde el PC → iPhone recibe notificación.
+- [ ] Validar: plomería push funciona (entrega + UI del AlarmScreen), sin bypass-silent.
+- [ ] **Resultado esperado**: confirmación de que el flujo push→app→UI funciona en hardware real. Coste $0, 1-2 horas.
 
 ### Fase 7a — Backend: device model + JSON endpoints + FCM notifier
 
-- [ ] Decisión D37 registrada en `decisiones.md`.
-- [ ] Nuevo modelo `Device` (`id`, `fcm_token`, `platform`, `timezone`, `locale`, `created_at`, `last_seen_at`, `is_active`) + migración Alembic.
-- [ ] `BoutSubscription` y `AlertLog`: añadir `device_id` nullable (FK a `devices`), sin romper histórico con `user_id`.
-- [ ] Endpoints `/api/devices` (register con FCM token + timezone + platform → device_id UUID; unregister).
-- [ ] Auth device: dependencia `get_current_device` vía header `X-Device-Id`.
-- [ ] Exponer ESPN como JSON: `GET /api/events` (lista) + `GET /api/events/{id}` (tarjeta con bouts + `AthleteResolver` para fotos/nombres). Reutiliza lógica de `web/user.py`.
-- [ ] `notifiers/fcm.py` con `firebase-admin`: mensaje data-only `{type: "alarm", event, bout, fighters, starts_in_min}`. `build_notifier()` gated por `FCM_CREDENTIALS` env-var → `DummyNotifier` si no configurado.
-- [ ] `Poller` refactorizado: carga `Device` (fcm_token, timezone) en vez de `User.phone`. Skip dispositivos inactivos.
-- [ ] Admin web refactorizado: vista de devices (FCM token ofuscado) + sus suscripciones + log de alertas. Quitar gestión de usuarios.
-- [ ] Tests: device register/unregister, FCM notifier mocked, poller con device, eventos JSON. Mantener tests existentes verdes.
-- [ ] Verificación: `ruff`/`black`/`mypy`/`pytest` + smoke con `httpx`/`curl`.
+**Eliminar era User/Twilio:**
+- [ ] Eliminar `User` model, `auth/security.py`, `auth/validators.py`, `auth/dependencies.py`.
+- [ ] Eliminar `/api/auth/register`, `/api/auth/login`, `/api/users` routers.
+- [ ] Eliminar `notifiers/twilio.py`, dep `twilio` en `pyproject.toml`, env-vars Twilio.
+- [ ] Migración Alembic: nueva tabla `devices` (`id`, `fcm_token`, `platform`, `timezone`, `locale`, `is_active`, `created_at`, `last_seen_at`).
+- [ ] `BoutSubscription` y `AlertLog`: `user_id` → `device_id` (FK a `devices`).
+- [ ] `get_current_device` (header `X-Device-Id`) reemplaza a `get_current_user`.
+- [ ] Endpoints: `POST /api/devices` (registro), `DELETE /api/devices/me`, `POST /api/devices/me/test-alarm`.
+- [ ] Exponer ESPN como JSON: `GET /api/events` (lista) + `GET /api/events/{id}` (tarjeta con bouts + `AthleteResolver` para fotos/nombres).
+- [ ] `notifiers/fcm.py` con `firebase-admin`: payload data-only descriptivo. `build_notifier()` gated por `FCM_CREDENTIALS` → `DummyNotifier`.
+- [ ] **Configurar proyecto Firebase** (consola, service account key Python, `FCM_CREDENTIALS` env-var).
+- [ ] `Poller` carga `Device` (fcm_token, timezone), skip inactivos.
+- [ ] Tests: device register/test-alarm, FCM mocked, eventos JSON, poller con device.
+- [ ] Verificación: `ruff`/`black`/`mypy`/`pytest` (~57 tests, 64 −7 user/auth).
 
-### Fase 7b — App Android v1 (Expo + React Native)
+### Fase 7b — App Android v1 (Expo + Android Studio + emulador + dev build)
 
-- [ ] Setup: `create-expo-app` con TypeScript + Expo Router + EAS config. Dev build (prebuild) — no Expo Go. Carpeta `mobile/` en raíz del repo.
-- [ ] Spike de alarma: validar que FCM high-priority → notification channel `IMPORTANCE_HIGH` + `setBypassDnd(true)` + foreground service `STREAM_ALARM` suena con el teléfono en silencio. **Primer milestone antes de construir pantallas.**
-- [ ] Native module Android (Kotlin): `AlarmNotificationsModule` (crea channel) + `AlarmService` (foreground, `MediaPlayer.STREAM_ALARM`, looping) + `AlarmActivity` (full-screen intent sobre lockscreen con `setShowWhenLocked`/`setTurnScreenOn`).
-- [ ] Permisos AndroidManifest: `USE_FULL_SCREEN_INTENT`, `SCHEDULE_EXACT_ALARM`, `FOREGROUND_SERVICE`, `POST_NOTIFICATIONS`, `RECEIVE_BOOT_COMPLETED`, `WAKE_LOCK`, `VIBRATE`.
-- [ ] Cliente FCM: `@reactnative-firebase/messaging`. Handler background → lanza `AlarmService`. Handler foreground → abre `AlarmScreen`.
-- [ ] Pantalla Home: cabecera marca, botón grande "Avísame" → navega a Eventos.
-- [ ] Pantalla Eventos: lista de próximos UFC (card con imagen, fecha, main event) desde `GET /api/events`.
-- [ ] Pantalla EventDetail: tarjeta de combates (matchNumber, segmento, foto+nombre peleadores con borde rojo/azul), selector de minutos (5/10/15/30), botón "Avisarme" → `POST /api/subscriptions`.
-- [ ] Pantalla Mis Alertas: suscripciones activas (cancelar) + historial desde `GET /api/alerts`.
-- [ ] Pantalla Ajustes: timezone, estado de permisos (re-pedir bypass DnD), diagnóstico FCM.
-- [ ] AlarmScreen (modal full-screen): "El combate X vs Y de UFC N empieza en N min" + botón "Descartar" (para el sonido).
-- [ ] Estado server: TanStack Query. Persistencia: AsyncStorage para `device_id`.
-- [ ] Diseño: design tokens alineados con la web (Inter Variable, paleta rojo UFC). Skills: `frontend-ui-engineering` + `ship-polished-ui` (cuando se cree).
-- [ ] Tests: Jest + React Native Testing Library para pantallas principales.
-- [ ] Build: EAS Build Android → APK/AAB internal. Prueba en dispositivo físico real (el "suene en silencio" solo se valida en hardware).
+**Setup y native module (bypass-silent):**
+- [ ] Instalar Android Studio + SDK + emulador Android en PC (gratis, ~5GB).
+- [ ] Setup dev build en `mobile/`: `app.json`, `eas.json`, `npx expo prebuild --platform android`.
+- [ ] Native module Kotlin: `AlarmNotificationsModule` (channel `IMPORTANCE_HIGH` + `setBypassDnd(true)` + `AudioAttributes(USAGE_ALARM)`) + `AlarmService` (foreground, `MediaPlayer(STREAM_ALARM)`, looping) + `AlarmActivity` (full-screen intent con `setShowWhenLocked`/`setTurnScreenOn`).
+- [ ] Sonido custom embebido en `mobile/android/app/src/main/res/raw/alarm.ogg` (~200-500KB).
+- [ ] Permisos `AndroidManifest.xml`: `USE_FULL_SCREEN_INTENT`, `SCHEDULE_EXACT_ALARM`, `FOREGROUND_SERVICE_DATA_SYNC`, `POST_NOTIFICATIONS`, `WAKE_LOCK`, `VIBRATE`.
+- [ ] Cliente FCM: `@reactnative-firebase/messaging`. Handler background → `AlarmService`. Handler foreground → `AlarmScreen`.
+- [ ] `google-services.json` en `mobile/android/app/`.
+- [ ] `expo-secure-store` para `device_id` (UUID v4 generado en 1ª launch).
+
+**Pantallas (Expo Router Tabs: Home / Eventos / Mis Alertas / Ajustes):**
+- [ ] **Home**: póster del próximo evento (hero full-bleed) + botón primario **"Avísame"** (→ EventDetail destacado, más vistoso) + botón secundario **"Eventos"** (→ lista de eventos).
+- [ ] **Eventos**: lista de próximos UFC (card con imagen, fecha, nombre) desde `GET /api/events`.
+- [ ] **EventDetail**: tarjeta de combates (foto+nombre peleadores, borde rojo/azul por esquina, matchNumber, segmento, peso), selector fijo de minutos (5/10/15/30/60), botón "Avisarme" → `POST /api/subscriptions`.
+- [ ] **Mis Alertas**: suscripciones activas (botón cancelar) + historial desde `GET /api/alerts`.
+- [ ] **Ajustes**: timezone, estado de permisos, botón "Probar alarma" → `POST /api/devices/me/test-alarm`, info diagnóstico FCM.
+- [ ] **AlarmScreen** (modal full-screen): "UFC 329 — McGregor vs Holloway empieza en ~15 min" + botón "Descartar" (para el sonido). Se abre desde el handler de FCM en foreground o desde el full-screen intent en background.
+
+**Diseño y estado:**
+- [ ] Design tokens: Inter (fuente), rojo UFC `#E50914`, fondo oscuro `#0A0A0A` (reusados de la web D35/D36).
+- [ ] Estado server: TanStack Query. `device_id` en `expo-secure-store`.
+- [ ] Tests: Jest + React Native Testing Library (pantallas principales).
+- [ ] Validar en emulador: navegación, API, pantallas, flujo completo crear/cancelar alerta.
+- [ ] **Validar bypass-silent cuando se consiga hardware Android** (dev build en dispositivo físico con modo silencio activado).
 
 ### Fase 7c — Deploy + smoke real
 
 - [ ] Backend en Railway (D33) con env-vars: `FCM_CREDENTIALS`, `FCM_PROJECT_ID`.
-- [ ] Proyecto Firebase + app Android + `google-services.json` cargado en EAS.
-- [ ] APK al owner → prueba en su móvil con teléfono en silencio: crear alerta, disparar desde backend, verificar alarma.
-- [ ] Iterar ajustes.
+- [ ] Firebase project + `google-services.json` en EAS.
+- [ ] Build EAS free tier → APK interno para el owner.
+- [ ] Smoke: crear alerta, disparar desde backend (admin/fixture), verificar alarma en hardware Android físico con modo silencio.
 
 ### Fase 7d — iOS (post-MVP, tras validar Android)
 
 - [ ] Mismo código Expo con build iOS via EAS.
-- [ ] Solicitar **Critical Alert Entitlement** de Apple (justificación: avisos urgentes de eventos deportivos en tiempo real).
-- [ ] Sin entitlement, iOS no bypass silent — decidir con el owner si aceptar limitación o esperar aprobación.
+- [ ] Solicitar **Critical Alert Entitlement** de Apple.
+- [ ] Sin entitlement, iOS no bypass silent — decidir si aceptar limitación o esperar aprobación.
 
 
 
