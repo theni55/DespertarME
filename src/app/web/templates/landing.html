@@ -1,6 +1,15 @@
 {% extends "base.html" %}
 {% block title %}DespertarME — No te pierdas ni un combate{% endblock %}
 {% block description %}Recibe una llamada automática justo antes de que empiece tu combate favorito. MMA en directo hoy, boxeo y tenis muy pronto.{% endblock %}
+{% block meta_extra %}
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="DespertarME — No te pierdas ni un combate">
+    <meta property="og:description" content="Recibe una llamada automática justo antes de que empiece tu combate favorito. MMA en directo hoy, boxeo y tenis muy pronto.">
+    <meta property="og:image" content="/static/img/hero.jpg">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="DespertarME — No te pierdas ni un combate">
+    <meta name="twitter:description" content="Recibe una llamada automática justo antes de que empiece tu combate favorito. MMA en directo hoy, boxeo y tenis muy pronto.">
+{% endblock %}
 {% block body_class %}landing{% endblock %}
 {% block body %}
 
@@ -8,7 +17,7 @@
 
     <picture class="hero-bg" aria-hidden="true">
         <source srcset="/static/img/hero.webp" type="image/webp">
-        <img src="/static/img/hero.jpg" alt="" loading="eager" fetchpriority="high">
+        <img src="/static/img/hero.jpg" alt="" width="1600" height="1067" loading="eager" fetchpriority="high">
     </picture>
     <div class="hero-overlay" aria-hidden="true"></div>
     <div id="tsparticles" class="hero-particles" aria-hidden="true"></div>
@@ -18,7 +27,7 @@
         <a href="/app/login" class="nav-enter">Entrar</a>
     </nav>
 
-    <main id="main-content" class="hero-content">
+    <main id="main-content" class="hero-content" tabindex="-1">
         <span class="kicker">Avisador de alertas deportivas</span>
         <h1>No te pierdas ni un <span class="accent-text">combate</span></h1>
         <p class="lead">

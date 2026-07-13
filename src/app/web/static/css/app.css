@@ -68,6 +68,7 @@
 
   /* Motion */
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-smooth: cubic-bezier(0.22, 1, 0.36, 1);
   --duration-fast: 150ms;
   --duration-base: 250ms;
   --duration-slow: 600ms;
@@ -625,7 +626,10 @@ body.landing {
   color: var(--text-muted);
   font-size: var(--text-sm);
   font-weight: 600;
-  padding: var(--space-2) var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
   border-radius: var(--radius-full);
   transition: color var(--duration-fast) var(--ease-out), background var(--duration-fast) var(--ease-out);
 }
@@ -648,6 +652,19 @@ body.landing {
   padding: var(--space-8);
   max-width: 720px;
   margin: 0 auto;
+}
+
+@keyframes hero-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+    filter: blur(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
 }
 
 .hero-content .kicker {
@@ -682,6 +699,18 @@ body.landing {
   text-shadow: 0 1px 8px rgba(0, 0, 0, 0.5);
 }
 
+.hero-content .kicker {
+  animation: hero-enter 280ms var(--ease-smooth) backwards;
+}
+
+.hero-content h1 {
+  animation: hero-enter 280ms var(--ease-smooth) backwards 80ms;
+}
+
+.hero-content .lead {
+  animation: hero-enter 280ms var(--ease-smooth) backwards 160ms;
+}
+
 /* --- CTA único: "Avísame" --- */
 .btn-wake {
   display: inline-block;
@@ -692,12 +721,16 @@ body.landing {
   padding: var(--space-4) var(--space-12);
   border-radius: var(--radius-full);
   box-shadow: 0 0 0 rgba(230, 57, 70, 0.5);
-  animation: wake-glow 2.6s ease-in-out infinite;
+  animation: hero-enter 280ms var(--ease-smooth) backwards 240ms, wake-glow 2.6s ease-in-out infinite;
   transition: transform var(--duration-fast) var(--ease-out);
 }
 
 .btn-wake:hover {
   transform: translateY(-2px) scale(1.03);
+}
+
+.btn-wake:active {
+  transform: scale(0.98);
 }
 
 @keyframes wake-glow {
@@ -714,6 +747,12 @@ body.landing {
   .btn-wake {
     animation: none;
     box-shadow: var(--shadow-glow);
+  }
+
+  .hero-content .kicker,
+  .hero-content h1,
+  .hero-content .lead {
+    animation: none;
   }
 }
 
