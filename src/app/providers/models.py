@@ -10,12 +10,15 @@ desde estos DTOs.
 
 from __future__ import annotations
 
+import re
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
 # Estado del combate segun ESPN status.type.state (verificado en vivo).
 BoutState = Literal["pre", "in", "post"]
+
+_ATHLETE_ID_RE = re.compile(r"/athletes/(\d+)")
 
 
 class _ESPNBase(BaseModel):
@@ -26,6 +29,35 @@ class AthleteRef(_ESPNBase):
     """Referencia (URL) a un atleta; el nombre se resuelve bajo demanda."""
 
     ref: str = Field(alias="$ref")
+
+    @property
+    def athlete_id(self) -> str | None:
+        """Extrae el id del atleta del `$ref` (ej. `.../athletes/4686725?lang=en`)."""
+        m = _ATHLETE_ID_RE.search(self.ref)
+        return m.group(1) if m else None
+
+
+class AthleteHeadshot(_ESPNBase):
+    href: str
+    alt: str | None = None
+
+
+class AthleteDetail(_ESPNBase):
+    """Detalle de un atleta (`/sports/mma/athletes/{id}`): nombre + foto."""
+
+    id: str
+    display_name: str = Field(default="", alias="displayName")
+    nickname: str | None = None
+    headshot: AthleteHeadshot | None = None
+
+    @property
+    def headshot_url(self) -> str | None:
+        """URL de la foto de la cara; fallback al patrón CDN estándar de ESPN."""
+        if self.headshot and self.headshot.href:
+            return self.headshot.href
+        if self.id:
+            return f"https://a.espncdn.com/i/headshots/mma/players/full/{self.id}.png"
+        return None
 
 
 class Competitor(_ESPNBase):

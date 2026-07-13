@@ -85,7 +85,7 @@ de decisiones vive en `decisiones.md`; las fuentes de datos en `fuentes-datos.md
 |------|-----------|---------|
 | Lenguaje | Python | 3.12+ |
 | Framework | FastAPI (async) | última |
-| Scheduler | APScheduler (pendiente integrar, D29) | 3.x |
+| Scheduler | APScheduler in-process en lifespan (D31) | 3.x |
 | ORM | SQLAlchemy 2.x async + Alembic | 2.x |
 | BD | PostgreSQL 16 (prod) / SQLite+aiosqlite (dev, D26) | 16 / — |
 | Cache/state | Redis 7 (prod) / fakeredis (tests, D27) | 7 / — |
@@ -93,44 +93,55 @@ de decisiones vive en `decisiones.md`; las fuentes de datos en `fuentes-datos.md
 | Resiliencia | tenacity (backoff) + circuit breaker manual (D24) | 9.x |
 | Auth | passlib[bcrypt] + PyJWT (D28) | — |
 | Web admin | Jinja2 + HTMX (D21) | — |
-| Proveedor SIM | Twilio (D23, Fase 5) | — |
+| Proveedor SIM | Twilio gated por config (D23, D30) | 9.x |
+| Deploy | Railway (contenedor always-on, PG+Redis add-ons, D33) | — |
 | Tests | pytest + pytest-asyncio + respx + freezegun + fakeredis | — |
 | Lint/format | ruff + black + mypy | — |
 
 ---
 
-## Estructura de módulos (Fase 0–3)
+## Estructura de módulos (Fase 0–3 + MVP launch)
 
 ```
 src/app/
-├─ main.py              # FastAPI app + routers
-├─ config.py            # pydantic-settings
+├─ main.py              # FastAPI app + routers + lifespan (scheduler D31)
+├─ config.py            # pydantic-settings (+ normalización DATABASE_URL PaaS,
+│                       #   guard JWT_SECRET en producción, D33)
+├─ scheduler.py         # PollerScheduler: APScheduler in-process (D31)
 ├─ db/
 │  ├─ session.py        # engine async SQLAlchemy
 │  └─ models/           # User, SportSubscription, EventSubscription,
 │                       # BoutSubscription, AlertLog (UNIQUE D16)
 ├─ providers/           # Fase 0: ESPN UFC
-│  ├─ base.py           # ABC Provider
-│  ├─ models.py         # DTOs pydantic (parsing ESPN)
+│  ├─ base.py           # ABC Provider (+ get_athlete)
+│  ├─ models.py         # DTOs pydantic (parsing ESPN, + AthleteDetail)
+│  ├─ athletes.py       # AthleteResolver: caché Redis+memoria (D32)
 │  └─ espn_ufc.py       # EspnUfcProvider + tenacity + CB (D24)
 ├─ domain/
 │  └─ entities.py       # dataclasses frozen (Bout, Card, EstimatedStart...) (D25)
 ├─ engine/
 │  ├─ estimator.py      # EstimatorEngine (recálculo puro, D15/D18)
 │  ├─ state.py          # AlertState (Redis idempotencia, D16)
-│  └─ poller.py         # Poller (orquestación + reintentos D17, D29)
+│  └─ poller.py         # Poller (orquestación + reintentos D17; payload real
+│                       #   con User.phone + nombres de peleadores)
 ├─ notifiers/
+│  ├─ __init__.py       # build_notifier(): factory gated por config (D30)
 │  ├─ base.py           # VoiceNotifier + AlertPayload/CallResult
-│  └─ dummy.py          # DummyNotifier (log-only)
+│  ├─ dummy.py          # DummyNotifier (log-only)
+│  └─ twilio.py         # TwilioNotifier (TwiML inline es-ES, D30)
 ├─ auth/                # Fase 3: JWT
 │  ├─ security.py       # hash/verify + create/decode token
+│  ├─ validators.py     # normalize_phone_e164 (D34)
 │  └─ dependencies.py   # get_current_user / require_admin
 ├─ api/                 # Fase 3: REST
-│  ├─ schemas.py        # pydantic request/response DTOs
+│  ├─ schemas.py        # pydantic request/response DTOs (phone E.164 D34)
 │  └─ routes/           # auth, users, subscriptions, alert_log
-└─ web/                 # Fase 3: admin web
-   ├─ admin.py          # router Jinja2 + HTMX
-   └─ templates/        # base, login, dashboard, users, alerts
+└─ web/                 # Fase 3: admin + usuario
+   ├─ admin.py          # router /admin/* (+ /admin/users/{id} + toggle-active)
+   ├─ user.py           # router /app/* (+ fotos/nombres de peleadores)
+   └─ templates/        # base, login, dashboard, users, user_detail, alerts
+                       # + user_register, user_login, user_dashboard,
+                       #   event_list, event_detail, my_alerts
 ```
 
 ---
@@ -138,5 +149,5 @@ src/app/
 ## Ver también
 
 - **Proveedores de datos** (ESPN, TheSportsDB, scraping) → `fuentes-datos.md`
-- **Decisiones de diseño D1–D29** → `decisiones.md`
+- **Decisiones de diseño D1–D34** → `decisiones.md`
 - **Roadmap por fases** → `fases.md`

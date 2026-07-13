@@ -138,3 +138,178 @@
 - **Verificación**: 50/50 tests ✅ · ruff ✅ · black ✅ · mypy ✅ ·
   flujo completo verificado con httpx (registro → dashboard → eventos →
   detalle → crear alerta → verla activa → cancelar).
+
+## Sesión 5 — MVP launch (fotos de peleadores + Twilio + scheduler + Railway)
+
+Objetivos del owner para dejar el MVP lanzado: peleas con cara/nombre de cada
+peleador, sesión de usuario + datos desde admin, y llamadas Twilio en el
+momento adecuado. Decisiones de alcance tomadas con el owner: Railway como
+plataforma (Vercel/CF Pages descartados: serverless no soporta el scheduler
+24/7), Postgres + Redis add-ons, scheduler in-process 1 worker, Twilio gated
+(aún sin cuenta), teléfono obligatorio E.164.
+
+- **WS1 Peleadores**: `get_athlete()` + `AthleteDetail` (verificado en vivo:
+  `displayName` + `headshot.href`); `AthleteRef.athlete_id` (regex sobre
+  `$ref`); `AthleteResolver` (D32) con caché Redis TTL 7d + memoria compartida
+  + lote de 4 concurrentes, degradación a "TBD"; `event_detail.html` con
+  headshots (borde rojo/azul por esquina) y placeholder SVG.
+- **WS3 Twilio + scheduler**: `TwilioNotifier` (TwiML inline es-ES ×2,
+  `asyncio.to_thread`); `build_notifier()` gated por las 3 env-vars (D30);
+  Poller cableado con datos reales (User.phone_normalized, nombres, evento) y
+  skip de usuarios sin teléfono/inactivos — **bugfix**: el mapeo usaba el id
+  del competitor como id de atleta; `scheduler.py` con `AsyncIOScheduler` en
+  lifespan (D31), `SCHEDULER_ENABLED` flag; teléfono obligatorio E.164 en
+  registro web y API (`auth/validators.py`, D34).
+- **WS2 Admin**: `/admin/users/{id}` (teléfono, suscripciones, historial de
+  alertas) + toggle activar/desactivar (con guard anti-auto-desactivación) +
+  link desde la lista.
+- **WS4 Deploy**: `railway.json` (healthcheck `/health`, migraciones en start);
+  Dockerfile prod (sin deps dev, `--workers 1`); normalización de
+  `DATABASE_URL` PaaS → asyncpg; guard `JWT_SECRET` en producción;
+  `.env.example` actualizado.
+- **Entorno**: este clon no tenía venv; creado con `py -3.12` (el `python` del
+  PATH es 3.11).
+- **Verificación**: `pytest` 72/72 ✅ (22 nuevos: notifiers, athletes, poller
+  payload/skip, get_athlete, teléfono API) · ruff ✅ · black ✅ · mypy ✅ ·
+  smoke server (health, login user/admin, scheduler arranca con Dummy gated) ·
+  smoke E2E en vivo contra ESPN: registro + eventos + detalle con **28
+  headshots y nombres reales**.
+- **Pendiente**: ejecutar el deploy en Railway (cuenta owner); credenciales
+  Twilio; rotar el token GitHub embebido en el remote (aviso de seguridad).
+
+## Sesión 6 — Rediseño visual + landing dinámica (D35, en curso)
+
+- Owner pidió "lavado de cara" vistoso/llamativo + landing dinámica. Se
+  investigaron 3 repos de skills para agentes frontend (`nexu-io/open-design`,
+  `addyosmani/agent-skills`, `msitarzewski/agency-agents`) y se debatió Jinja2
+  vs SPA: **se decide construir sobre Jinja2** (D35) — el motor de plantillas
+  no limita el diseño visual; migrar a SPA obligaría a rehacer la auth por
+  cookie sin ganar nada en "vistosidad".
+- **Fase 0**: instalado el subset frontend de `addyosmani/agent-skills` en
+  `.opencode/skills/` (`frontend-ui-engineering`, `performance-optimization`,
+  `code-review-and-quality` + checklist de accesibilidad).
+- **Fase 1**: `StaticFiles` montado en `main.py`; fuente **Inter Variable**
+  auto-hospedada (`static/fonts/inter-var-latin.woff2`, ~48KB, descargada de
+  `cdn.jsdelivr.net/fontsource` y verificada por magic bytes `wOF2`).
+- **Fase 2**: CSS extraído de `base.html` a `static/css/app.css` con design
+  tokens completos (color/spacing/tipografía/motion/sombras) y refresco de
+  **las 12 plantillas** (auth con labels visibles, tablas envueltas en
+  `.table-wrap` para responsive, utilidades para eliminar CSS inline
+  repetido: `.nav-user`, `.inline-form`, `.btn-sm`, `.event-row`, etc.).
+  Accesibilidad: skip-link, foco visible, `prefers-reduced-motion`.
+- **Fase 3**: `landing.html` nueva (hero, cómo funciona, deportes, CTA,
+  footer) + `static/js/reveal.js` (reveal-on-scroll vanilla, progressive
+  enhancement). `main.py`: `/` sirve la landing siempre (antes 302 a `/app`,
+  ahora pública incluso con sesión activa — decisión explícita del owner).
+- **Fase 4 (parcial)**: extraído `partials/_alert_cell.html` de
+  `event_detail.html` con atributos `hx-post`/`hx-target` ya escritos, pero
+  el backend (`web/user.py`) **todavía no** detecta `HX-Request` para
+  devolver el partial — pendiente de completar.
+- **Verificación parcial**: `ruff` ✅ `black` ✅ `mypy` ✅. `pytest`: **2
+  tests en rojo** (`test_root_redirects_to_app` en `test_health.py` y
+  `test_api.py`, esperan 302 y ahora es 200 — cambio esperado, falta
+  actualizarlos), 70 verdes. Smoke HTTP manual (`curl`/`Invoke-WebRequest`)
+  confirma 200 en `/`, `/app/login`, `/app/register`, CSS y fuente sirven
+  bien. **Falta** revisión visual real en navegador y breakpoints.
+- **Hallazgo suelto**: fichero `imagen landing.jpeg` sin trackear en la raíz
+  del repo — probablemente referencia visual del owner para el hero, sin
+  incorporar todavía.
+- **Pendiente**: completar Fase 4 (HTMX real en create/delete alert), Fase 5
+  (arreglar los 2 tests, smoke visual en navegador, decidir sobre la imagen
+  suelta, actualizar `handoff.md` al cerrar).
+
+## Sesión 6 (cont.) — Landing rediseñada a pantalla única (D36)
+
+- El owner pidió cambiar la landing recién creada: **una única pantalla sin
+  scroll**, con `imagen landing.jpeg` (póster oficial UFC 329, McGregor vs
+  Holloway 2) de fondo, **un solo botón "Avísame"** hacia el registro, y
+  dinamismo visual con partículas/movimiento de fondo. Antes de tocar código
+  se resolvieron 4 decisiones vía preguntas estructuradas: acceso de usuarios
+  existentes (enlace "Entrar" discreto arriba), técnica de partículas
+  (**tsparticles vía CDN**, descartando CSS-only por ser muy limitado y
+  canvas propio por menor riqueza visual), tratamiento de la imagen (fondo
+  full-bleed + overlay, no recuadro central) y optimización (generar
+  WebP+JPG con `ffmpeg`, no servir el 1MB original).
+- **Imágenes**: `ffmpeg` (ya instalado vía winget) generó
+  `static/img/hero.webp` (161KB, calidad 80) y `static/img/hero.jpg` (202KB,
+  fallback `<picture>`) a 1600px de ancho desde el JPEG original de 1MB.
+  El fichero suelto `imagen landing.jpeg` de la raíz **se eliminó** tras
+  copiar su contenido optimizado (cierra el hallazgo pendiente de la sesión
+  anterior).
+- **`landing.html` reescrita por completo**: `.hero-screen` a `100svh` con
+  `<picture>` (webp/jpg) de fondo, capa `.hero-overlay` (degradado oscuro +
+  glow rojo radial) para legibilidad, `#tsparticles` para el movimiento,
+  nav superior mínima (marca + "Entrar") y contenido central (kicker + h1 +
+  lead + botón `.btn-wake` "Avísame" con animación de brillo pulsante vía
+  `@keyframes wake-glow`, respetando `prefers-reduced-motion`). Se eliminan
+  las secciones de marketing (cómo funciona, deportes, CTA final, footer) —
+  ya no encajan en una pantalla única.
+- **tsparticles 2.12.0** cargado por CDN (`cdn.jsdelivr.net`, versión
+  pinneada) con init inline guardado tras `matchMedia("(prefers-reduced-motion: reduce)")`
+  y tras `window.load`; partículas tipo "chispas" (rojo/coral/dorado,
+  movimiento ascendente lento, repulsión al hover). Progressive enhancement:
+  sin JS o con reduced-motion, la landing es 100% funcional sin partículas.
+- **CSS**: se sustituyó todo el bloque de landing de D35 (hero con
+  `max-width`, `.section`, `.steps`, `.sport-card`, `.cta-final`,
+  `.landing-footer`, animaciones `[data-reveal]`) por los estilos de
+  pantalla única. Se añadió salvaguarda `@media (max-height: 560px)` que
+  reactiva el scroll vertical en móviles apaisados muy bajos, para que el
+  CTA nunca quede cortado por el `overflow: hidden` estricto.
+- **Limpieza de dead code**: `reveal.js` y la clase `data-reveal`/`reveal-init`
+  ya no los usa nadie (solo la landing anterior) → se eliminó el fichero y su
+  `<script>` en `base.html`.
+- **Tests**: se aprovechó para cerrar los 2 tests rojos heredados de la
+  sesión anterior (`test_root_redirects_to_app` en `test_health.py` y
+  `test_api.py`, que esperaban 302). Se reescribieron como
+  `test_root_serves_landing` (200 + contiene "Avísame"), sin tocar la
+  cobertura ya existente de `/app` sin cookie → redirige a `/app/login`
+  (`test_api.py` líneas 196-198, intacta).
+- **Verificación completa**: `ruff` ✅ · `black` ✅ · `mypy` ✅ · `pytest`
+  **72/72 verdes** (0 rojos, primera vez desde que empezó la Fase 6). Smoke
+  HTTP manual sobre el `uvicorn --reload` ya corriendo: `/` 200 con
+  "Avísame" y script de tsparticles, `static/img/hero.webp` y `hero.jpg`
+  sirven con el tamaño esperado, `/app` sin cookie → 303 a `/app/login`
+  (200).
+- Nueva decisión **D36** (ver `decisiones.md`).
+- **Pendiente**: smoke visual real en navegador (breakpoints 320/768/1024/1440,
+  contraste del texto sobre la imagen, foco de teclado en "Entrar"/"Avísame",
+  verificar que las partículas no molestan en pantallas pequeñas), completar
+  Fase 4 (HTMX real en create/delete alert, sigue sin tocar), y cuando el
+  cartel destacado cambie de evento, regenerar `hero.webp`/`hero.jpg` con el
+  póster nuevo.
+
+## Sesión 7 — Pivot a app móvil + skills grill (D37/D38)
+
+- El owner decidió pivotar: **web apartada, foco en app móvil**.
+- **Planificación con preguntas estructuradas** (en modo plan): stack
+  React Native + Expo TypeScript, sin cuentas de usuario (device model),
+  notificaciones push FCM tipo despertador, web congelada, admin refactorizado
+  a devices, solo UFC v1. Decisiones D37 registradas.
+- **Skills instaladas**: `grill-me` y `grilling` desde `mattpocock/skills`
+  (`skills/productivity/`) vía git sparse-checkout a `.opencode/skills/`.
+  Formato frontmatter compatible con OpenCode. Decisión D38.
+- **Memorias actualizadas**: `decisiones.md` (D37, D38 + pendientes Fase 7),
+  `fases.md` (Fase 6 congelada, Fase 7 detallada), `handoff.md` (nueva sesión,
+  estado global, próximos pasos), `bitacora.md` (esta entrada).
+- **En curso**: sesión de grilling con el owner para cerrar decisiones
+  pendientes de implementación de Fase 7 (estructura de proyecto, auth device,
+  payload FCM, tipo de sonido de alarma, persistencia de device_id, navegación).
+- **Pendiente tras grilling**: crear skill `ship-polished-ui` (pospuesta de
+  Sesión 6), arrancar Fase 7a (backend device model + JSON endpoints + FCM).
+- **Verificación en vivo**: rama `web` verificada como auto-contenida — todos
+  los endpoints (landing, admin, user, static) responden 200. Se levanta sola
+  con checkout + pip install + alembic + uvicorn.
+- **Grilling completado**: 17 decisiones de implementación resueltas una a
+  una vía `grilling` skill (`mattpocock/skills`). Plan de Fase 7 consolidado:
+  estructura proyecto (`mobile/` en raíz), auth device (header `X-Device-Id` +
+  `expo-secure-store`), eliminación de User/Twilio/teléfono/auth JWT, payload
+  FCM descriptivo, sonido custom embebido, Expo Router Tabs, selector minutos
+  fijo (5/10/15/30/60), design tokens reusados de la web, Home con póster +
+  botón "Avísame" + "Eventos", admin diferido, Firebase en Fase 7a, desarrollo
+  Android con emulador (Android Studio gratuito), spike Expo Go en iPhone para
+  validar plomería push, API mínima (8 endpoints) + test-alarm, Device schema
+  mínimo viable. PR #5 creado para sync `main` → `dev`.
+- **Memorias actualizadas**: `decisiones.md` (D37 ampliado con 17 decisiones +
+  pendientes post-MVP), `fases.md` (Fase 7 reescrita con Spike + 7a + 7b + 7c
+  + 7d detallado), `handoff.md` (grilling completado, próximo paso: spike Expo
+  Go), `bitacora.md` (esta entrada).

@@ -12,6 +12,8 @@ from app.db.models import Base
 from app.db.session import get_session
 from app.main import app
 from app.providers.models import (
+    AthleteDetail,
+    AthleteHeadshot,
     AthleteRef,
     BoutFormat,
     BoutRegulation,
@@ -79,6 +81,18 @@ async def fake_redis():
 # --- Provider fake ----------------------------------------------------------
 
 
+# Refs con formato real de ESPN para que `AthleteRef.athlete_id` parsee el id.
+_ATHLETE_REF = "http://sports.core.api.espn.com/v2/sports/mma/athletes/{aid}?lang=en"
+
+# Atletas fake conocidos por el FakeProvider (id -> nombre).
+FAKE_ATHLETES = {
+    "101": "Red Prev",
+    "102": "Blue Prev",
+    "201": "Conor Test",
+    "202": "Max Fake",
+}
+
+
 class FakeProvider:
     """Provider que devuelve datos controlados sin red.
 
@@ -104,6 +118,7 @@ class FakeProvider:
         self._prev_state = prev_state
         self._prev_clock = prev_clock
         self._prev_period = prev_period
+        self.athlete_calls: list[str] = []
 
     def set_prev_state(self, state: str, clock: float = 0.0, period: int = 0) -> None:
         self._prev_state = state
@@ -124,10 +139,14 @@ class FakeProvider:
             format=BoutFormat(regulation=BoutRegulation(periods=3, clock=300.0)),
             competitors=[
                 Competitor(
-                    id="red-1", order=1, athlete=AthleteRef.model_validate({"$ref": "ref-red-1"})
+                    id="red-1",
+                    order=1,
+                    athlete=AthleteRef.model_validate({"$ref": _ATHLETE_REF.format(aid="101")}),
                 ),
                 Competitor(
-                    id="blue-1", order=2, athlete=AthleteRef.model_validate({"$ref": "ref-blue-1"})
+                    id="blue-1",
+                    order=2,
+                    athlete=AthleteRef.model_validate({"$ref": _ATHLETE_REF.format(aid="102")}),
                 ),
             ],
         )
@@ -140,10 +159,14 @@ class FakeProvider:
             format=BoutFormat(regulation=BoutRegulation(periods=5, clock=300.0)),
             competitors=[
                 Competitor(
-                    id="red-2", order=1, athlete=AthleteRef.model_validate({"$ref": "ref-red-2"})
+                    id="red-2",
+                    order=1,
+                    athlete=AthleteRef.model_validate({"$ref": _ATHLETE_REF.format(aid="201")}),
                 ),
                 Competitor(
-                    id="blue-2", order=2, athlete=AthleteRef.model_validate({"$ref": "ref-blue-2"})
+                    id="blue-2",
+                    order=2,
+                    athlete=AthleteRef.model_validate({"$ref": _ATHLETE_REF.format(aid="202")}),
                 ),
             ],
         )
@@ -161,6 +184,17 @@ class FakeProvider:
             type=CompetitionStatusType(
                 state=self._prev_state,  # type: ignore[arg-type]
                 completed=(self._prev_state == "post"),
+            ),
+        )
+
+    async def get_athlete(self, athlete_id: str) -> AthleteDetail:
+        self.athlete_calls.append(athlete_id)
+        name = FAKE_ATHLETES.get(athlete_id, f"Fighter {athlete_id}")
+        return AthleteDetail(
+            id=athlete_id,
+            displayName=name,
+            headshot=AthleteHeadshot(
+                href=f"https://a.espncdn.com/i/headshots/mma/players/full/{athlete_id}.png"
             ),
         )
 

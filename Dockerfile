@@ -11,11 +11,14 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends build-essential curl \
     && rm -rf /var/lib/apt/lists/*
 
-COPY pyproject.toml README.md ./
+COPY pyproject.toml README.md alembic.ini ./
+COPY alembic ./alembic
 COPY src ./src
 
-RUN pip install --editable .[dev]
+RUN pip install .
 
 EXPOSE 8000
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# --workers 1 es requisito: el scheduler del Poller corre in-process (D31).
+# Shell form para expandir $PORT (Railway lo inyecta; local usa 8000).
+CMD alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1
