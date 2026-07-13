@@ -2,181 +2,47 @@
 
 > Punto de entrada de cada sesión: estado actual, último avance y próximo paso. Actualízalo al final de cada sesión.
 
-## ⚠️ Tarea pendiente al iniciar la próxima sesión: crear skill `ship-polished-ui`
-
-**Contexto:** en la sesión anterior el owner pidió leer el artículo
-["The 10 rules to ship truly polished UI with Claude"](https://x.com/kvnkld/status/2066863634949779464)
-de Kevin (@kvnkld) y convertirlo en una skill de OpenCode. Se leyó el
-artículo completo (vía mirror, ya que x.com requiere JS) y se acordó el
-plan con el owner mediante preguntas de clarificación. **No se llegó a
-crear el archivo** — la sesión terminó en modo plan justo antes de
-ejecutarlo. Esta es la primera tarea de la próxima sesión.
-
-**Decisiones ya confirmadas por el owner:**
-- Nombre de la skill: **`ship-polished-ui`**
-- Idioma del contenido: **inglés** (consistente con las demás skills del repo)
-- Incluir subcarpeta `references/` con `motion-library.md` (patrón ya usado
-  por `frontend-ui-engineering`)
-
-**Archivos a crear:**
-
-```
-.opencode/skills/ship-polished-ui/
-├─ SKILL.md
-└─ references/
-   └─ motion-library.md
-```
-
-### `SKILL.md` — contenido a incluir
-
-Frontmatter:
-```yaml
----
-name: ship-polished-ui
-description: Adds premium polish and micro-interactions to UIs. Use when animations feel stiff or generic, when building interactive components (sliders, drag, expand/collapse), or when UI needs to look hand-crafted rather than AI-generated. Complements frontend-ui-engineering.
----
-```
-
-Secciones:
-- **Overview** — la meta-regla que subyace a las 10: cambiar adjetivos por
-  números ("smooth" no es un valor; `cubic-bezier(...)` a 280ms sí).
-- **When to Use** — al añadir animación/motion, micro-interacciones,
-  componentes interactivos, o cuando algo "se siente AI".
-- **The house easing set** — bloque CSS con las 4 variables:
-  ```css
-  :root {
-    --ease-smooth: cubic-bezier(0.22, 1, 0.36, 1);    /* default */
-    --ease-out:    cubic-bezier(0.17, 1, 0.32, 1);    /* entradas decorativas */
-    --ease-spring: cubic-bezier(0.35, 1.55, 0.65, 1); /* badges, pops, overshoot */
-    --ease-in-out: cubic-bezier(0.66, 0, 0.34, 1);    /* movimientos simétricos */
-  }
-  ```
-- **The 10 rules**, cada una con su snippet:
-  1. Easing propio, nunca defaults nativos (`ease`, `ease-in-out`).
-  2. Definir design tokens antes de construir ("usa solo estos tokens, sin
-     valores one-off").
-  3. Draggables con física real: momentum, fricción, resistencia; overscroll
-     que estira y rebota en vez de parar en seco.
-  4. Snap points magnéticos: dos zonas (pull-in estrecha + release amplia) +
-     flash del label al enganchar.
-  5. Entradas con blur, nunca solo fade: `opacity 0→1` + `translateY 6px→0`
-     + `blur(2px)→0`, ~280ms sobre `--ease-smooth`.
-  6. Sombras en capas, no una sola: hairline ring of light en vez de borde;
-     opacidad por capa 2–8%; varios blurs apilados de distinto tamaño.
-  7. Press response en todo clickable: encoger a **98%** (no 95%, que se
-     lee como "colapso" en vez de "presión firme").
-  8. Expand/collapse con `grid-template-rows: 0fr → 1fr` (nunca el hack
-     `max-height: 9999px`, que da saltos).
-  9. Respetar `prefers-reduced-motion`: colapsar a instantáneo, parar loops
-     decorativos.
-  10. Un componente es un **set de estados**, no una imagen: idle / hover /
-      pressed / loading / disabled / success — se descubren usándolo, no
-      se especifican completos en Figma de antemano.
-- **Prompting patterns** — describir el *feeling*, no la jerga técnica;
-  entregar el bloque de tokens primero ("mata el 80% del look AI-slop").
-- **Red Flags** — fades planos sin blur, sombra única, press al 95%,
-  `max-height:9999px`, curvas de easing nativas del navegador, valores
-  fuera de la escala de tokens.
-- **Verification checklist** — easing tokenizado y no nativo, entradas con
-  blur, press feedback en clickables, `prefers-reduced-motion` honrado,
-  estados completos del componente (no solo idle/hover).
-- **Cierre** — "el prompt te da el 90%; el 10% final (el taste, las
-  micro-decisiones de 2px/98%) es tuyo". Atribución al artículo original y
-  link al tweet.
-
-### `references/motion-library.md` — contenido a incluir
-- Catálogo de curvas de easing con su intención de uso (default / entradas
-  decorativas / overshoot / simétrico) — las mismas 4 del bloque CSS de
-  arriba, con explicación ampliada.
-- Duraciones sugeridas por intención (press ~120ms, entrada ~280ms, drag
-  release variable según velocidad).
-- Reglas de asimetría enter/exit (las entradas suelen ser más lentas que
-  las salidas).
-- Snippets copy-paste: hover lift, staggered reveal, modal entry, shimmer
-  loading.
-- Bloque completo de `@media (prefers-reduced-motion: reduce)` con el
-  patrón de fallback a instantáneo.
-
-**Fuente original completa del artículo** (para no tener que volver a
-buscarla): mirror legible en
-`https://gu-log.vercel.app/en/posts/en-sp-233-20260617-polished-ui-rules`
-(x.com/i/article/... requiere JavaScript y no es fetcheable directamente).
-
-**Próximo paso inmediato:** crear ambos ficheros tal cual el plan de
-arriba, luego verificar que OpenCode reconoce la skill nueva (puede
-requerir reiniciar OpenCode, ver nota en "Notas de entorno" sobre
-`.opencode/skills/` no siendo hot-reload).
-
 ---
 
 ## Última sesión
 
-**Fecha:** 2026-07-09 · **Sesión 6 (cont.) — Landing rediseñada a pantalla única (D36)**
+**Fecha:** 2026-07-13 · **Sesión 7 — Pivot a app móvil (D37/D38)**
 
-**Contexto:** tras la Sesión 6 (rediseño visual + landing multi-sección,
-D35), el owner pidió cambiar la landing recién creada: **una única pantalla
-sin scroll**, con la imagen del cartel de UFC 329 (`imagen landing.jpeg`,
-hallazgo pendiente de la sesión anterior) como fondo, **un solo botón
-"Avísame"** hacia el registro, y dinamismo visual con partículas/movimiento
-de fondo. Se resolvieron 4 decisiones de diseño con el owner antes de tocar
-código (ver `decisiones.md` → D36): acceso de usuarios existentes (enlace
-"Entrar" discreto), técnica de partículas (**tsparticles vía CDN**, no
-CSS-only ni canvas propio), tratamiento de la imagen (fondo full-bleed +
-overlay) y optimización (WebP+JPG generados con `ffmpeg`, no el 1MB
-original).
+**Contexto:** el owner decidió un cambio de rumbo: **dejar la web apartada**
+y centrar el desarrollo en una app móvil (Android primero, iOS después).
+Antes de ejecutar, se realizó una fase de planificación con preguntas
+estructuradas que resolvió las decisiones de alto nivel (D37).
 
-**Qué se hizo:**
-- **Imágenes**: `ffmpeg` generó `static/img/hero.webp` (161KB) y
-  `static/img/hero.jpg` (202KB, fallback) a 1600px desde el JPEG original.
-  El fichero suelto `imagen landing.jpeg` de la raíz **se eliminó** (cierra
-  el hallazgo pendiente de la sesión anterior).
-- **`landing.html` reescrita por completo**: `.hero-screen` a `100svh` con
-  `<picture>` de fondo (webp/jpg), overlay degradado + glow rojo, capa
-  `#tsparticles`, nav superior mínima (marca + "Entrar" → `/app/login`) y
-  contenido central (kicker + h1 + lead + botón `.btn-wake` "Avísame" →
-  `/app/register`, con animación de brillo pulsante). Se eliminan las
-  secciones de marketing de la landing anterior (cómo funciona, deportes,
-  CTA final, footer).
-- **tsparticles 2.12.0** por CDN (versión pinneada), init guardado tras
-  `prefers-reduced-motion`; partículas tipo chispas rojo/dorado con
-  movimiento ascendente y repulsión al hover. Progressive enhancement: sin
-  JS o con reduced-motion, la landing es 100% funcional.
-- **CSS**: sustituido íntegramente el bloque de landing de D35 por los
-  estilos de pantalla única, con salvaguarda `@media (max-height: 560px)`
-  que reactiva scroll en móviles apaisados muy bajos.
-- **Limpieza**: `reveal.js` y `data-reveal`/`reveal-init` eliminados (dead
-  code, solo los usaba la landing anterior).
-- **Cerrados los 2 tests rojos heredados** de la sesión anterior:
-  `test_root_redirects_to_app` (esperaba 302) reescrito como
-  `test_root_serves_landing` (200 + contiene "Avísame") en
-  `tests/test_health.py` y `tests/test_api.py`. Se verificó que la
-  cobertura de `/app` sin cookie → redirige a `/app/login` sigue intacta.
+**Decisiones confirmadas (D37):**
+- **Stack app**: React Native + Expo (TypeScript) con dev builds EAS.
+- **Modelo**: sin cuentas de usuario. El actor es un `Device` (FCM token).
+- **Notificaciones**: push FCM tipo despertador (bypass DnD, IMPORTANCE_HIGH,
+  foreground service con STREAM_ALARM, full-screen intent).
+- **Web**: web de usuario + landing **congeladas**. Admin web **refactorizado**
+  a vista de devices.
+- **Deportes v1**: solo UFC (lo ya integrado). Boxeo/Tenis diferido.
+- **Backend**: Railway + Firebase FCM. Railway deploy ya planeado (D33).
 
-**Verificación de esta sesión:** `ruff` ✅ · `black` ✅ · `mypy` ✅ ·
-`pytest` → **72/72 verdes** (0 rojos, primera vez limpio desde que empezó
-la Fase 6) · smoke HTTP manual sobre el `uvicorn --reload` ya corriendo:
-`/` 200 con "Avísame" y script de tsparticles, `hero.webp`/`hero.jpg`
-sirven con el tamaño esperado, `/app` sin cookie → 303 a `/app/login` (200).
+**Qué se hizo en esta sesión:**
+- Instaladas skills `grill-me` y `grilling` desde `mattpocock/skills` en
+  `.opencode/skills/` (D38).
+- Memorias actualizadas: `decisiones.md` (D37, D38), `fases.md` (Fase 6
+  congelada, Fase 7 añadida), `handoff.md` (nuevo estado y sesión),
+  `bitacora.md` (entrada de la sesión).
+- **En curso**: sesión de grilling para refinar el plan de Fase 7
+  (decisiones de implementación aún pendientes).
 
-**Pendiente aún (no bloqueante, no se tocó esta sesión):**
-- Backend HTMX real en `create_alert`/`delete_alert` (`src/app/web/user.py`)
-  — el partial `_alert_cell.html` ya tiene los `hx-*` escritos pero el
-  backend no detecta `HX-Request` todavía.
-- **Smoke visual real en navegador**: responsive 320/768/1024/1440,
-  contraste del texto sobre la imagen, foco de teclado en "Entrar"/"Avísame",
-  comportamiento de las partículas en pantallas pequeñas/gama baja.
-- Si el cartel destacado cambia de evento en el futuro, regenerar
-  `static/img/hero.webp`/`hero.jpg` con el póster nuevo (comandos `ffmpeg`
-  documentados en `bitacora.md` → Sesión 6 cont.).
+**Pendiente tras el grilling:**
+- Cerrar la sesión de grilling con todas las decisiones de Fase 7a y 7b
+  cerradas.
+- Crear skill `ship-polished-ui` (tarea pospuesta de la Sesión 6) — será
+  útil durante Fase 7b para el diseño de la app.
+- Arrancar Fase 7a (backend: device model + JSON endpoints + FCM notifier).
 
-**Detalle completo**: `memoria/fases.md` → "Fase 6 — Rediseño visual +
-landing dinámica". Decisiones: `D35`/`D36` en `memoria/decisiones.md`.
-Narrativa: `memoria/bitacora.md` → "Sesión 6 (cont.)".
-
-**Servidor:** sigue corriendo un `uvicorn --reload` en local en el puerto
-8000 (PID 740, ver `Get-NetTCPConnection -LocalPort 8000`) desde la sesión
-anterior, usado para el smoke test de esta sesión. Puede matarse sin
-problema al empezar la siguiente.
+**Ramas:** la web congelada vive en la rama `web` (snapshot del último commit
+de la era web, `dcf62f8`). `main` es ahora la rama de desarrollo de la app
+(backend API-only + futuro `mobile/`). Para consultar o ejecutar la web:
+`git checkout web` y levantar con `uvicorn app.main:app --reload`.
 
 ---
 
@@ -191,8 +57,9 @@ problema al empezar la siguiente.
 | Fase 3 — Multiusuario + admin web | **Completada** ✅ |
 | Fase MVP-launch — fotos + Twilio + scheduler + Railway | **Código listo** ✅ (deploy pendiente) |
 | Fase 4 — Boxeo/Tenis reales | Pendiente (fuera del MVP) |
-| Fase 5 — VoiceNotifier real (Twilio) | **Completada** ✅ (falta cuenta Twilio para llamada real) |
-| Fase 6 — Rediseño visual + landing dinámica (D35/D36) | 🔶 **En curso** — landing de pantalla única lista y verificada (tests + smoke HTTP); falta HTMX real, smoke visual en navegador |
+| Fase 5 — VoiceNotifier real (Twilio) | **Completada** ✅ (pendiente cuenta Twilio del owner) |
+| Fase 6 — Rediseño visual + landing dinámica (D35/D36) | ❄️ **Congelada** — landing y web funcionales; se abandona HTMX y smoke visual |
+| Fase 7 — App móvil Android (React Native + Expo) | 🔶 **En planificación** — grilling en curso para cerrar decisiones de implementación |
 
 Detalle de checkboxes en `fases.md`.
 
@@ -200,28 +67,30 @@ Detalle de checkboxes en `fases.md`.
 
 ## Próximos pasos
 
-**Inmediato (cerrar Fase 6):**
+**Inmediato (cerrar planificación Fase 7):**
 
-1. **Completar HTMX real**: en `src/app/web/user.py`, los endpoints
-   `create_alert` y `delete_alert` deben detectar `request.headers.get("HX-Request")`
-   y devolver `partials/_alert_cell.html` en vez del `RedirectResponse` 303,
-   para que crear/cancelar una alerta no recargue la página.
-2. **Smoke visual en navegador real**: abrir `http://localhost:8000/` y
-   recorrer landing (pantalla única, sin scroll salvo pantallas muy bajas) →
-   registro → dashboard → evento con fotos. Revisar responsive en
-   320/768/1024/1440, contraste de color del texto sobre la imagen,
-   navegación por teclado (Tab en "Entrar"/"Avísame"), y que las partículas
-   no sobrecarguen dispositivos de gama baja.
-3. Actualizar `memoria/handoff.md` de nuevo al cerrar esta fase.
+1. **Completar grilling**: resolver las decisiones pendientes
+   (`decisiones.md` → "Decisiones pendientes (Fase 7)") una a una.
+2. **Crear skill `ship-polished-ui`** (tarea pospuesta de Sesión 6) —
+   contenido detallado en el handoff anterior.
 
-**Después de cerrar Fase 6:**
+**Después del grilling (arrancar Fase 7a):**
 
-4. **Deploy en Railway** (requiere cuenta del owner) — ver checklist detallado
-   más abajo, sin cambios respecto a la Sesión 5.
-5. **Cuenta Twilio**: set env-vars cuando el owner la tenga.
-6. **Seguridad**: rotar el token GitHub embebido en el remote del clon local.
-7. (Opcional) Cadencia adaptativa D15 en el scheduler; CI GitHub Actions.
-8. Si el cartel destacado cambia de evento, regenerar `static/img/hero.*`.
+3. Migración Alembic: `Device` + `device_id` en `BoutSubscription`/`AlertLog`.
+4. Endpoints `/api/devices`, `GET /api/events`, `GET /api/events/{id}` JSON.
+5. `FcmNotifier` con `firebase-admin`.
+6. Refactor Poller: `Device.fcm_token` + timezone en vez de `User.phone`.
+7. Admin web refactorizado a devices.
+8. Tests + verificación completa (ruff/black/mypy/pytest).
+
+**Después de Fase 7a (arrancar Fase 7b):**
+
+9. Setup proyecto Expo + Native module Android (alarma).
+10. Spike: validar FCM → alarma bypass DnD en dispositivo físico real.
+11. Pantallas: Home, Eventos, EventDetail, Mis Alertas, Ajustes, AlarmScreen.
+12. Build EAS → APK interno → prueba con el owner.
+
+---
 
 ---
 
@@ -268,9 +137,17 @@ uvicorn app.main:app --reload
 - **tsparticles**: única dependencia por CDN del proyecto (versión pinneada
   `2.12.0` en jsdelivr) — rompe puntualmente el principio "sin CDN" de D35
   (que solo cubría fuentes), aceptado como progressive enhancement (D36).
-- **Skills de agente**: `.opencode/skills/` contiene el subset frontend de
-  `addyosmani/agent-skills`. Si esta sesión no las ve activas, reinicia
-  OpenCode (el config no es hot-reload).
+- **Skills de agente**: `.opencode/skills/` contiene:
+  - Subset frontend de `addyosmani/agent-skills`: `frontend-ui-engineering`,
+    `performance-optimization`, `code-review-and-quality` (+
+    `references/accessibility-checklist.md` en frontend).
+  - Subset productivity de `mattpocock/skills`: `grill-me` (user-invoked),
+    `grilling` (model-invoked) — D38.
+  - Si esta sesión no las ve activas, reinicia OpenCode (el config no es
+    hot-reload).
+- **Entorno app (nuevo)**: el proyecto Expo vivirá en `mobile/` (raíz del repo).
+  Requiere Node 24.18+ (presente), `npx expo`, EAS CLI, Android Studio (para
+  dev build y emulador). Aún no creado — se crea en Fase 7b.
 
 ---
 
