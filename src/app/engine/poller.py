@@ -26,6 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.alert_log import AlertLog
 from app.db.models.subscriptions import BoutSubscription
+from app.db.models.users import User
 from app.domain.entities import (
     Athlete,
     Bout,
@@ -36,7 +37,9 @@ from app.domain.entities import (
 from app.engine.estimator import EstimatorEngine
 from app.engine.state import AlertState
 from app.notifiers.base import AlertPayload, CallResult, VoiceNotifier
+from app.providers.athletes import AthleteResolver
 from app.providers.base import Provider
+from app.providers.models import Competitor as ProviderCompetitor
 
 logger = logging.getLogger(__name__)
 
@@ -55,12 +58,14 @@ class Poller:
         state: AlertState,
         estimator: EstimatorEngine | None = None,
         retry_delays: tuple[float, ...] = RETRY_DELAYS,
+        athlete_resolver: AthleteResolver | None = None,
     ) -> None:
         self._provider = provider
         self._notifier = notifier
         self._state = state
         self._estimator = estimator or EstimatorEngine()
         self._retry_delays = retry_delays
+        self._resolver = athlete_resolver or AthleteResolver(provider)
 
     async def poll_once(self, session: AsyncSession, now: datetime | None = None) -> int:
         """Procesa todas las suscripciones activas. Devuelve nº de alertas disparadas."""
@@ -85,6 +90,16 @@ class Poller:
         self, session: AsyncSession, sub: BoutSubscription, now: datetime
     ) -> bool:
         """Procesa una suscripción. Devuelve True si se disparó la alerta."""
+        user = await session.get(User, sub.user_id)
+        if user is None or not user.is_active:
+            logger.warning("Suscripción %s: usuario inexistente o inactivo, skip", sub.id)
+            return False
+        if not user.phone_normalized:
+            logger.warning(
+                "Suscripción %s: usuario %s sin teléfono, no se puede llamar", sub.id, user.id
+            )
+            return False
+
         card = await self._load_card(sub)
         target = card.bout_by_id(sub.bout_id)
         if target is None:
@@ -122,7 +137,7 @@ class Poller:
             logger.info("Suscripción %s: alerta ya disparada (idempotente)", sub.id)
             return False
 
-        result = await self._call_with_retries(sub, target, estimate, now)
+        result = await self._call_with_retries(sub, user, card, target, estimate, now)
         await self._log_alert(session, sub, target, estimate, result, now, status_key)
 
         if result.success:
@@ -135,12 +150,32 @@ class Poller:
         return False
 
     async def _load_card(self, sub: BoutSubscription) -> Card:
-        """Carga la tarjeta del evento vía Provider y mapea a dominio."""
+        """Carga la tarjeta del evento vía Provider y mapea a dominio.
+
+        Resuelve los nombres de los atletas (con caché) para que la llamada
+        pueda decir "X contra Y" en vez de ids.
+        """
         event = await self._provider.get_event_card(sub.event_id)
+
+        athlete_ids = [
+            corner.athlete.athlete_id
+            for comp in event.bouts
+            for corner in (comp.red_corner, comp.blue_corner)
+            if corner and corner.athlete and corner.athlete.athlete_id
+        ]
+        resolved = await self._resolver.resolve_many(athlete_ids)
+
+        def _to_athlete(corner: ProviderCompetitor | None) -> Athlete | None:
+            if corner is None or corner.athlete is None:
+                return None
+            aid = corner.athlete.athlete_id
+            if not aid:
+                return None
+            found = resolved.get(aid)
+            return Athlete(id=aid, name=found.name if found else None)
+
         bouts: list[Bout] = []
         for comp in event.bouts:
-            red = comp.red_corner
-            blue = comp.blue_corner
             bouts.append(
                 Bout(
                     id=comp.id,
@@ -150,8 +185,8 @@ class Poller:
                     weight_class=comp.weight_class.text if comp.weight_class else None,
                     periods=comp.format.regulation.periods if comp.format else 3,
                     round_seconds=comp.format.regulation.clock if comp.format else 300.0,
-                    red=Athlete(id=red.id) if red else None,
-                    blue=Athlete(id=blue.id) if blue else None,
+                    red=_to_athlete(comp.red_corner),
+                    blue=_to_athlete(comp.blue_corner),
                 )
             )
         return Card(event_id=event.id, event_name=event.name, bouts=bouts)
@@ -159,6 +194,8 @@ class Poller:
     async def _call_with_retries(
         self,
         sub: BoutSubscription,
+        user: User,
+        card: Card,
         target: Bout,
         estimate: EstimatedStart,
         now: datetime,
@@ -167,11 +204,11 @@ class Poller:
         minutes_until = max(0, int((estimate.start_at - now).total_seconds() // 60))
         payload = AlertPayload(
             user_id=sub.user_id,
-            phone="+000000000",
-            event_name="",
+            phone=user.phone_normalized or "",
+            event_name=card.event_name,
             bout_id=sub.bout_id,
-            red_name=None,
-            blue_name=None,
+            red_name=target.red.name if target.red else None,
+            blue_name=target.blue.name if target.blue else None,
             weight_class=target.weight_class,
             minutes_until_start=minutes_until,
         )

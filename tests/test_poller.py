@@ -21,7 +21,20 @@ from app.db.models.subscriptions import BoutSubscription
 from app.db.models.users import User
 from app.engine.poller import Poller
 from app.engine.state import AlertState
+from app.notifiers.base import AlertPayload, CallResult, VoiceNotifier
 from app.notifiers.dummy import DummyNotifier
+
+
+class CapturingNotifier(VoiceNotifier):
+    """Notifier que captura el payload para verificar el cableado real."""
+
+    def __init__(self) -> None:
+        self.payloads: list[AlertPayload] = []
+
+    async def call(self, payload: AlertPayload) -> CallResult:
+        self.payloads.append(payload)
+        return CallResult(success=True, call_id="captured")
+
 
 # --- Helpers -----------------------------------------------------------------
 
@@ -135,7 +148,7 @@ async def test_poller_retries_on_notifier_failure(db_session, fake_provider, fak
     await _seed_user_and_sub(db_session)
     fake_provider.set_prev_state("post")
     state = AlertState(client=fake_redis)
-    notifier = DummyNotifier(fail_on_phone="+000000000")
+    notifier = DummyNotifier(fail_on_phone="+34600000000")
     poller = Poller(
         provider=fake_provider,
         notifier=notifier,
@@ -180,3 +193,70 @@ async def test_alert_state_idempotency(fake_redis) -> None:
     assert second is False
     assert await state.was_fired("sub-1", "bout-1", "post") is True
     assert await state.was_fired("sub-1", "bout-1", "in") is False
+
+
+@freeze_time("2026-07-11T21:26:00+00:00")
+async def test_poller_payload_has_real_user_and_fighter_data(
+    db_session, fake_provider, fake_redis
+) -> None:
+    """El payload de la llamada lleva teléfono real, evento y nombres (MVP launch)."""
+    user, _ = await _seed_user_and_sub(db_session)
+    fake_provider.set_prev_state("post")
+    state = AlertState(client=fake_redis)
+    notifier = CapturingNotifier()
+    poller = Poller(
+        provider=fake_provider,
+        notifier=notifier,
+        state=state,
+        retry_delays=(),
+    )
+
+    fired = await poller.poll_once(db_session, now=datetime.now(UTC))
+
+    assert fired == 1
+    assert len(notifier.payloads) == 1
+    payload = notifier.payloads[0]
+    assert payload.phone == "+34600000000"
+    assert payload.event_name == "UFC Test"
+    assert payload.red_name == "Conor Test"
+    assert payload.blue_name == "Max Fake"
+    assert payload.user_id == user.id
+
+
+@freeze_time("2026-07-11T21:26:00+00:00")
+async def test_poller_skips_user_without_phone(db_session, fake_provider, fake_redis) -> None:
+    """Sin teléfono no hay llamada: la suscripción se salta sin marcar idempotencia."""
+    user = User(
+        id=str(uuid.uuid4()),
+        email="nophone@example.com",
+        hashed_password="x",
+        phone_normalized=None,
+    )
+    db_session.add(user)
+    await db_session.flush()
+    sub = BoutSubscription(
+        id=str(uuid.uuid4()),
+        user_id=user.id,
+        event_id="ev-1",
+        bout_id="comp-target",
+        target_match_number=1,
+        previous_bout_id="comp-prev",
+        previous_match_number=2,
+        lead_minutes=15,
+        status="active",
+    )
+    db_session.add(sub)
+    await db_session.commit()
+    fake_provider.set_prev_state("post")
+    state = AlertState(client=fake_redis)
+    poller = Poller(
+        provider=fake_provider,
+        notifier=DummyNotifier(),
+        state=state,
+        retry_delays=(),
+    )
+
+    fired = await poller.poll_once(db_session, now=datetime.now(UTC))
+
+    assert fired == 0
+    assert await state.was_fired(sub.id, sub.bout_id, "post") is False

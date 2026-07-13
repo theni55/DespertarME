@@ -220,3 +220,58 @@ async def test_circuit_breaker_resets_on_success() -> None:
         with pytest.raises(httpx.HTTPStatusError):
             await provider.get_event_card(EVENT_ID)
         assert not provider.is_circuit_open
+
+
+# --- get_athlete: nombre + headshot (MVP launch) ------------------------------
+
+
+@respx.mock
+async def test_get_athlete_returns_name_and_headshot() -> None:
+    athlete_id = "4686725"
+    respx.get(url=f"{BASE}/sports/mma/athletes/{athlete_id}").respond(
+        json={
+            "id": athlete_id,
+            "displayName": "Cody Durden",
+            "nickname": "Custom Made",
+            "headshot": {
+                "href": f"https://a.espncdn.com/i/headshots/mma/players/full/{athlete_id}.png",
+                "alt": "Cody Durden",
+            },
+        }
+    )
+
+    async with EspnUfcProvider() as provider:
+        athlete = await provider.get_athlete(athlete_id)
+
+    assert athlete.display_name == "Cody Durden"
+    assert athlete.headshot_url == (
+        f"https://a.espncdn.com/i/headshots/mma/players/full/{athlete_id}.png"
+    )
+
+
+@respx.mock
+async def test_get_athlete_headshot_fallback_when_missing() -> None:
+    athlete_id = "111"
+    respx.get(url=f"{BASE}/sports/mma/athletes/{athlete_id}").respond(
+        json={"id": athlete_id, "displayName": "Sin Foto"}
+    )
+
+    async with EspnUfcProvider() as provider:
+        athlete = await provider.get_athlete(athlete_id)
+
+    # Fallback al patrón CDN estándar aunque ESPN no mande headshot.
+    assert athlete.headshot_url == (
+        f"https://a.espncdn.com/i/headshots/mma/players/full/{athlete_id}.png"
+    )
+
+
+def test_athlete_ref_parses_id_from_url() -> None:
+    from app.providers.models import AthleteRef
+
+    ref = AthleteRef.model_validate(
+        {"$ref": "http://sports.core.api.espn.com/v2/sports/mma/athletes/4686725?lang=en"}
+    )
+    assert ref.athlete_id == "4686725"
+
+    bad = AthleteRef.model_validate({"$ref": "http://example.com/nada"})
+    assert bad.athlete_id is None
