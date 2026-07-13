@@ -29,6 +29,19 @@ estructuradas que resolvió las decisiones de alto nivel (D37).
 - Memorias actualizadas: `decisiones.md` (D37, D38), `fases.md` (Fase 6
   congelada, Fase 7 añadida), `handoff.md` (nuevo estado y sesión),
   `bitacora.md` (entrada de la sesión).
+- **Split de ramas completado**: rama `web` creada desde `dcf62f8` como
+  archivo congelado de la era web (pusheada a origin). `main` limpiada:
+  `src/app/web/` eliminado (~2500 líneas HTML/CSS/Jinja2), `main.py`
+  reducido a API-only (solo FastAPI + health + lifespan + routers REST),
+  `pyproject.toml` sin `jinja2` ni `python-multipart`. 64 tests verdes
+  (72 − 8 web). 2 commits en main: `d65f369` (skills + D37/D38) y
+  `849ddd3` (web archival + cleanup).
+- **Rama `web` verificada como auto-contenida**: smoke test en vivo —
+  checkout web, uvicorn, y todos los endpoints responden 200: `/health`,
+  `/` (landing con "Avísame"), `/admin/login`, `/app/login`, CSS/fonts/hero.
+  Se levanta sola solo con `git checkout web` + `pip install -e .[dev]` +
+  `alembic upgrade head` + `uvicorn app.main:app --reload`.
+  `bitacora.md` (entrada de la sesión).
 - **En curso**: sesión de grilling para refinar el plan de Fase 7
   (decisiones de implementación aún pendientes).
 
