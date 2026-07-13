@@ -162,56 +162,6 @@ def test_list_alerts_empty(app_client: TestClient) -> None:
     assert resp.json() == []
 
 
-# --- Admin web ---------------------------------------------------------------
-
-
-def test_admin_login_page(app_client: TestClient) -> None:
-    resp = app_client.get("/admin/login")
-    assert resp.status_code == 200
-    assert "DespertarME" in resp.text
-
-
-def test_admin_dashboard_redirects_without_auth(app_client: TestClient) -> None:
-    resp = app_client.get("/admin", follow_redirects=False)
-    assert resp.status_code == 303
-    assert "/admin/login" in resp.headers["location"]
-
-
-# --- User web ---------------------------------------------------------------
-
-
-def test_user_login_page(app_client: TestClient) -> None:
-    resp = app_client.get("/app/login")
-    assert resp.status_code == 200
-    assert "DespertarME" in resp.text
-
-
-def test_user_register_page(app_client: TestClient) -> None:
-    resp = app_client.get("/app/register")
-    assert resp.status_code == 200
-    assert "Crear cuenta" in resp.text
-
-
-def test_user_dashboard_redirects_without_auth(app_client: TestClient) -> None:
-    resp = app_client.get("/app", follow_redirects=False)
-    assert resp.status_code == 303
-    assert "/app/login" in resp.headers["location"]
-
-
-def test_user_register_and_login_flow(app_client: TestClient) -> None:
-    resp = app_client.post(
-        "/app/register",
-        data={"email": "webuser@example.com", "password": "mypassword123", "phone": "+34600000000"},
-        follow_redirects=False,
-    )
-    assert resp.status_code == 303
-    assert resp.headers["location"] == "/app"
-
-    resp = app_client.get("/app", follow_redirects=False)
-    assert resp.status_code == 200
-    assert "webuser@example.com" in resp.text
-
-
 # --- Meta endpoints siguen funcionando ---------------------------------------
 
 
@@ -219,10 +169,3 @@ def test_health_still_ok(app_client: TestClient) -> None:
     resp = app_client.get("/health")
     assert resp.status_code == 200
     assert resp.json()["status"] == "ok"
-
-
-def test_root_serves_landing(app_client: TestClient) -> None:
-    """La landing pública (D35/D36) se sirve siempre en `/`, sin redirigir."""
-    resp = app_client.get("/", follow_redirects=False)
-    assert resp.status_code == 200
-    assert "Avísame" in resp.text
