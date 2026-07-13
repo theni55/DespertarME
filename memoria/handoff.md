@@ -28,7 +28,7 @@ estructuradas que resolvió las decisiones de alto nivel (D37).
   `.opencode/skills/` (D38).
 - Memorias actualizadas: `decisiones.md` (D37, D38), `fases.md` (Fase 6
   congelada, Fase 7 añadida), `handoff.md` (nuevo estado y sesión),
-  `bitacora.md` (entrada de la sesión).
+   `bitacora.md` (entrada de la sesión).
 - **Split de ramas completado**: rama `web` creada desde `dcf62f8` como
   archivo congelado de la era web (pusheada a origin). `main` limpiada:
   `src/app/web/` eliminado (~2500 líneas HTML/CSS/Jinja2), `main.py`
@@ -41,9 +41,10 @@ estructuradas que resolvió las decisiones de alto nivel (D37).
   `/` (landing con "Avísame"), `/admin/login`, `/app/login`, CSS/fonts/hero.
   Se levanta sola solo con `git checkout web` + `pip install -e .[dev]` +
   `alembic upgrade head` + `uvicorn app.main:app --reload`.
-  `bitacora.md` (entrada de la sesión).
-- **En curso**: sesión de grilling para refinar el plan de Fase 7
-  (decisiones de implementación aún pendientes).
+- **Grilling completado**: 17 decisiones de implementación resueltas con
+  el owner vía `grilling` skill (`mattpocock/skills`). Plan de Fase 7
+  consolidado en `decisiones.md` (D37 ampliado) y `fases.md` (Spike + 7a +
+  7b + 7c + 7d detallado). PR #5 creado para sync `main` → `dev`.
 
 **Pendiente tras el grilling:**
 - Cerrar la sesión de grilling con todas las decisiones de Fase 7a y 7b
@@ -70,9 +71,9 @@ de la era web, `dcf62f8`). `main` es ahora la rama de desarrollo de la app
 | Fase 3 — Multiusuario + admin web | **Completada** ✅ |
 | Fase MVP-launch — fotos + Twilio + scheduler + Railway | **Código listo** ✅ (deploy pendiente) |
 | Fase 4 — Boxeo/Tenis reales | Pendiente (fuera del MVP) |
-| Fase 5 — VoiceNotifier real (Twilio) | **Completada** ✅ (pendiente cuenta Twilio del owner) |
+| Fase 5 — VoiceNotifier real (Twilio) | ❄️ **Obsoleta** — sustituida por FCM (D37), Twilio se elimina en Fase 7a |
 | Fase 6 — Rediseño visual + landing dinámica (D35/D36) | ❄️ **Congelada** — landing y web funcionales; se abandona HTMX y smoke visual |
-| Fase 7 — App móvil Android (React Native + Expo) | 🔶 **En planificación** — grilling en curso para cerrar decisiones de implementación |
+| Fase 7 — App móvil Android (React Native + Expo) | 📋 **Plan detallado** — 17 decisiones vía grilling, D37 ampliado, fases.md actualizado. Próximo paso: Spike Expo Go |
 
 Detalle de checkboxes en `fases.md`.
 
@@ -80,56 +81,42 @@ Detalle de checkboxes en `fases.md`.
 
 ## Próximos pasos
 
-**Inmediato (cerrar planificación Fase 7):**
+**Inmediato:**
 
-1. **Completar grilling**: resolver las decisiones pendientes
-   (`decisiones.md` → "Decisiones pendientes (Fase 7)") una a una.
-2. **Crear skill `ship-polished-ui`** (tarea pospuesta de Sesión 6) —
-   contenido detallado en el handoff anterior.
+1. **Spike Expo Go** en iPhone: validar plomería push (entrega + UI AlarmScreen). Gratis, 1-2 horas.
+2. Opcional: **crear skill `ship-polished-ui`** (pospuesta de Sesión 6) — útil para Fase 7b.
 
-**Después del grilling (arrancar Fase 7a):**
+**Fase 7a (backend):**
+3. Eliminar `User`, auth JWT, teléfono, Twilio del backend.
+4. Migración: nueva tabla `devices`, renombrar FKs en `BoutSubscription`/`AlertLog`.
+5. `get_current_device` (header `X-Device-Id`) + endpoints `/api/devices`.
+6. `GET /api/events` + `GET /api/events/{id}` JSON.
+7. `FcmNotifier` con `firebase-admin` + configurar proyecto Firebase.
+8. Refactor Poller: `Device.fcm_token` + timezone en vez de `User.phone`.
+9. Tests + verificación completa (ruff/black/mypy/pytest).
 
-3. Migración Alembic: `Device` + `device_id` en `BoutSubscription`/`AlertLog`.
-4. Endpoints `/api/devices`, `GET /api/events`, `GET /api/events/{id}` JSON.
-5. `FcmNotifier` con `firebase-admin`.
-6. Refactor Poller: `Device.fcm_token` + timezone en vez de `User.phone`.
-7. Admin web refactorizado a devices.
-8. Tests + verificación completa (ruff/black/mypy/pytest).
-
-**Después de Fase 7a (arrancar Fase 7b):**
-
-9. Setup proyecto Expo + Native module Android (alarma).
-10. Spike: validar FCM → alarma bypass DnD en dispositivo físico real.
-11. Pantallas: Home, Eventos, EventDetail, Mis Alertas, Ajustes, AlarmScreen.
-12. Build EAS → APK interno → prueba con el owner.
+**Fase 7b (app Android):**
+10. Instalar Android Studio + emulador. Setup dev build en `mobile/`.
+11. Native module Kotlin (bypass-silent alarm service).
+12. Pantallas: Home, Eventos, EventDetail, Mis Alertas, Ajustes, AlarmScreen.
 
 ---
 
----
-
-## Cómo levantar la web en local
+## Cómo levantar el backend en local (API-only, rama main)
 
 ```powershell
 .\.venv\Scripts\Activate.ps1
-# .env: DATABASE_URL=sqlite+aiosqlite:///./avisador.db (append tras copiar .env.example)
+# .env: DATABASE_URL=sqlite+aiosqlite:///./avisador.db
 alembic upgrade head          # crea las tablas en avisador.db
 uvicorn app.main:app --reload
 ```
 
-**Landing pública (D35/D36, pantalla única):**
-- `http://localhost:8000/` → landing de pantalla única (imagen del cartel de
-  fondo + partículas + botón "Avísame"). Ya no redirige a `/app`; se muestra
-  siempre, incluso con sesión activa.
-
-**Usuario (vista funcional):**
-- `http://localhost:8000/app/login` / `/app/register` → auth de usuario
-- `http://localhost:8000/app` → dashboard (requiere cookie de sesión)
-- `http://localhost:8000/app/events/{event_id}` → tarjeta con fotos y nombres + crear alerta
-
-**Admin:**
-- `http://localhost:8000/admin/login` (seed: `python scripts/seed_admin.py`)
-- `http://localhost:8000/admin/users/{id}` → detalle de usuario
+- `http://localhost:8000/health` → `{"status":"ok"}`
 - `http://localhost:8000/docs` → Swagger UI
+- `/` → 404 (API-only, sin landing)
+
+**La web (landing, admin, /app/*) solo existe en la rama `web`**: `git checkout web` y seguir
+las mismas instrucciones de arriba.
 
 ---
 
@@ -142,14 +129,10 @@ uvicorn app.main:app --reload
   benignos si hay suscripciones activas. `SCHEDULER_ENABLED=false` para apagarlo.
 - **Tip (PowerShell)**: usar `python -m pip` en vez de `pip`.
 - **Hooks git**: activar una vez con `pwsh scripts/setup-hooks.ps1`.
-- **Assets estáticos**: `src/app/web/static/{css,fonts,img}/`, montados en
-  `/static` vía `StaticFiles`. Sin build step — CSS puro, sin bundler ni
-  `package.json`. `fonts/inter-var-latin.woff2` es la tipografía Inter
-  Variable auto-hospedada (D35); `img/hero.webp`+`hero.jpg` son el póster de
-  fondo de la landing (regenerar con `ffmpeg` si cambia el evento destacado).
-- **tsparticles**: única dependencia por CDN del proyecto (versión pinneada
-  `2.12.0` en jsdelivr) — rompe puntualmente el principio "sin CDN" de D35
-  (que solo cubría fuentes), aceptado como progressive enhancement (D36).
+- **Assets estáticos**: la web (rama `web`) tiene `src/app/web/static/` con CSS,
+  fuentes e imágenes del hero. En main (API-only) no hay static — se eliminó con
+  el split (D37). Para levantar la web: `git checkout web`.
+- **tsparticles**: dependencia CDN de la landing (rama `web`). No aplica en main.
 - **Skills de agente**: `.opencode/skills/` contiene:
   - Subset frontend de `addyosmani/agent-skills`: `frontend-ui-engineering`,
     `performance-optimization`, `code-review-and-quality` (+
@@ -169,8 +152,8 @@ uvicorn app.main:app --reload
 ```powershell
 .\.venv\Scripts\Activate.ps1        # activar venv
 alembic upgrade head                # aplicar migraciones (SQLite)
-uvicorn app.main:app --reload        # servidor dev (API + web + scheduler)
-pytest -v                            # tests (72/72 verdes)
+uvicorn app.main:app --reload        # servidor dev (API-only, sin web)
+pytest -v                            # tests (64 verdes en main, 72 en rama web)
 python scripts/probe_espn.py          # smoke ESPN en vivo
 ruff check src tests                  # lint
 black --check src tests scripts       # formato
