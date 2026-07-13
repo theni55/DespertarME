@@ -277,3 +277,22 @@ plataforma (Vercel/CF Pages descartados: serverless no soporta el scheduler
   Fase 4 (HTMX real en create/delete alert, sigue sin tocar), y cuando el
   cartel destacado cambie de evento, regenerar `hero.webp`/`hero.jpg` con el
   póster nuevo.
+
+## Sesión 7 — Pivot a app móvil + skills grill (D37/D38)
+
+- El owner decidió pivotar: **web apartada, foco en app móvil**.
+- **Planificación con preguntas estructuradas** (en modo plan): stack
+  React Native + Expo TypeScript, sin cuentas de usuario (device model),
+  notificaciones push FCM tipo despertador, web congelada, admin refactorizado
+  a devices, solo UFC v1. Decisiones D37 registradas.
+- **Skills instaladas**: `grill-me` y `grilling` desde `mattpocock/skills`
+  (`skills/productivity/`) vía git sparse-checkout a `.opencode/skills/`.
+  Formato frontmatter compatible con OpenCode. Decisión D38.
+- **Memorias actualizadas**: `decisiones.md` (D37, D38 + pendientes Fase 7),
+  `fases.md` (Fase 6 congelada, Fase 7 detallada), `handoff.md` (nueva sesión,
+  estado global, próximos pasos), `bitacora.md` (esta entrada).
+- **En curso**: sesión de grilling con el owner para cerrar decisiones
+  pendientes de implementación de Fase 7 (estructura de proyecto, auth device,
+  payload FCM, tipo de sonido de alarma, persistencia de device_id, navegación).
+- **Pendiente tras grilling**: crear skill `ship-polished-ui` (pospuesta de
+  Sesión 6), arrancar Fase 7a (backend device model + JSON endpoints + FCM).
