@@ -73,7 +73,7 @@ de la era web, `dcf62f8`). `main` es ahora la rama de desarrollo de la app
 | Fase 4 — Boxeo/Tenis reales | Pendiente (fuera del MVP) |
 | Fase 5 — VoiceNotifier real (Twilio) | ❄️ **Obsoleta** — sustituida por FCM (D37), Twilio se elimina en Fase 7a |
 | Fase 6 — Rediseño visual + landing dinámica (D35/D36) | ❄️ **Congelada** — landing y web funcionales; se abandona HTMX y smoke visual |
-| Fase 7 — App móvil Android (React Native + Expo) | 📋 **Plan detallado** — 17 decisiones vía grilling, D37 ampliado, fases.md actualizado. Próximo paso: Spike Expo Go |
+| Fase 7 — App móvil Android (React Native + Expo) | 📋 **Plan detallado** — 17 decisiones vía grilling, D37 ampliado, D39 actualiza el spike a dev build Android físico. Próximo paso: Spike dev build Android (bypass-silent) |
 
 Detalle de checkboxes en `fases.md`.
 
@@ -83,7 +83,7 @@ Detalle de checkboxes en `fases.md`.
 
 **Inmediato:**
 
-1. **Spike Expo Go** en iPhone: validar plomería push (entrega + UI AlarmScreen). Gratis, 1-2 horas.
+1. **Spike dev build Android físico** (EAS Build cloud, sin Android Studio en PC): validar bypass-silent (DnD) + UI AlarmScreen con trigger local (sin FCM). Hardware Android disponible hoy. Ver Fase 7-Spike en `fases.md` (D39).
 2. Opcional: **crear skill `ship-polished-ui`** (pospuesta de Sesión 6) — útil para Fase 7b.
 
 **Fase 7a (backend):**

@@ -313,3 +313,18 @@ plataforma (Vercel/CF Pages descartados: serverless no soporta el scheduler
   pendientes post-MVP), `fases.md` (Fase 7 reescrita con Spike + 7a + 7b + 7c
   + 7d detallado), `handoff.md` (grilling completado, próximo paso: spike Expo
   Go), `bitacora.md` (esta entrada).
+
+## Sesión 8 — Cambio de spike (D39): Expo Go+iPhone → dev build Android físico
+
+- El owner consiguió un móvil Android físico hoy (ventana de varias horas con
+  hardware).
+- **D39 registrada**: sustituye la decisión #13 de D37. El spike deja de ser
+  Expo Go en iPhone (solo plomería push) y pasa a **dev build Android físico**
+  vía EAS Build cloud (sin Android Studio en PC). Misma meta (plomería push +
+  UI AlarmScreen) ampliada con la **validación del bypass-silent** (DnD,
+  `IMPORTANCE_HIGH` + `setBypassDnd` + `USAGE_ALARM` + foreground +
+  full-screen intent), que es lo crítico del producto. Solo se actualiza la
+  #13; el resto de D37 intacto (incluida #11 Firebase en 7a y #12 build
+  diferido).
+- `fases.md` Fase 7-Spike reescrita; `handoff.md` Próximos pasos actualizado.
+- **Pendiente**: ejecutar el spike en la ventana de hoy.

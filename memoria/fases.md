@@ -156,16 +156,30 @@ SPA — ver D35), sin build step.
 
 ## Fase 7 — App móvil Android (React Native + Expo) 🔶 plan detallado (17 decisiones vía grilling, D37)
 
-### Fase 7-Spike — Validación plomería push (Expo Go iPhone, gratis)
+### Fase 7-Spike — Validación bypass-silent en Android físico (dev build EAS)
 
-Validar que el push llega al dispositivo real y la app puede reaccionar. El bypass-silent se valida después con hardware Android.
+El spike ya no usa Expo Go+iPhone (D39): con hardware Android disponible, se prueba el flujo crítico completo (native Kotlin + DnD). Firebase/FCM entra en Fase 7a (decisión 11 de D37 sin cambio); el spike valida bypass-silent con un **trigger local** (botón "Probar alarma" en la app que invoca el native module directo), sin FCM.
 
-- [ ] Crear proyecto Expo mínimo en `mobile/` (TypeScript + Expo Router).
-- [ ] Pantalla con botón "simular alarma" → muestra AlarmScreen UI.
-- [ ] Configurar `expo-notifications` + Expo push tokens.
-- [ ] Enviar push de prueba desde el PC → iPhone recibe notificación.
-- [ ] Validar: plomería push funciona (entrega + UI del AlarmScreen), sin bypass-silent.
-- [ ] **Resultado esperado**: confirmación de que el flujo push→app→UI funciona en hardware real. Coste $0, 1-2 horas.
+- [ ] `mobile/` con `npx create-expo-app --template blank-typescript` + Expo Router.
+- [ ] Pantallas: Home (botón "Probar alarma local" + muestra info device) + **AlarmScreen** modal full-screen con botón "Descartar".
+- [ ] `expo-secure-store` para `device_id` (UUID v4 en 1ª launch).
+- [ ] `npx expo prebuild --platform android` → genera `mobile/android/`.
+- [ ] Native module Kotlin en `mobile/android/app/src/main/java/com/despertarme/alarm/`:
+  - `AlarmNotificationsModule.kt` (canal `IMPORTANCE_HIGH`, `setBypassDnd(true)`, `AudioAttributes(USAGE_ALARM)`).
+  - `AlarmService.kt` (foreground service, `RingtoneManager.TYPE_ALARM` loop + wakelock).
+  - `AlarmActivity.kt` (`setShowWhenLocked`/`setTurnScreenOn`, full-screen intent, botón "Descartar" detiene el service).
+  - `AlarmPackage.kt` + registro en `MainApplication.kt`.
+- [ ] `AndroidManifest.xml` permisos: `USE_FULL_SCREEN_INTENT`, `SCHEDULE_EXACT_ALARM`, `FOREGROUND_SERVICE_DATA_SYNC`, `POST_NOTIFICATIONS`, `WAKE_LOCK`, `VIBRATE`, `ACCESS_NOTIFICATION_POLICY`.
+- [ ] `eas.json` perfil `development` (APK instalable sideload) + `production`.
+- [ ] `eas build --platform android --profile development` (~45 min build cloud).
+- [ ] Instalar APK en Android físico + otorgar permisos: notificaciones, **Override Do Not Disturb**.
+- [ ] **Validar 4 cosas** (botón local, sin FCM):
+  - Suena `TYPE_ALARM` aunque el móvil esté en DnD.
+  - Se enciende la pantalla y aparece `AlarmActivity` full-screen.
+  - Botón "Descartar" para el sonido.
+  - Foreground service arranca/termina limpio.
+- [ ] `adb` standalone (`platform-tools`, ~5MB sin Android Studio) para `logcat` si hace falta debugear.
+- [ ] **Resultado esperado**: bypass-silent confirmado en Android físico → desbloquea Fase 7b sin sorpresas. Si falla algo, aislar qué eslabón (canal, foreground service, DnD, full-screen intent) falla en <2h.
 
 ### Fase 7a — Backend: device model + JSON endpoints + FCM notifier
 
