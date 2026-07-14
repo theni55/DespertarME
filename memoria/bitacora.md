@@ -334,5 +334,34 @@ plataforma (Vercel/CF Pages descartados: serverless no soporta el scheduler
   7a y #12 build diferido).
 - `fases.md` Fase 7-Spike reescrita (reducida); `decisiones.md` D39 actualizada;
   `handoff.md` Próximos pasos y estado global actualizados.
-- **Pendiente**: ejecutar el spike en la ventana de hoy. Requiere cuenta Expo
-  gratis (expo.dev) para `eas login` + `eas build`.
+- **Spike code escrito en `mobile/`** (commit `532201d`, push a `origin/dev`):
+  - Scaffold: `npx create-expo-app` (Expo SDK 57 + RN 0.86 + TypeScript).
+  - `App.tsx`: 1 pantalla negra con 2 botones (Probar/Parar) + estado del
+    servicio. Sin Expo Router, sin secure-store.
+  - `npx expo prebuild --platform android` → `mobile/android/` generado.
+  - Native module Kotlin en `mobile/android/app/src/main/java/com/despertarme/spike/alarm/`:
+    - `AlarmModule.kt` — canal `IMPORTANCE_HIGH` + `setBypassDnd(true)`,
+      métodos `startAlarm`/`stopAlarm` expuestos a JS, pide
+      `ACCESS_NOTIFICATION_POLICY` si no lo tiene.
+    - `AlarmService.kt` — foreground service tipo `mediaPlayback`,
+      `RingtoneManager.TYPE_ALARM` (fallback `TYPE_RINGTONE`) en loop con
+      `AudioAttributes(USAGE_ALARM)` + `PARTIAL_WAKE_LOCK` (10 min cap).
+      Notification `CATEGORY_ALARM` + `setSilent(true)` (sonido por Ringtone,
+      no por notification). Limpieza en `onDestroy`.
+    - `AlarmPackage.kt` + registro en `MainApplication.kt`.
+  - `AndroidManifest.xml`: permisos `ACCESS_NOTIFICATION_POLICY`,
+    `FOREGROUND_SERVICE_MEDIA_PLAYBACK`, `POST_NOTIFICATIONS`, `WAKE_LOCK`,
+    `VIBRATE` + `<service foregroundServiceType="mediaPlayback"/>`.
+  - `eas.json` perfil único `development` (APK internal, `assembleRelease`).
+  - `mobile/README.md` con chuleta de build, permisos manuales en el móvil,
+    y troubleshooting OEM (`adb logcat`).
+  - TypeScript compila limpio (`tsc --noEmit`). Kotlin solo se verifica
+    con la build en la nube.
+  - `.gitignore` de `mobile/` ajustado: `/android` ya no se ignora (commitea
+    el Kotlin custom + manifest editado).
+- **Pendiente**: login Expo del owner (gratis, expo.dev) → `eas build` (~30-45
+  min cloud) → instalar APK en el móvil + permisos manuales (notificaciones ON,
+  "Anular el modo No Molestar" ON, volumen de alarma máximo) → probar: móvil
+  en DnD → "Probar alarma" → ¿suena `TYPE_ALARM`? → "Parar". Si no suena:
+  `adb logcat` (platform-tools ~5MB standalone) para aislar qué eslabón falla
+  (canal, foreground service, DnD, OEM).

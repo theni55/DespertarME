@@ -160,17 +160,19 @@ SPA — ver D35), sin build step.
 
 **Alcance reducido (D39, revisado Sesión 8):** el spike solo valida **que suena `TYPE_ALARM` con el móvil en modo No Molestar**. No incluye full-screen intent, ni `expo-secure-store`, ni FCM, ni carátula MVP, ni Expo Router multi-pantalla. Razón: el único riesgo que no se puede probar sin hardware real es el bypass DnD; el resto (UI, navegación, FCM, full-screen) se itera en dev build con Android Studio en Fase 7b sin sorpresas. Menos Kotlin a ciegas = menos probabilidad de que la primera APK crashee.
 
-- [ ] `mobile/` con `npx create-expo-app --template blank-typescript` (1 sola pantalla, sin Expo Router).
-- [ ] Pantalla única `App.tsx`: botón rojo "Probar alarma" + botón "Parar" + estado del servicio.
-- [ ] `npx expo prebuild --platform android` → genera `mobile/android/`.
-- [ ] Native module Kotlin en `mobile/android/app/src/main/java/com/despertarme/alarm/`:
-  - `AlarmModule.kt` (crea canal `IMPORTANCE_HIGH` + `setBypassDnd(true)` + `AudioAttributes(USAGE_ALARM)`; arranca/para el service).
-  - `AlarmService.kt` (foreground service con `RingtoneManager.TYPE_ALARM` en loop + `PARTIAL_WAKE_LOCK` + `startForeground`).
-  - Registro en `MainApplication.kt` (1 línea).
-- [ ] `AndroidManifest.xml` permisos mínimos: `FOREGROUND_SERVICE_DATA_SYNC`, `POST_NOTIFICATIONS`, `WAKE_LOCK`, `VIBRATE`, `ACCESS_NOTIFICATION_POLICY`.
-- [ ] `eas.json` perfil único `development` (APK instalable sideload).
+- [x] `mobile/` con `npx create-expo-app --template blank-typescript` (1 sola pantalla, sin Expo Router).
+- [x] Pantalla única `App.tsx`: botón rojo "Probar alarma" + botón "Parar" + estado del servicio.
+- [x] `npx expo prebuild --platform android` → genera `mobile/android/`.
+- [x] Native module Kotlin en `mobile/android/app/src/main/java/com/despartarme/spike/alarm/`:
+  - `AlarmModule.kt` (crea canal `IMPORTANCE_HIGH` + `setBypassDnd(true)`; arranca/para el service).
+  - `AlarmService.kt` (foreground service tipo `mediaPlayback` con `RingtoneManager.TYPE_ALARM` en loop + `PARTIAL_WAKE_LOCK` + `startForeground`).
+  - `AlarmPackage.kt` + registro en `MainApplication.kt`.
+- [x] `AndroidManifest.xml` permisos: `FOREGROUND_SERVICE_MEDIA_PLAYBACK`, `POST_NOTIFICATIONS`, `WAKE_LOCK`, `VIBRATE`, `ACCESS_NOTIFICATION_POLICY` + `<service foregroundServiceType="mediaPlayback"/>`.
+- [x] `eas.json` perfil único `development` (APK instalable sideload).
+- [x] `mobile/README.md` con chuleta de build, permisos manuales en el móvil, troubleshooting OEM.
+- [ ] `eas login` del owner (cuenta Expo gratis, expo.dev).
 - [ ] `eas build --platform android --profile development` (~30-45 min build cloud).
-- [ ] Instalar APK en Android físico + otorgar permisos: notificaciones, **Override Do Not Disturb** (Settings → Apps → DespertarME).
+- [ ] Instalar APK en Android físico + otorgar permisos: notificaciones, **Override Do Not Disturb** (Settings → Apps → DespertarME), volumen de alarma al máximo.
 - [ ] **Validar 2 cosas** (botón local, sin FCM, sin full-screen):
   - Suena `TYPE_ALARM` aunque el móvil esté en DnD.
   - Botón "Parar" detiene el sonido y el foreground service termina limpio.
