@@ -314,17 +314,25 @@ plataforma (Vercel/CF Pages descartados: serverless no soporta el scheduler
   + 7d detallado), `handoff.md` (grilling completado, próximo paso: spike Expo
   Go), `bitacora.md` (esta entrada).
 
-## Sesión 8 — Cambio de spike (D39): Expo Go+iPhone → dev build Android físico
+## Sesión 8 — Cambio de spike (D39): Expo Go+iPhone → dev build Android físico (solo sonido)
 
 - El owner consiguió un móvil Android físico hoy (ventana de varias horas con
   hardware).
 - **D39 registrada**: sustituye la decisión #13 de D37. El spike deja de ser
   Expo Go en iPhone (solo plomería push) y pasa a **dev build Android físico**
-  vía EAS Build cloud (sin Android Studio en PC). Misma meta (plomería push +
-  UI AlarmScreen) ampliada con la **validación del bypass-silent** (DnD,
-  `IMPORTANCE_HIGH` + `setBypassDnd` + `USAGE_ALARM` + foreground +
-  full-screen intent), que es lo crítico del producto. Solo se actualiza la
-  #13; el resto de D37 intacto (incluida #11 Firebase en 7a y #12 build
-  diferido).
-- `fases.md` Fase 7-Spike reescrita; `handoff.md` Próximos pasos actualizado.
-- **Pendiente**: ejecutar el spike en la ventana de hoy.
+  vía EAS Build cloud (sin Android Studio en PC).
+- **Alcance recortado a solo sonido + bypass DnD**: tras discutir con el owner
+  se acordó reducir el spike a lo mínimo necesario — validar que `TYPE_ALARM`
+  suena con el móvil en modo No Molestar. **Sin** full-screen intent, **sin**
+  `expo-secure-store`, **sin** FCM, **sin** carátula MVP, **sin** Expo Router
+  multi-pantalla. 1 pantalla con 2 botones + 2 ficheros Kotlin (~50-70 líneas).
+  Razón: el único riesgo que no se puede probar sin hardware real es el bypass
+  DnD; cuanto menos Kotlin a ciegas (sin emulador para debugear), menos
+  probabilidad de que la primera APK crashee. El full-screen intent, FCM y el
+  resto entran en Fase 7b con Android Studio para iterar rápido.
+- Solo se actualiza la #13; el resto de D37 intacto (incluida #11 Firebase en
+  7a y #12 build diferido).
+- `fases.md` Fase 7-Spike reescrita (reducida); `decisiones.md` D39 actualizada;
+  `handoff.md` Próximos pasos y estado global actualizados.
+- **Pendiente**: ejecutar el spike en la ventana de hoy. Requiere cuenta Expo
+  gratis (expo.dev) para `eas login` + `eas build`.

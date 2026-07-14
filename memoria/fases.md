@@ -156,30 +156,26 @@ SPA — ver D35), sin build step.
 
 ## Fase 7 — App móvil Android (React Native + Expo) 🔶 plan detallado (17 decisiones vía grilling, D37)
 
-### Fase 7-Spike — Validación bypass-silent en Android físico (dev build EAS)
+### Fase 7-Spike — Validación bypass-silent (solo sonido) en Android físico (dev build EAS)
 
-El spike ya no usa Expo Go+iPhone (D39): con hardware Android disponible, se prueba el flujo crítico completo (native Kotlin + DnD). Firebase/FCM entra en Fase 7a (decisión 11 de D37 sin cambio); el spike valida bypass-silent con un **trigger local** (botón "Probar alarma" en la app que invoca el native module directo), sin FCM.
+**Alcance reducido (D39, revisado Sesión 8):** el spike solo valida **que suena `TYPE_ALARM` con el móvil en modo No Molestar**. No incluye full-screen intent, ni `expo-secure-store`, ni FCM, ni carátula MVP, ni Expo Router multi-pantalla. Razón: el único riesgo que no se puede probar sin hardware real es el bypass DnD; el resto (UI, navegación, FCM, full-screen) se itera en dev build con Android Studio en Fase 7b sin sorpresas. Menos Kotlin a ciegas = menos probabilidad de que la primera APK crashee.
 
-- [ ] `mobile/` con `npx create-expo-app --template blank-typescript` + Expo Router.
-- [ ] Pantallas: Home (botón "Probar alarma local" + muestra info device) + **AlarmScreen** modal full-screen con botón "Descartar".
-- [ ] `expo-secure-store` para `device_id` (UUID v4 en 1ª launch).
+- [ ] `mobile/` con `npx create-expo-app --template blank-typescript` (1 sola pantalla, sin Expo Router).
+- [ ] Pantalla única `App.tsx`: botón rojo "Probar alarma" + botón "Parar" + estado del servicio.
 - [ ] `npx expo prebuild --platform android` → genera `mobile/android/`.
 - [ ] Native module Kotlin en `mobile/android/app/src/main/java/com/despertarme/alarm/`:
-  - `AlarmNotificationsModule.kt` (canal `IMPORTANCE_HIGH`, `setBypassDnd(true)`, `AudioAttributes(USAGE_ALARM)`).
-  - `AlarmService.kt` (foreground service, `RingtoneManager.TYPE_ALARM` loop + wakelock).
-  - `AlarmActivity.kt` (`setShowWhenLocked`/`setTurnScreenOn`, full-screen intent, botón "Descartar" detiene el service).
-  - `AlarmPackage.kt` + registro en `MainApplication.kt`.
-- [ ] `AndroidManifest.xml` permisos: `USE_FULL_SCREEN_INTENT`, `SCHEDULE_EXACT_ALARM`, `FOREGROUND_SERVICE_DATA_SYNC`, `POST_NOTIFICATIONS`, `WAKE_LOCK`, `VIBRATE`, `ACCESS_NOTIFICATION_POLICY`.
-- [ ] `eas.json` perfil `development` (APK instalable sideload) + `production`.
-- [ ] `eas build --platform android --profile development` (~45 min build cloud).
-- [ ] Instalar APK en Android físico + otorgar permisos: notificaciones, **Override Do Not Disturb**.
-- [ ] **Validar 4 cosas** (botón local, sin FCM):
+  - `AlarmModule.kt` (crea canal `IMPORTANCE_HIGH` + `setBypassDnd(true)` + `AudioAttributes(USAGE_ALARM)`; arranca/para el service).
+  - `AlarmService.kt` (foreground service con `RingtoneManager.TYPE_ALARM` en loop + `PARTIAL_WAKE_LOCK` + `startForeground`).
+  - Registro en `MainApplication.kt` (1 línea).
+- [ ] `AndroidManifest.xml` permisos mínimos: `FOREGROUND_SERVICE_DATA_SYNC`, `POST_NOTIFICATIONS`, `WAKE_LOCK`, `VIBRATE`, `ACCESS_NOTIFICATION_POLICY`.
+- [ ] `eas.json` perfil único `development` (APK instalable sideload).
+- [ ] `eas build --platform android --profile development` (~30-45 min build cloud).
+- [ ] Instalar APK en Android físico + otorgar permisos: notificaciones, **Override Do Not Disturb** (Settings → Apps → DespertarME).
+- [ ] **Validar 2 cosas** (botón local, sin FCM, sin full-screen):
   - Suena `TYPE_ALARM` aunque el móvil esté en DnD.
-  - Se enciende la pantalla y aparece `AlarmActivity` full-screen.
-  - Botón "Descartar" para el sonido.
-  - Foreground service arranca/termina limpio.
+  - Botón "Parar" detiene el sonido y el foreground service termina limpio.
 - [ ] `adb` standalone (`platform-tools`, ~5MB sin Android Studio) para `logcat` si hace falta debugear.
-- [ ] **Resultado esperado**: bypass-silent confirmado en Android físico → desbloquea Fase 7b sin sorpresas. Si falla algo, aislar qué eslabón (canal, foreground service, DnD, full-screen intent) falla en <2h.
+- [ ] **Resultado esperado**: bypass-silent de audio confirmado en Android físico → el 90% del riesgo del producto está validado. El full-screen intent, FCM y el resto entran en Fase 7b con Android Studio para iterar rápido. Si no suena: aislar en <2h qué eslabón falla (canal, foreground service, DnD, permiso OEM).
 
 ### Fase 7a — Backend: device model + JSON endpoints + FCM notifier
 
