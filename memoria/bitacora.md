@@ -381,9 +381,32 @@ plataforma (Vercel/CF Pages descartados: serverless no soporta el scheduler
   - **Fix**: `npm uninstall eas-cli` + `npm install` (regenera lock sincronizado
     con package.json limpio). Para EAS, usar `npx eas-cli` (descarga efímera) o
     `npm i -g eas-cli` (PC del owner), no meterlo en el proyecto.
-- **Build EAS #2 pendiente de relanzar** tras este fix. Si vuelve a fallar, ya
-  será en Gradle/Kotlin (lo crítico del spike) y podremos debugear con el log
-  que entrega EAS.
+- **Build EAS #2 `FINISHED` ✅** (build `960ed029`, commit `81ca690`):
+  - Cola: ~6382 s (free tier saturado). Compilación Gradle/Kotlin: ~350 s
+    (~6 min) — la primera compilación real del Kotlin a ciegas pasó limpia.
+  - APK lista en:
+    `https://expo.dev/artifacts/eas/XUKdmgABRh-LmTGg5KxpaYjrD8y6CnBcImGM0Ygq-5c.apk`
+    (válido hasta 28-jul-2026).
+- **Prueba en móvil Android 14 físico → CRASH ❌**:
+  - APK instalada, permiso de notificaciones concedido ("Permitir").
+  - Al tocar "Probar alarma" la app **se cierra de golpe sin mensaje** —
+    crash de proceso nativo (no capturado por el `catch` de JS, lo que
+    descarta errores de puente y apunta a crash en el lado Kotlin o en
+    `startForeground`).
+  - El "Service: stopped" que mostró la UI antes de morir sugiere que el
+    `AlarmService` arrancó y se cayó en seguida.
+  - **Sin `adb logcat` todavía** — el owner no ha hecho el setup USB
+    (platform-tools + depuración USB). Hace falta el stack trace exacto
+    para diagnosticar la línea del Kotlin que crashea.
+- **`expo doctor` (bare workflow)**: avisó de que ciertos campos de
+  `app.json` (`orientation`, `icon`, `android.adaptiveIcon`, `plugins`...)
+  no se sincronizan automáticamente en cada build porque `mobile/android/`
+  está commiteado (bare workflow, no managed). Esperado y no problemático
+  para el spike: cualquier cambio futuro en `app.json` requerirá
+  `npx expo prebuild --platform android --clean` manual + re-commitear
+  `android/`. Mismo aviso que apareció en el log de EAS #2
+  ("Specified value for android.package in app.json is ignored because an
+  android directory was detected").
 - Nota: el bypass-silent *no* requiere que el usuario tenga `ACCESS_NOTIFICATION_POLICY`
   concedido para "sonar"—el canal `IMPORTANCE_HIGH` + `setBypassDnd(true)` es
   suficiente por sí solo en Android stock. El permiso DnD solo se pide por si

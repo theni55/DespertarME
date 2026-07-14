@@ -6,7 +6,8 @@
 
 ## Última sesión
 
-**Fecha:** 2026-07-14 · **Sesión 8 — Spike bypass-silent (D39) + código escrito + build EAS fallida**
+**Fecha:** 2026-07-14 · **Sesión 8 — Spike bypass-silent (D39): build OK,
+APK crashea en móvil**
 
 **Contexto:** el owner consiguió un móvil Android físico hoy (ventana de
 varias horas con hardware). Se decide cambiar el spike previsto en D37
@@ -70,7 +71,37 @@ prueba el bypass-silent del audio (lo crítico del producto).
     lock sincronizado con package.json limpio). Para futuras builds, usar
     `npx eas-cli` (descarga efímera) o `npm i -g eas-cli` (PC del owner),
     no meterlo en el proyecto.
-- **Build EAS #2 pendiente de relanzar** tras este fix.
+- **Build EAS #1 FALLIDA** (build `f3a519f8`, estado `ERRORED`):
+  - Falló en la fase `INSTALL_DEPENDENCIES` (~1.5 s, antes de tocar
+    Gradle/Kotlin). Error `npm ci`: `package.json and package-lock.json
+    in sync` → `Missing: typescript@5.9.3 from lock file`.
+  - **Causa raíz**: el agente (yo) metió `eas-cli` como devDependency del
+    proyecto (`npm i --save-dev eas-cli`) tras el prebuild. `eas-cli` es
+    CLI global, no dep de proyecto; ensució el árbol de deps y
+    desincronizó el lock sin pensarlo.
+  - **Fix aplicado**: `npm uninstall eas-cli` + `npm install` (regenera
+    lock sincronizado con package.json limpio). Para futuras builds, usar
+    `npx eas-cli` (descarga efímera) o `npm i -g eas-cli` (PC del owner),
+    no meterlo en el proyecto.
+- **Build EAS #2 `FINISHED` ✅** (build `960ed029`, commit `81ca690`):
+  - Cola ~6382 s (free tier saturado); compilación Gradle/Kotlin ~350 s
+    (~6 min). El Kotlin a ciegas compiló limpio.
+  - APK: `https://expo.dev/artifacts/eas/XUKdmgABRh-LmTGg5KxpaYjrD8y6CnBcImGM0Ygq-5c.apk`
+    (válido hasta 28-jul-2026).
+- **Prueba en móvil físico Android 14 → CRASH ❌**:
+  - APK instalada, permiso de notificaciones concedido.
+  - "Probar alarma" → la app **se cierra de golpe** sin mensaje de error
+    capturado por JS. Crash de proceso nativo (el `AlarmService` arrancó
+    y se cayó en seguida — la UI reached a mostrar "Service: stopped"
+    antes de morir).
+  - **Diagnóstico pendiente**: hace falta `adb logcat` para ver el stack
+    trace exacto. El owner no ha hecho todavía el setup USB (platform-tools
+    ~5MB + activar depuración USB + cable).
+- **`expo doctor` aviso (no bloqueante, esperado)**: estamos en bare
+  workflow (`mobile/android/` commiteado por el Kotlin custom). Ciertos
+  campos de `app.json` no se sincronizan en cada build automáticamente.
+  Si en Fase 7b se toca `app.json`, hay que correr
+  `npx expo prebuild --platform android --clean` y re-commitear `android/`.
 
 **Pendiente tras esta sesión:**
 - **Login Expo** (gratis, https://expo.dev/signup): necesario para
@@ -106,7 +137,7 @@ congelada vive en la rama `web` (snapshot del último commit de la era web,
 | Fase 4 — Boxeo/Tenis reales | Pendiente (fuera del MVP) |
 | Fase 5 — VoiceNotifier real (Twilio) | ❄️ **Obsoleta** — sustituida por FCM (D37), Twilio se elimina en Fase 7a |
 | Fase 6 — Rediseño visual + landing dinámica (D35/D36) | ❄️ **Congelada** — landing y web funcionales; se abandona HTMX y smoke visual |
-| Fase 7 — App móvil Android (React Native + Expo) | 🔶 **En curso** — Fase 7-Spike (solo sonido+bypass DnD): código en `dev` (`532201d`), EAS login+init OK (proyecto `@theni55/despertarme-spike`), build #1 fallida por lock desincronizado (fix aplicado), build #2 pendiente de relanzar. D37 + D39. |
+| Fase 7 — App móvil Android (React Native + Expo) | 🔶 **En curso** — Fase 7-Spike (solo sonido+bypass DnD): código en `dev`, build EAS #2 `FINISHED` ✅, APK instalada en móvil Android 14 → **CRASH al tocar "Probar alarma"**. Pendiente: `adb logcat` para diagnosticar el Kotlin. D37 + D39. |
 
 Detalle de checkboxes en `fases.md`.
 
@@ -116,10 +147,24 @@ Detalle de checkboxes en `fases.md`.
 
 **Inmediato:**
 
-1. **Relanzar Build EAS #2** desde `mobile/`: `npx eas build --platform android --profile development --non-interactive` (~30-45 min cloud) → URL descarga APK. El lock ya está sincronizado tras el fix (eas-cli fuera de devDeps); debería pasar la fase `INSTALL_DEPENDENCIES`. Si falla, ya será en Gradle/Kotlin.
-2. **Instalar APK + dar permisos manuales en el móvil**: notificaciones ON (dialog al abrir) + volumen de alarma máximo (Settings → Sonido). "Anular el modo No Molestar" es **opcional** (el canal `setBypassDnd(true)` debería bastar en Android stock); probar primero sin él.
-3. **Probar**: móvil en DnD → "Probar alarma" → ¿suena `TYPE_ALARM`? → "Parar". Si falla: `adb logcat` (platform-tools ~5MB) para aislar qué eslabón falla (canal, foreground service, DnD, OEM).
-4. Opcional: **crear skill `ship-polished-ui`** (pospuesta de Sesión 6) — útil para Fase 7b.
+1. **Debug del crash en móvil**: el owner instala Android `platform-tools`
+   (~5MB, sin Android Studio) + activa depuración USB + cable al PC. Yo
+   ejecuto `adb logcat` filtrado para capturar el stack trace exacto del
+   crash al tocar "Probar alarma".
+2. Con el stack trace: **edit del Kotlin** (1-3 líneas casi seguro) +
+   commit + push a `dev`.
+3. **Relanzar Build EAS #3** (~6-15 min, deps cacheadas) → nueva URL APK.
+4. Reinstalar APK en móvil + probar otra vez: "Probar alarma" →
+   ¿suena `TYPE_ALARM` con DnD? → "Parar".
+5. Actualizar memorias con el resultado del spike (D40 si hace falta).
+6. Opcional: **crear skill `ship-polished-ui`** (pospuesta de Sesión 6) —
+   útil para Fase 7b.
+
+**Plan B (si no se puede hacer `adb logcat`)**: aplicar los 3 fixes
+defensivos probables a ciegas (mover `startForeground` tras `play()`,
+cambiar `setSmallIcon` a un drawable seguro, try/catch en
+`playAlarmLoop` que devuelva error legible a JS) y relanzar build #3
+sin diagnóstico previo. Más lento pero viable.
 
 **Fase 7a (backend):**
 3. Eliminar `User`, auth JWT, teléfono, Twilio del backend.
