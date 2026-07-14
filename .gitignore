@@ -76,3 +76,15 @@ logs/
 
 # OS
 Thumbs.db
+
+# Mobile (Expo/React Native) — cubre ramas sin mobile/.gitignore (fix main)
+mobile/node_modules/
+mobile/.expo/
+mobile/dist/
+mobile/web-build/
+mobile/expo-env.d.ts
+mobile/.kotlin/
+mobile/android/.gradle/
+mobile/android/build/
+mobile/android/app/build/
+mobile/android/app/debug.keystore
