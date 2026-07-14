@@ -6,7 +6,7 @@
 
 ## Última sesión
 
-**Fecha:** 2026-07-14 · **Sesión 8 — Spike bypass-silent (D39) + código escrito**
+**Fecha:** 2026-07-14 · **Sesión 8 — Spike bypass-silent (D39) + código escrito + build EAS fallida**
 
 **Contexto:** el owner consiguió un móvil Android físico hoy (ventana de
 varias horas con hardware). Se decide cambiar el spike previsto en D37
@@ -54,6 +54,23 @@ prueba el bypass-silent del audio (lo crítico del producto).
     sin compilar — primera build en la nube lo confirma.
 - `.gitignore` de `mobile/` ajustado: `/android` ya no se ignora (commitea
   el Kotlin custom + manifest editado).
+- **EAS login del owner** (cuenta `theni55`, `thenitrex1@gmail.com`).
+- **`eas init`**: proyecto `@theni55/despertarme-spike` creado (ID
+  `7e79b9e4-c187-4216-bbfd-ab2200b392d2`), linkeado en `mobile/app.json`
+  (`extra.eas.projectId` + `owner`).
+- **Build EAS #1 FALLIDA** (build `f3a519f8`, estado `ERRORED`):
+  - Falló en la fase `INSTALL_DEPENDENCIES` (~1.5 s, antes de tocar
+    Gradle/Kotlin). Error `npm ci`: `package.json and package-lock.json
+    in sync` → `Missing: typescript@5.9.3 from lock file`.
+  - **Causa raíz**: el agente (yo) metió `eas-cli` como devDependency del
+    proyecto (`npm i --save-dev eas-cli`) tras el prebuild. `eas-cli` es
+    CLI global, no dep de proyecto; ensució el árbol de deps y
+    desincronizó el lock sin pensarlo.
+  - **Fix aplicado**: `npm uninstall eas-cli` + `npm install` (regenera
+    lock sincronizado con package.json limpio). Para futuras builds, usar
+    `npx eas-cli` (descarga efímera) o `npm i -g eas-cli` (PC del owner),
+    no meterlo en el proyecto.
+- **Build EAS #2 pendiente de relanzar** tras este fix.
 
 **Pendiente tras esta sesión:**
 - **Login Expo** (gratis, https://expo.dev/signup): necesario para
@@ -89,7 +106,7 @@ congelada vive en la rama `web` (snapshot del último commit de la era web,
 | Fase 4 — Boxeo/Tenis reales | Pendiente (fuera del MVP) |
 | Fase 5 — VoiceNotifier real (Twilio) | ❄️ **Obsoleta** — sustituida por FCM (D37), Twilio se elimina en Fase 7a |
 | Fase 6 — Rediseño visual + landing dinámica (D35/D36) | ❄️ **Congelada** — landing y web funcionales; se abandona HTMX y smoke visual |
-| Fase 7 — App móvil Android (React Native + Expo) | 🔶 **En curso** — Fase 7-Spike (solo sonido+bypass DnD): código escrito y commiteado en `dev` (`532201d`). Pendiente: login Expo + build EAS + probar en móvil físico. D37 + D39. |
+| Fase 7 — App móvil Android (React Native + Expo) | 🔶 **En curso** — Fase 7-Spike (solo sonido+bypass DnD): código en `dev` (`532201d`), EAS login+init OK (proyecto `@theni55/despertarme-spike`), build #1 fallida por lock desincronizado (fix aplicado), build #2 pendiente de relanzar. D37 + D39. |
 
 Detalle de checkboxes en `fases.md`.
 
@@ -99,11 +116,10 @@ Detalle de checkboxes en `fases.md`.
 
 **Inmediato:**
 
-1. **Login Expo** (gratis, https://expo.dev/signup): necesario para `eas build`. Pendiente del owner.
-2. **Build EAS** desde `mobile/`: `npx eas build --platform android --profile development` (~30-45 min cloud) → URL descarga APK.
-3. **Instalar APK + dar permisos manuales en el móvil**: notificaciones ON + "Anular el modo No Molestar" ON + volumen de alarma máximo.
-4. **Probar**: móvil en DnD → "Probar alarma" → ¿suena `TYPE_ALARM`? → "Parar". Si falla: `adb logcat` para aislar.
-5. Opcional: **crear skill `ship-polished-ui`** (pospuesta de Sesión 6) — útil para Fase 7b.
+1. **Relanzar Build EAS #2** desde `mobile/`: `npx eas build --platform android --profile development --non-interactive` (~30-45 min cloud) → URL descarga APK. El lock ya está sincronizado tras el fix (eas-cli fuera de devDeps); debería pasar la fase `INSTALL_DEPENDENCIES`. Si falla, ya será en Gradle/Kotlin.
+2. **Instalar APK + dar permisos manuales en el móvil**: notificaciones ON (dialog al abrir) + volumen de alarma máximo (Settings → Sonido). "Anular el modo No Molestar" es **opcional** (el canal `setBypassDnd(true)` debería bastar en Android stock); probar primero sin él.
+3. **Probar**: móvil en DnD → "Probar alarma" → ¿suena `TYPE_ALARM`? → "Parar". Si falla: `adb logcat` (platform-tools ~5MB) para aislar qué eslabón falla (canal, foreground service, DnD, OEM).
+4. Opcional: **crear skill `ship-polished-ui`** (pospuesta de Sesión 6) — útil para Fase 7b.
 
 **Fase 7a (backend):**
 3. Eliminar `User`, auth JWT, teléfono, Twilio del backend.

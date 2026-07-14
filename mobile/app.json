@@ -29,6 +29,12 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "plugins": []
+    "plugins": [],
+    "extra": {
+      "eas": {
+        "projectId": "7e79b9e4-c187-4216-bbfd-ab2200b392d2"
+      }
+    },
+    "owner": "theni55"
   }
 }

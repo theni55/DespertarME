@@ -365,3 +365,28 @@ plataforma (Vercel/CF Pages descartados: serverless no soporta el scheduler
   en DnD → "Probar alarma" → ¿suena `TYPE_ALARM`? → "Parar". Si no suena:
   `adb logcat` (platform-tools ~5MB standalone) para aislar qué eslabón falla
   (canal, foreground service, DnD, OEM).
+- **EAS login hecho** (`theni55` owner). `npx eas init --force --non-interactive`
+  creó el proyecto `@theni55/despertarme-spike` (ID
+  `7e79b9e4-c187-4216-bbfd-ab2200b392d2`) y lo linkeó en `mobile/app.json`
+  (`extra.eas.projectId` + `owner`).
+- **Build EAS #1 fallida** (build `f3a519f8`, commit `e998c482`):
+  - Estado `ERRORED` en fase `INSTALL_DEPENDENCIES` (~1.5 s, antes de tocar
+    Gradle/Kotlin).
+  - Causa: `npm ci` decía `package.json and package-lock.json are in sync`
+    fallaba con `Missing: typescript@5.9.3 from lock file`.
+  - **Root cause real**: el agente (yo) había metido `eas-cli` como
+    devDependency del proyecto (`npm i --save-dev eas-cli`) tras el prebuild.
+    `eas-cli` es CLI global, no dep de proyecto; ensució el árbol de deps y
+    desincronizó el lock sin pensarlo.
+  - **Fix**: `npm uninstall eas-cli` + `npm install` (regenera lock sincronizado
+    con package.json limpio). Para EAS, usar `npx eas-cli` (descarga efímera) o
+    `npm i -g eas-cli` (PC del owner), no meterlo en el proyecto.
+- **Build EAS #2 pendiente de relanzar** tras este fix. Si vuelve a fallar, ya
+  será en Gradle/Kotlin (lo crítico del spike) y podremos debugear con el log
+  que entrega EAS.
+- Nota: el bypass-silent *no* requiere que el usuario tenga `ACCESS_NOTIFICATION_POLICY`
+  concedido para "sonar"—el canal `IMPORTANCE_HIGH` + `setBypassDnd(true)` es
+  suficiente por sí solo en Android stock. El permiso DnD solo se pide por si
+  hace falta cambiar el estado de DnD programáticamente (caso bonus). El
+  volumen de alarma del sistema sí tiene que estar alto (no se puede subir por
+  código en Android 14).
