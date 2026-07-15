@@ -500,3 +500,42 @@ plataforma (Vercel/CF Pages descartados: serverless no soporta el scheduler
 - **Pendiente**: el continuador arranca con el Paso 1 del handoff (instalar
   Android Studio + emulador → logcat → fix E1 + defensivos → build EAS #3 →
   validación en móvil físico).
+
+## Sesión 10 — Fix E1 + setup Android SDK local + Hyper-V + build EAS #3 (2026-07-15)
+
+- El continuador ejecutó el Paso 1 del handoff de Sesión 9.
+- **Fix E1 aplicado** en 4 archivos (commit `e896b88`, push a `dev`):
+  - `AndroidManifest.xml` + `app.json`: añadido `FOREGROUND_SERVICE` (el permiso
+    genérico que faltaba, causante del `SecurityException` en `startForeground`).
+  - `AlarmModule.kt`: eliminada llamada a `promptPolicyAccess()` del flujo
+    `startAlarm` (innecesaria — el canal con `setBypassDnd` basta, y además
+    mandaba la app a Settings de DnD justo antes del `startForegroundService`).
+  - `AlarmService.kt`: null-check en `getRingtone()` (devuelve null → NPE) +
+    guard `if (Build.VERSION.SDK_INT >= 28) { isLooping = true }` (API 28+).
+  - TypeScript: `tsc --noEmit` compila limpio.
+- **Android SDK instalado (portable, sin winget ni admin):**
+  - JDK 17 (Temurin portable zip) en `%LOCALAPPDATA%\jdk-17\jdk-17.0.19+10`.
+  - Android CLI tools (cmdline-tools) → layout `latest/` tras mover desde el
+    doble anidamiento `cmdline-tools/cmdline-tools/`.
+  - sdkmanager instaló: `platform-tools`, `platforms;android-34`,
+    `system-images;android-34;google_apis;x86_64`, `emulator`,
+    `build-tools;34.0.0`.
+  - AVD `pixel_6_api34` creado (Google APIs x86_64).
+  - `emulator -accel-check` → **sin aceleración**, Hyper-V apagado. CPU tiene
+    extensiones de virtualización pero no están activadas.
+- **Hyper-V**: se disparó elevación UAC vía
+  `Start-Process powershell -Verb RunAs` con
+  `Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V-All`.
+  Pendiente de que el owner apruebe el diálogo UAC y reinicie.
+- **Build EAS #3 lanzada** como red de seguridad (build ID `f486f8c5`, cola
+  free tier ~1-2h). Commit con los fixes ya incluido.
+  URL: https://expo.dev/accounts/theni55/projects/despertarme-spike/builds/f486f8c5-d956-4ce9-ab79-2ed12a39a236
+- **Explicación de los 3 caminos de testing al owner**: Camino A (emulador
+  local, ~5 min/build, necesita Hyper-V), Camino B (móvil físico + build local
+  Gradle sin EAS, necesita USB debugging), Camino C (EAS cloud build, ~2h cola).
+  Owner eligió Camino A (emulador).
+- **Memorias actualizadas**: `handoff.md` (Sesión 10), `bitacora.md` (esta
+  entrada). Commit + push próximos.
+- **Pendiente para próxima sesión**: verificar estado EAS #3 + Hyper-V
+  (aprobación UAC + reinicio) → si Hyper-V OK: fijar env vars, arrancar
+  emulador, compilar local, validar DnD. Si no: Camino B (USB) o esperar EAS.
