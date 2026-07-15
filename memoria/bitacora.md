@@ -413,3 +413,90 @@ plataforma (Vercel/CF Pages descartados: serverless no soporta el scheduler
   hace falta cambiar el estado de DnD programáticamente (caso bonus). El
   volumen de alarma del sistema sí tiene que estar alto (no se puede subir por
   código en Android 14).
+
+## Sesión 9 — Análisis plan de migración + codebase review + D40/D41 (solo memorias, cero código)
+
+- El owner pidió revisar el plan de migración web→móvil (Fase 7) contra la
+  codebase, evaluando solidez, mejoras, riesgos y acierto de las decisiones.
+  Además planteó la idea de crear alarmas locales en el dispositivo en vez de
+  depender exclusivamente de FCM como timbre ("¿no sería más fácil que la app
+  creara una alarma en el móvil del usuario?").
+- **Decisión estratégica D40 — Arquitectura de alarma híbrida**: la idea del
+  owner es correcta en su variante técnica. La app programa alarmas locales
+  exactas (`AlarmManager.setAlarmClock` en Android / **AlarmKit** en iOS 26+, 
+  nuevo framework de Apple presentado en WWDC25 sesión 230 que garantiza bypass
+  de silencio y focus sin Critical Alert Entitlement — verificado contra la doc
+  oficial). FCM data-only pasa de "ring now" a "reprogramador" (mensajes
+  `update` con `estimated_start_at`, `started`, `cancelled`). Verify-then-ring:
+  la alarma local consulta al backend antes de sonar (self-healing). Descartada
+  la variante `ACTION_SET_ALARM` (alarma en el Reloj del sistema): no
+  actualizable/cancelable fiablemente, sin contexto del combate, varía por OEM.
+- **Decisión táctica D41 — Validación emulador-primero**: Android Studio +
+  emulador API 34 se adelanta de Fase 7b al spike actual. El emulador valida
+  Android estándar (crash E1, sonido `USAGE_ALARM`, DnD, Doze forzado);
+  iteración en ~2-5 min local vs ~2 h EAS cloud con logcat integrado sin
+  setup USB. El móvil físico queda como confirmación final de quirks OEM
+  (Xiaomi/Samsung/Huawei), en dispositivos concretos cuando haya acceso.
+- **Codebase review del backend (`src/app/` + `tests/`)**: revisión exhaustiva
+  con file:line concretas. Hallazgos clave:
+  - **E1 — Crash del spike**: falta `FOREGROUND_SERVICE` en el manifest
+    (SecurityException en `startForeground` desde API 28, fuera del try/catch
+    del bridge → la app muere sin mensaje JS). 3 defensivos adicionales:
+    null-check en `getRingtone()` (`AlarmService.kt:45` puede devolver null),
+    quitar `promptPolicyAccess()` del flujo `startAlarm` (lanza Settings +
+    innecesario, bitacora:410), guard API 28 en `isLooping`.
+  - **E2 — Estimación `post` se desliza al infinito** (`estimator.py:111-118`):
+    `start = now + buffer` recalcula en cada poll → delta constante 300 s →
+    `lead < 5` nunca dispara. Con D40 la alarma local se reprogramaría al
+    infinito. Fix: anclar a primera observación de la transición.
+  - **E3 — Poller nunca mira el combate objetivo** (`poller.py:104-122`):
+    solo consulta el previo. Puede disparar "empieza en 5 min" horas después
+    del combate. Falta guard + tipos de mensaje `started`/`cancelled`.
+  - **E4 — `previous_bout_id` congelado por el cliente** (`subscriptions.py:43`)
+    vs cartelera viva que usa el estimador: reordenaciones UFC → estimaciones
+    incoherentes. Derivarlo server-side y quitarlo del contrato del cliente.
+  - **E5 — CB se abre con 404s** (`espn_ufc.py:150-156`): al existir
+    `GET /api/events/{id}` público, DoS trivial (5 ids inválidos = poller
+    muerto 60 s). Contar solo fallos retryables.
+  - **E6 — `fired_at_hour = now.hour`** (`poller.py:252`): colisiona entre
+    días distintos; no impide duplicado si un retry cruza cambio de hora. Usar
+    `epoch//3600`. Falta UNIQUE `(device_id, bout_id)` — con la app, un tap
+    de re-suscribirse generará push duplicados.
+  - **E7 — Retries de voz** (36 s sleep por sub fallida, `poller.py:216-218`)
+    bloquean el ciclo del poll entero; sin sentido para FCM (idempotente,
+    barato). Recortar.
+  - **E8 — Sin caché de card por ciclo** (`poller.py:152-166`): N subs =
+    N fetches idénticos a ESPN por minuto. Agrupar por `event_id`.
+  - **5 trampas de migración para Fase 7a**: (1) `sport_subscriptions`/
+    `event_subscriptions` también tienen FK a users (`subscriptions.py:21-39`),
+    el plan no las menciona; (2) ENUM `user_role` de PG no se borra solo con
+    `drop_table`, requiere `sa.Enum.drop()` explícito; (3) FKs sin naming
+    convention en `Base` + migración base autogenerada contra SQLite →
+    escribir la de 7a a mano contra PG; (4) `new_uuid` en
+    `auth/dependencies.py:57` — lo importa `subscriptions.py:13`, si se borra
+    `auth/` en bloque ese router deja de importar; (5) `config.py:74` referencia
+    `jwt_secret` en el `model_validator` de producción — si se borra el campo
+    sin borrar el validator, la app no arranca.
+  - **Fase 7b error de tipo de service**: listaba `FOREGROUND_SERVICE_DATA_SYNC`
+    — tipo fuertemente restringido en Android 14+. El spike usa `mediaPlayback`,
+    que es lo correcto.
+  - **Fase 7d obsoleta**: la premisa "Critical Alert Entitlement" queda
+    invalidada por AlarmKit (iOS 26, sin entitlement, schedule de fecha fija,
+    ciclo de vida cancelar/reprogramar por id, mismo patrón que Android).
+  - Separación provider/dominio/engine excelente — 31 tests sobreviven intactos
+    a Fase 7a. Tests actuales de poller/api/notifiers se reescriben
+    mecánicamente. Bugs E2/E3/E4 sin cobertura de tests.
+  - **Aciertos del plan confirmados**: spike-first (validar lo existencial
+    antes que lo bonito), recorte a solo sonido (D39), modelo Device sin
+    cuentas (simplifica onboarding), eliminar User/Twilio en vez de convivir
+    (split limpio), Android primero + iOS diferido.
+- **Memorias actualizadas**: `decisiones.md` (D40 + D41 + limpieza de
+  pendientes obsoletas), `fases.md` (Spike rehecho con checklist ejecutable,
+  7a ampliada con 13 fixes y 5 trampas, 7b con AlarmScheduler D40 y corrección
+  de tipo de service, 7d reescrita con AlarmKit), `handoff.md` (Sesión 9 como
+  punto de entrada), `bitacora.md` (esta entrada).
+- **Sin cambios de código** — `mobile/` y `src/app/` intactos. La sesión fue
+  exclusivamente de análisis y actualización del plan documentado.
+- **Pendiente**: el continuador arranca con el Paso 1 del handoff (instalar
+  Android Studio + emulador → logcat → fix E1 + defensivos → build EAS #3 →
+  validación en móvil físico).

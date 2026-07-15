@@ -156,85 +156,149 @@ SPA — ver D35), sin build step.
 
 ## Fase 7 — App móvil Android (React Native + Expo) 🔶 plan detallado (17 decisiones vía grilling, D37)
 
-### Fase 7-Spike — Validación bypass-silent (solo sonido) en Android físico (dev build EAS)
+### Fase 7-Spike — Validación bypass-silent (solo sonido) 🔶 en curso (Sesión 9)
 
-**Alcance reducido (D39, revisado Sesión 8):** el spike solo valida **que suena `TYPE_ALARM` con el móvil en modo No Molestar**. No incluye full-screen intent, ni `expo-secure-store`, ni FCM, ni carátula MVP, ni Expo Router multi-pantalla. Razón: el único riesgo que no se puede probar sin hardware real es el bypass DnD; el resto (UI, navegación, FCM, full-screen) se itera en dev build con Android Studio en Fase 7b sin sorpresas. Menos Kotlin a ciegas = menos probabilidad de que la primera APK crashee.
+**Alcance reducido (D39, revisado Sesión 8):** validar que `TYPE_ALARM` suena con el móvil en DnD. Sin FCM, sin full-screen, sin carátula.
 
-- [x] `mobile/` con `npx create-expo-app --template blank-typescript` (1 sola pantalla, sin Expo Router).
-- [x] Pantalla única `App.tsx`: botón rojo "Probar alarma" + botón "Parar" + estado del servicio.
-- [x] `npx expo prebuild --platform android` → genera `mobile/android/`.
-- [x] Native module Kotlin en `mobile/android/app/src/main/java/com/despartarme/spike/alarm/`:
-  - `AlarmModule.kt` (crea canal `IMPORTANCE_HIGH` + `setBypassDnd(true)`; arranca/para el service).
-  - `AlarmService.kt` (foreground service tipo `mediaPlayback` con `RingtoneManager.TYPE_ALARM` en loop + `PARTIAL_WAKE_LOCK` + `startForeground`).
-  - `AlarmPackage.kt` + registro en `MainApplication.kt`.
-- [x] `AndroidManifest.xml` permisos: `FOREGROUND_SERVICE_MEDIA_PLAYBACK`, `POST_NOTIFICATIONS`, `WAKE_LOCK`, `VIBRATE`, `ACCESS_NOTIFICATION_POLICY` + `<service foregroundServiceType="mediaPlayback"/>`.
-- [x] `eas.json` perfil único `development` (APK instalable sideload).
-- [x] `mobile/README.md` con chuleta de build, permisos manuales en el móvil, troubleshooting OEM.
-- [ ] `eas login` del owner (cuenta Expo gratis, expo.dev).
-- [ ] `eas build --platform android --profile development` (~30-45 min build cloud).
-- [ ] Instalar APK en Android físico + otorgar permisos: notificaciones, **Override Do Not Disturb** (Settings → Apps → DespertarME), volumen de alarma al máximo.
-- [ ] **Validar 2 cosas** (botón local, sin FCM, sin full-screen):
-  - Suena `TYPE_ALARM` aunque el móvil esté en DnD.
-  - Botón "Parar" detiene el sonido y el foreground service termina limpio.
-- [ ] `adb` standalone (`platform-tools`, ~5MB sin Android Studio) para `logcat` si hace falta debugear.
-- [ ] **Resultado esperado**: bypass-silent de audio confirmado en Android físico → el 90% del riesgo del producto está validado. El full-screen intent, FCM y el resto entran en Fase 7b con Android Studio para iterar rápido. Si no suena: aislar en <2h qué eslabón falla (canal, foreground service, DnD, permiso OEM).
+**Historial hecho (Sesión 8):**
+- [x] `mobile/` con `npx create-expo-app --template blank-typescript`.
+- [x] `App.tsx`: 1 pantalla negra, 2 botones (Probar/Parar) + estado del servicio.
+- [x] `npx expo prebuild --platform android` → `mobile/android/`.
+- [x] Native module Kotlin en `alarm/`: `AlarmModule.kt` (canal `IMPORTANCE_HIGH` + `setBypassDnd`, expone `startAlarm`/`stopAlarm`), `AlarmService.kt` (foreground `mediaPlayback`, `RingtoneManager.TYPE_ALARM` loop, `USAGE_ALARM`, `PARTIAL_WAKE_LOCK` 10 min, notification `CATEGORY_ALARM` + `setSilent(true)`), `AlarmPackage.kt` + registro en `MainApplication.kt`.
+- [x] `AndroidManifest.xml`: `FOREGROUND_SERVICE_MEDIA_PLAYBACK`, `POST_NOTIFICATIONS`, `WAKE_LOCK`, `VIBRATE`, `ACCESS_NOTIFICATION_POLICY` + `<service foregroundServiceType="mediaPlayback"/>`.
+- [x] `eas.json` perfil `development` (APK `assembleRelease`), `mobile/README.md` troubleshooting.
+- [x] EAS login (`theni55`), `eas init` → `@theni55/despertarme-spike` linkeado.
+- [x] Build EAS #2 `FINISHED` ✅ (commit `81ca690`, cola ~6382 s free tier, Kotlin compiló limpio).
+- [x] APK instalada en Android 14 físico, permiso notificaciones concedido.
+- [x] **Prueba en móvil → CRASH ❌**: al tocar "Probar alarma" la app se cierra de golpe (crash de proceso nativo, no capturado por JS).
 
-### Fase 7a — Backend: device model + JSON endpoints + FCM notifier
+**Diagnóstico de la Sesión 9 (revisión de codebase):**
+
+Causa casi segura del crash: **falta `android.permission.FOREGROUND_SERVICE`** en `AndroidManifest.xml:2` y `app.json:21-27`. Desde API 28, `startForeground()` sin el permiso genérico lanza `SecurityException` que **mata el proceso entero**, fuera del try/catch del bridge JS-Native. La excepción salta en `AlarmService.kt:32` (`startForeground`). Encaja 100% con los síntomas: no hay mensaje de error capturado, la UI alcanza a mostrar "stopped" antes de morir.
+
+**Defensivos adicionales (misma build):**
+1. `AlarmService.kt:45`: `RingtoneManager.getRingtone()` puede devolver null → NPE. Null-check con error legible vía callback al JS.
+2. `AlarmModule.kt:46-48`: `promptPolicyAccess()` lanza Settings de DnD justo antes de `startForegroundService` → manda la app a background + innecesario (el bypass DnD funciona con el canal solo, bitacora:410). Mover a botón aparte o eliminar del flujo.
+3. `AlarmService.kt:50`: `isLooping` requiere API 28+. Guard con `Build.VERSION.SDK_INT`.
+
+**Nuevo flujo de validación (D41 — emulador-primero):**
+
+Sin Android Studio aún → el continuador instala Android Studio + emulador API 34 (Google APIs):
+
+- [ ] Instalar Android Studio + SDK + emulador API 34 Google APIs (~5-8 GB) + verificar virtualización activada (Windows: Hyper-V/HAXM). Requisito previo: JDK 17.
+- [ ] `npx expo run:android` — compila en local (~2-5 min, vs ~2 h EAS) e instala en emulador.
+- [ ] **Reproducir el crash** en emulador + `logcat` para confirmar (o refutar) la hipótesis `SecurityException` por `FOREGROUND_SERVICE`.
+- [ ] **Fix**: añadir `<uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>` en `AndroidManifest.xml` + `app.json` permissions.
+- [ ] **Defensivos**: null-check `getRingtone`, quitar prompt Settings de `startAlarm`, guard API 28 en `isLooping`.
+- [ ] **Validar en emulador con DnD/silencio**:
+  - Activar DnD en Settings del emulador.
+  - Tocar "Probar alarma" → suena `TYPE_ALARM` con `USAGE_ALARM`.
+  - "Parar" → silencio + foreground service termina limpio + notificación desaparece.
+- [ ] **Validar Doze** (para D40): `adb shell dumpsys deviceidle force-idle` + verificar que `setAlarmClock` (cuando se implemente en 7b) despierta puntualmente.
+- [ ] Build EAS #3 → descargar APK → instalar en el **móvil Android 14 físico del owner**.
+- [ ] **Smoke OEM** en el dispositivo real: DnD, silencio total, sonido, parar. Si falla en el dispositivo pero no en emulador → es un quirk del fabricante (Xiaomi/Samsung/etc.) y se aborda con los datos concretos de ese modelo.
+
+### Fase 7a — Backend: device model + JSON endpoints + FCM notifier (D40 ampliado)
 
 **Eliminar era User/Twilio:**
-- [ ] Eliminar `User` model, `auth/security.py`, `auth/validators.py`, `auth/dependencies.py`.
-- [ ] Eliminar `/api/auth/register`, `/api/auth/login`, `/api/users` routers.
-- [ ] Eliminar `notifiers/twilio.py`, dep `twilio` en `pyproject.toml`, env-vars Twilio.
-- [ ] Migración Alembic: nueva tabla `devices` (`id`, `fcm_token`, `platform`, `timezone`, `locale`, `is_active`, `created_at`, `last_seen_at`).
-- [ ] `BoutSubscription` y `AlertLog`: `user_id` → `device_id` (FK a `devices`).
-- [ ] `get_current_device` (header `X-Device-Id`) reemplaza a `get_current_user`.
-- [ ] Endpoints: `POST /api/devices` (registro), `DELETE /api/devices/me`, `POST /api/devices/me/test-alarm`.
-- [ ] Exponer ESPN como JSON: `GET /api/events` (lista) + `GET /api/events/{id}` (tarjeta con bouts + `AthleteResolver` para fotos/nombres).
-- [ ] `notifiers/fcm.py` con `firebase-admin`: payload data-only descriptivo. `build_notifier()` gated por `FCM_CREDENTIALS` → `DummyNotifier`.
-- [ ] **Configurar proyecto Firebase** (consola, service account key Python, `FCM_CREDENTIALS` env-var).
-- [ ] `Poller` carga `Device` (fcm_token, timezone), skip inactivos.
-- [ ] Tests: device register/test-alarm, FCM mocked, eventos JSON, poller con device.
-- [ ] Verificación: `ruff`/`black`/`mypy`/`pytest` (~57 tests, 64 −7 user/auth).
 
-### Fase 7b — App Android v1 (Expo + Android Studio + emulador + dev build)
+- [ ] **Preparación previa (antes de borrar `auth/`)**: mover `new_uuid()` de `auth/dependencies.py:57` a un util neutro (lo importa `subscriptions.py:13` y `auth.py:11` — si se borra `auth/` en bloque, `subscriptions.py` deja de importar).
+- [ ] Limpiar `config.py:71-79`: el `model_validator` de producción referencia `jwt_secret` — quitar el campo Y el validator juntos para que la app arranque. Añadir settings FCM (`FCM_CREDENTIALS_PATH` o `FCM_CREDENTIALS_JSON`).
+- [ ] Eliminar `User` model, `auth/` completo (security, validators, dependencies), routers `/api/auth/*` y `/api/users/*`, `notifiers/twilio.py`.
+- [ ] Quitar deps de `pyproject.toml`: `passlib[bcrypt]`, `bcrypt<5.0`, `pyjwt`, `twilio`, `pydantic[email]` (solo lo usaba `UserCreate`). Añadir `firebase-admin`.
+- [ ] Eliminar `scripts/seed_admin.py` (password hardcodeada + apunta a rutas web que ya no existen).
+- [ ] Limpiar `src/app/web/__pycache__/` (`.pyc` huérfanos de la era web).
 
-**Setup y native module (bypass-silent):**
-- [ ] Instalar Android Studio + SDK + emulador Android en PC (gratis, ~5GB).
-- [ ] Setup dev build en `mobile/`: `app.json`, `eas.json`, `npx expo prebuild --platform android`.
-- [ ] Native module Kotlin: `AlarmNotificationsModule` (channel `IMPORTANCE_HIGH` + `setBypassDnd(true)` + `AudioAttributes(USAGE_ALARM)`) + `AlarmService` (foreground, `MediaPlayer(STREAM_ALARM)`, looping) + `AlarmActivity` (full-screen intent con `setShowWhenLocked`/`setTurnScreenOn`).
-- [ ] Sonido custom embebido en `mobile/android/app/src/main/res/raw/alarm.ogg` (~200-500KB).
-- [ ] Permisos `AndroidManifest.xml`: `USE_FULL_SCREEN_INTENT`, `SCHEDULE_EXACT_ALARM`, `FOREGROUND_SERVICE_DATA_SYNC`, `POST_NOTIFICATIONS`, `WAKE_LOCK`, `VIBRATE`.
-- [ ] Cliente FCM: `@reactnative-firebase/messaging`. Handler background → `AlarmService`. Handler foreground → `AlarmScreen`.
-- [ ] `google-services.json` en `mobile/android/app/`.
+**Migración Alembic — escribir a mano contra Postgres:**
+
+⚠️ La migración base `a3657c6166f0` se autogeneró contra SQLite. Las FKs no tienen naming convention (`Base` no define `metadata.naming_convention`). Hacer a mano:
+
+- [ ] **Crear tabla `devices`**: `id` (UUID PK), `fcm_token`, `platform`, `timezone`, `locale`, `is_active`, `created_at`, `last_seen_at`.
+- [ ] **Renombrar FKs en `bout_subscriptions` y `alert_log`**: `user_id` → `device_id` + FK a `devices`. ⚠️ Hay 5 FKs con `ondelete='CASCADE'` → si se dropea `users` antes de migrar datos, se borran suscripciones y alert_log en cascada. Orden correcto: crear `devices` → migrar datos → dropear FK vieja → renombrar columna → crear FK nueva → dropear `users`.
+- [ ] **Tablas `sport_subscriptions` y `event_subscriptions`**: también tienen FK a `users` (`subscriptions.py:21-39`). El plan no las menciona pero existen. Decidir: eliminar tablas enteras (ningún router las usa — parecen muertas) o renombrar FK también.
+- [ ] **Eliminar `users`**: antes, `sa.Enum(name='user_role').drop(op.get_bind())` explícito (Alembic no lo detecta en autogenerate y el ENUM queda huérfano en PG).
+- [ ] **Índices**: renombrar `ix_bout_subscriptions_user_id` → `ix_bout_subscriptions_device_id`, ídem `alert_log`.
+- [ ] Añadir **UNIQUE `(device_id, bout_id)`** en `bout_subscriptions` — sin esto, un tap de re-suscribirse en la app genera push duplicados.
+- [ ] **`fired_at_hour` → `fired_at_epoch_hour`** (`epoch//3600`) en `alert_log`: `now.hour` colisiona entre días distintos a la misma hora (IntegrityError espurio) y permite duplicado si un retry cruza el cambio de hora.
+
+**Device auth y endpoints:**
+
+- [ ] `get_current_device` (header `X-Device-Id`) reemplaza a `get_current_user` en `subscriptions.py` y `alert_log.py`.
+- [ ] `POST /api/devices` (registro), `DELETE /api/devices/me`, `POST /api/devices/me/test-alarm`.
+- [ ] `GET /api/events` (lista con caché Redis + filtro por fecha — `list_upcoming_events` actual no filtra pasados y es N+1 secuencial, `espn_ufc.py:175-196`).
+- [ ] `GET /api/events/{id}` (tarjeta con bouts, fotos/nombres vía `AthleteResolver`, y **`previous_bout_id` calculado server-side** — el cliente no debe mandarlo, `schemas.py:46-52` hoy lo exige).
+
+**Contrato FCM (D40):**
+
+- [ ] `notifiers/fcm.py` con `firebase-admin`. Payload data-only con `type` (`update`/`started`/`cancelled`) + `estimated_start_at` + `bout_id` + `event_id` + `fighters` + `event_name`. `build_notifier()` gated por `FCM_CREDENTIALS` → `DummyNotifier` (mismo patrón D30 que Twilio).
+- [ ] **Configurar proyecto Firebase** (consola, service account key Python, `FCM_CREDENTIALS` env-var, `google-services.json` para la app).
+
+**Refactor Poller (fixes de bugs encontrados en Sesión 9):**
+
+- [ ] **E2 — Anclar estimación `post` a primera observación** (`estimator.py:111-118`): hoy `start_at = now + buffer` se recalcula en cada poll → `delta` constante = 300 s → `should_fire` nunca se cumple con `lead < 5 min`. Con D40 esto muta: el backend ya no dispara "ring now" sino que pushea `estimated_start_at`, pero si la estimación se desliza hacia delante cada poll, la alarma local se reprograma al infinito. **Fix**: persistir `observed_at` (timestamp de la transición `in→post`) en Redis y calcular `start_at = observed_at + buffer`, relativo a un momento fijo.
+- [ ] **E3 — Guard del estado del combate objetivo** (`poller.py:104-122`): hoy solo mira el previo. Si el target ya está `in`/`post` (servidor arrancó tarde, Redis se vació, sub creada a mitad de evento), el poller debe pushear `started`/`cancelled`, no una estimación fantasma.
+- [ ] **E4 — Derivar `previous_bout_id` server-side** desde la card fresca en cada poll (el `subscriptions.py:43` congela lo que mandó el cliente; las reordenaciones día-de-evento de UFC producen estimaciones incoherentes silenciosas). Aprovechar para quitarlo del contrato del cliente → simplifica la API móvil.
+- [ ] **E6 — Idempotencia reforzada**: `fired_at_hour` → `epoch//3600` (ver migración arriba) + UNIQUE `(device_id, bout_id)`. Reconsiderar si marcar idempotencia antes o después de notificar: para FCM (más barato que voz), marcar tras éxito y confiar en UNIQUE de BD puede ser mejor estrategia.
+- [ ] **E7 — Retries D17 recortados para FCM**: los 3 intentos con sleep acumulado de 36 s (`poller.py:216-218`, bloquean el ciclo entero del poll) no tienen sentido para push (idempotente, barato, sin estado de sesión). Reducir a 1 retry corto o eliminar. Ajustar `misfire_grace_time` del scheduler para no descartar ticks.
+- [ ] **E5 — Circuit breaker solo con fallos retryables** (`espn_ufc.py:150-156`): hoy cuenta 404s y cualquier excepción → 5 requests a un `event_id` inválido desde el endpoint público `GET /api/events/{id}` tumban poller + API 60 s (DoS trivial). Contar solo 429/5xx/transporte.
+- [ ] **E8 — Caché de card por ciclo en `poll_once`**: agrupar subs por `event_id` → 1 fetch ESPN/min en vez de N.
+- [ ] **Validación server-side de `lead_minutes`**: con valor mínimo sensato (≥1, o ≥5 si no se arregla E2).
+
+**Poller con Device:**
+
+- [ ] Carga `Device` (fcm_token, timezone, locale) en vez de `User`, skip `is_active==False` o `fcm_token is None`.
+- [ ] **Push on-change (D40)**: el poller pushea FCM cuando la estimación se mueve >~1 min (± lead conservador), no solo en el umbral del lead. Esto relaja la criticidad de la latencia del poller.
+- [ ] `_call_with_retries` adaptado a FCM (payload sin `phone`/`user_id`; token + data dict).
+
+**Tests:**
+
+- [ ] Reescribir `test_poller` (device en vez de User, payload cambiado) + `test_api` (nuevos endpoints, X-Device-Id) + `test_notifiers` (FCM mockeado, mismo patrón que Twilio). `test_estimator`, `test_espn_ufc`, `test_athletes` sobreviven intactos (~31 tests).
+- [ ] **Añadir tests para los bugs E2/E3/E4** (lead < 5 en post, target ya empezado, previo incoherente) — hoy sin cobertura.
+- [ ] Verificación completa: `ruff`/`black`/`mypy`/`pytest`.
+
+### Fase 7b — App Android v1 (Expo + Android Studio + emulador + dev build, D40/D41)
+
+**Setup (Android Studio ya instalado — adelantado en D41):**
+
+- [ ] Verificar que Android Studio + emulador API 34 funciona (ya debería estar desde el spike).
+- [ ] `npx expo prebuild --platform android --clean` si se tocó `app.json` (bare workflow, ver `expo doctor` en handoff Sesión 8).
+
+**Native module — alarma local + sonido:**
+
+- [ ] **`AlarmScheduler`** (nuevo, D40): receiver `AlarmReceiver` + `AlarmManager.setAlarmClock()` que programa la alarma local a `estimated_start_at − lead_minutes`. Al disparar, verify-then-ring: fetch a `GET /api/events/{id}` → si el target sigue en `pre` y la estimación es < lead → arranca `AlarmService`; si ya empezó → notifica sin sonido; si se canceló/reprogramó → reprograma la alarma local. Permiso `USE_EXACT_ALARM` (auto-concedido en Play por ser alarm app, sin fricción de usuario).
+- [ ] **Refactor del `AlarmService` del spike**: añadir sonido custom embebido (`res/raw/alarm.ogg`, ~200-500KB, en vez de `RingtoneManager.TYPE_ALARM` por defecto) + `AlarmActivity` (full-screen intent con `setShowWhenLocked`/`setTurnScreenOn` — ya no está en el spike, entra ahora con emulador para iterar).
+- [ ] Permisos `AndroidManifest.xml`: se mantienen los del spike + añadir `USE_FULL_SCREEN_INTENT`, `USE_EXACT_ALARM`, `RECEIVE_BOOT_COMPLETED` (para re-programar alarmas tras reinicio). ⚠️ `FOREGROUND_SERVICE_DATA_SYNC` del plan original está **descartado** — tipo erróneo/restringido en Android 14+. Se usa `mediaPlayback` (ya probado en el spike) o `specialUse`.
+- [ ] Cliente FCM: `@reactnative-firebase/messaging`. Handler background: recibir `update` → reprogramar `AlarmManager.setAlarmClock` (NO arrancar el service — la alarma local se encarga). Handler foreground: recibir `update` → actualizar UI; recibir `started`/`cancelled` → mostrar notificación informativa. `google-services.json` en `mobile/android/app/`.
 - [ ] `expo-secure-store` para `device_id` (UUID v4 generado en 1ª launch).
 
 **Pantallas (Expo Router Tabs: Home / Eventos / Mis Alertas / Ajustes):**
-- [ ] **Home**: póster del próximo evento (hero full-bleed) + botón primario **"Avísame"** (→ EventDetail destacado, más vistoso) + botón secundario **"Eventos"** (→ lista de eventos).
+- [ ] **Home**: póster del próximo evento (hero full-bleed) + botón primario **"Avísame"** (→ EventDetail destacado) + botón secundario **"Eventos"** (→ lista).
 - [ ] **Eventos**: lista de próximos UFC (card con imagen, fecha, nombre) desde `GET /api/events`.
-- [ ] **EventDetail**: tarjeta de combates (foto+nombre peleadores, borde rojo/azul por esquina, matchNumber, segmento, peso), selector fijo de minutos (5/10/15/30/60), botón "Avisarme" → `POST /api/subscriptions`.
+- [ ] **EventDetail**: tarjeta de combates (foto+nombre, borde rojo/azul por esquina, matchNumber, segmento, peso), selector fijo de minutos (5/10/15/30/60). ⚠️ El backend debe validar `lead >= 5` si no se arregló E2 en Fase 7a. Botón "Avisarme" → `POST /api/subscriptions` (sin mandar `previous_bout_id` — lo deriva el backend, E4).
 - [ ] **Mis Alertas**: suscripciones activas (botón cancelar) + historial desde `GET /api/alerts`.
 - [ ] **Ajustes**: timezone, estado de permisos, botón "Probar alarma" → `POST /api/devices/me/test-alarm`, info diagnóstico FCM.
-- [ ] **AlarmScreen** (modal full-screen): "UFC 329 — McGregor vs Holloway empieza en ~15 min" + botón "Descartar" (para el sonido). Se abre desde el handler de FCM en foreground o desde el full-screen intent en background.
+- [ ] **AlarmScreen** (modal full-screen): "McGregor vs Holloway — UFC 329 empieza en ~15 min" + botón "Descartar" (para el sonido). Se abre desde el `AlarmReceiver` vía `AlarmActivity`.
 
 **Diseño y estado:**
 - [ ] Design tokens: Inter (fuente), rojo UFC `#E50914`, fondo oscuro `#0A0A0A` (reusados de la web D35/D36).
 - [ ] Estado server: TanStack Query. `device_id` en `expo-secure-store`.
-- [ ] Tests: Jest + React Native Testing Library (pantallas principales).
-- [ ] Validar en emulador: navegación, API, pantallas, flujo completo crear/cancelar alerta.
-- [ ] **Validar bypass-silent cuando se consiga hardware Android** (dev build en dispositivo físico con modo silencio activado).
+- [ ] Tests: Jest + React Native Testing Library (pantallas principales + `AlarmScheduler`).
+- [ ] Validar en emulador: navegación, API, pantallas, flujo completo crear/cancelar alerta, verify-then-ring, Doze (`dumpsys deviceidle force-idle`).
+- [ ] **Confirmación en móvil físico**: bypass-silent con `setAlarmClock` (D40) + OEM quirks.
 
 ### Fase 7c — Deploy + smoke real
 
 - [ ] Backend en Railway (D33) con env-vars: `FCM_CREDENTIALS`, `FCM_PROJECT_ID`.
 - [ ] Firebase project + `google-services.json` en EAS.
 - [ ] Build EAS free tier → APK interno para el owner.
-- [ ] Smoke: crear alerta, disparar desde backend (admin/fixture), verificar alarma en hardware Android físico con modo silencio.
+- [ ] Smoke: crear alerta, verificar que la alarma local suena en hardware Android físico con DnD/silencio.
 
-### Fase 7d — iOS (post-MVP, tras validar Android)
+### Fase 7d — iOS (post-MVP, D40 vía AlarmKit)
 
 - [ ] Mismo código Expo con build iOS via EAS.
-- [ ] Solicitar **Critical Alert Entitlement** de Apple.
-- [ ] Sin entitlement, iOS no bypass silent — decidir si aceptar limitación o esperar aprobación.
+- [ ] **AlarmKit** (iOS 26+, WWDC25 sesión 230): `AlarmManager.schedule(id:configuration:)` con `Alarm.Schedule.fixed(date)`, título custom, sonido custom, botón secundario con App Intent para abrir la app. El sistema garantiza bypass de silencio y focus sin Critical Alert Entitlement — solo requiere `NSAlarmKitUsageDescription` en el plist y opt-in del usuario. Ciclo de vida completo: cancelar/reprogramar por id (mismo patrón que `setAlarmClock` en Android).
+- [ ] Requisito mínimo iOS 26 (adopción mayoritaria esperada para cuando se ejecute esta fase). Sin fallback a Critical Alert — el entitlement es discrecional de Apple y lento.
+- [ ] Mismo módulo conceptual `AlarmScheduler` con backend Swift nativo (módulo Expo custom o library de la comunidad si existe).
 
 
 
