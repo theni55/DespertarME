@@ -43,9 +43,6 @@ class AlarmModule(private val ctx: ReactApplicationContext) :
     @ReactMethod
     fun startAlarm(promise: Promise) {
         try {
-            if (!hasPolicyAccess()) {
-                promptPolicyAccess()
-            }
             ensureChannel()
             val intent = Intent(ctx, AlarmService::class.java).apply { action = ACTION_START }
             ContextCompat.startForegroundService(ctx, intent)
