@@ -156,7 +156,7 @@ SPA — ver D35), sin build step.
 
 ## Fase 7 — App móvil Android (React Native + Expo) 🔶 plan detallado (17 decisiones vía grilling, D37)
 
-### Fase 7-Spike — Validación bypass-silent (solo sonido) 🔶 en curso (Sesión 9)
+### Fase 7-Spike — Validación bypass-silent (solo sonido) ✅ COMPLETADA (Sesión 11)
 
 **Alcance reducido (D39, revisado Sesión 8):** validar que `TYPE_ALARM` suena con el móvil en DnD. Sin FCM, sin full-screen, sin carátula.
 
@@ -185,18 +185,18 @@ Causa casi segura del crash: **falta `android.permission.FOREGROUND_SERVICE`** e
 
 Sin Android Studio aún → el continuador instala Android Studio + emulador API 34 (Google APIs):
 
-- [ ] Instalar Android Studio + SDK + emulador API 34 Google APIs (~5-8 GB) + verificar virtualización activada (Windows: Hyper-V/HAXM). Requisito previo: JDK 17.
-- [ ] `npx expo run:android` — compila en local (~2-5 min, vs ~2 h EAS) e instala en emulador.
-- [ ] **Reproducir el crash** en emulador + `logcat` para confirmar (o refutar) la hipótesis `SecurityException` por `FOREGROUND_SERVICE`.
-- [ ] **Fix**: añadir `<uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>` en `AndroidManifest.xml` + `app.json` permissions.
-- [ ] **Defensivos**: null-check `getRingtone`, quitar prompt Settings de `startAlarm`, guard API 28 en `isLooping`.
-- [ ] **Validar en emulador con DnD/silencio**:
-  - Activar DnD en Settings del emulador.
-  - Tocar "Probar alarma" → suena `TYPE_ALARM` con `USAGE_ALARM`.
-  - "Parar" → silencio + foreground service termina limpio + notificación desaparece.
-- [ ] **Validar Doze** (para D40): `adb shell dumpsys deviceidle force-idle` + verificar que `setAlarmClock` (cuando se implemente en 7b) despierta puntualmente.
-- [ ] Build EAS #3 → descargar APK → instalar en el **móvil Android 14 físico del owner**.
-- [ ] **Smoke OEM** en el dispositivo real: DnD, silencio total, sonido, parar. Si falla en el dispositivo pero no en emulador → es un quirk del fabricante (Xiaomi/Samsung/etc.) y se aborda con los datos concretos de ese modelo.
+- [x] Instalar Android Studio + SDK + emulador API 34 Google APIs (~5-8 GB) + verificar virtualización activada (Windows: Hyper-V/HAXM). Requisito previo: JDK 17. *(Sesión 10: SDK portable sin admin. Sesión 11: VT-x BIOS activado por owner → WHPX operativo.)*
+- [x] `npx expo run:android` — compila en local (~2-5 min, vs ~2 h EAS) e instala en emulador. *(Sesión 11: `gradlew assembleDebug` 2m29s + Metro + `adb reverse` — `gradlew` directo no empaqueta JS bundle, ver handoff Sesión 11 hallazgo 1.)*
+- [x] **Reproducir el crash** en emulador + `logcat` para confirmar (o refutar) la hipótesis `SecurityException` por `FOREGROUND_SERVICE`. *(Sesión 11: hipótesis confirmada — sin `FOREGROUND_SERVICE`, `startForeground` lanza SecurityException. Tras fix, no crash.)*
+- [x] **Fix**: añadir `<uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>` en `AndroidManifest.xml` + `app.json` permissions. *(Sesión 10: commit `e896b88`.)*
+- [x] **Defensivos**: null-check `getRingtone`, quitar prompt Settings de `startAlarm`, guard API 28 en `isLooping`. *(Sesión 10: mismo commit.)*
+- [x] **Validar en emulador con DnD/silencio**:
+  - Activar DnD en Settings del emulador. *(Sesión 11: `adb shell cmd notification set_dnd priority` = "Alarms only" / `zen_mode=1`.)*
+  - Tocar "Probar alarma" → suena `TYPE_ALARM` con `USAGE_ALARM`. *(Sesión 11: ✅ MediaPlayer `state:started`, AudioTrack frames delivered, logcat limpio.)*
+  - "Parar" → silencio + foreground service termina limpio + notificación desaparece. *(Sesión 11: ✅ service destruido, player released, notificación retirada.)*
+- [ ] **Validar Doze** (para D40): `adb shell dumpsys deviceidle force-idle` + verificar que `setAlarmClock` (cuando se implemente en 7b) despierta puntualmente. *(Pendiente — entra en Fase 7b con `AlarmScheduler`.)*
+- [x] Build EAS → descargar APK → instalar en el **móvil Android 14 físico del owner**. *(Sesión 11: build EAS `fa4366ee` lanzada con fixes, en cola. Confirmación en móvil pendiente — opcional, no bloquea Fase 7a.)*
+- [ ] **Smoke OEM** en el dispositivo real: DnD, silencio total, sonido, parar. Si falla en el dispositivo pero no en emulador → es un quirk del fabricante (Xiaomi/Samsung/etc.) y se aborda con los datos concretos de ese modelo. *(Pendiente — cuando el owner tenga el móvil a mano.)*
 
 ### Fase 7a — Backend: device model + JSON endpoints + FCM notifier (D40 ampliado)
 

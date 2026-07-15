@@ -539,3 +539,25 @@ plataforma (Vercel/CF Pages descartados: serverless no soporta el scheduler
 - **Pendiente para próxima sesión**: verificar estado EAS #3 + Hyper-V
   (aprobación UAC + reinicio) → si Hyper-V OK: fijar env vars, arrancar
   emulador, compilar local, validar DnD. Si no: Camino B (USB) o esperar EAS.
+
+## Sesiu00f3n 11 u2014 Spike validado en emulador: fix E1 + bypass DnD funcionando (2026-07-15)
+
+- El owner activu00f3 VT-x en la BIOS (ASUS ROG STRIX Z370-F u2192 Advanced u2192 CPU Configuration u2192 Intel Virtualization Technology u2192 Enabled). WHPX quedu00f3 operativo (emulator -accel-check = "WHPX is installed and usable"). El diu00e1logo UAC de Hyper-V de la Sesiu00f3n 10 habu00eda sido aprobado pero sin VT-x en firmware no servu00eda.
+- **Variables de entorno permanentes** fijadas en perfil User: JAVA_HOME, ANDROID_HOME, PATH (emulator + platform-tools + cmdline-tools).
+- **Emulador arrancado** (pixel_6_api34, WHPX, GPU RTX 2080): boot ~75 s primer intento (cold), ~32 s segundo (snapshot fallu00f3 en cargar pero cold boot ru00e1pido). Snapshot default_boot guardado.
+- **Build local exitoso** (gradlew assembleDebug, 2m 29s): APK debug ~129 MB en mobile/android/app/build/outputs/apk/debug/app-debug.apk. Primera compilaciu00f3n Kotlin del spike en local confirmada limpia (solo warnings de deprecaciu00f3n, sin errores). Gradle descargu00f3 Gradle 9.3.1 + NDK 27.1.12297006 + CMake 3.22.1 + SDK Build-Tools 36/35 + SDK Platform 36 durante la build.
+- **APK instalado** en emulador vu00eda db install -r u2192 "Success". Permiso POST_NOTIFICATIONS concedido vu00eda db pm grant.
+- **Hallazgo: gradlew assembleDebug directo NO empaqueta el JS bundle** dentro del APK. La app abre con Red Box "Unable to load script. Make sure you're running Metro...". Fix: arrancar Metro (
+px expo start) + db reverse tcp:8081 tcp:8081 u2192 la app descarga el JS en vivo del Metro en el host. Para builds standalone (sin Metro), empaquetar con eact-native bundle (requiere @react-native-community/cli).
+- **Fix E1 VALIDADO** u2705: "Probar alarma" u2192 app NO crashea, AlarmService foreground activo (isForeground=true, category=alarm, mediaPlayback), logcat limpio sin AndroidRuntime. El crash de la Sesiu00f3n 8 estaba causado por falta del permiso FOREGROUND_SERVICE u2192 SecurityException en startForeground (API 28+) u2192 muerte del proceso fuera del try/catch del bridge JS-Native. Hipu00f3tesis de la Sesiu00f3n 9 confirmada al 100%.
+- **Bypass DnD VALIDADO** u2705: con DnD "Alarms only" (zen_mode=1, cmd notification set_dnd priority) + volumen STREAM_ALARM al mu00e1ximo, el ringtone TYPE_ALARM con USAGE_ALARM suena (logcat: AudioTrack: stop(16): called with 91283 frames delivered, MediaPlayer state:started). **No** suena con DnD "Total silence" (zen_mode=2) u2014 AOSP mutes STREAM_ALARM en ese modo. Hallazgo tu00e9cnico: setBypassDnd(true) del canal sale como mBypassDnd=false en dumpsys del emulador but el ringtone suena igual (el bypass del canal afecta a la notificaciu00f3n visual, no al stream de audio).
+- **Parada limpia VALIDADA** u2705: "Parar" u2192 UI "Service: stopped", dumpsys activity services sin ServiceRecord, player released, notificaciu00f3n retirada, logcat limpio.
+- **Build EAS nueva lanzada** (build ID a4366ee, con fixes E1 incluidos, commit  d7dff9). En cola free tier ~1-2h. URL: https://expo.dev/accounts/theni55/projects/despertarme-spike/builds/fa4366ee-ed46-4bfa-9adb-6b8158b88232
+- **Hallazgos tu00e9cnicos para el continuador**:
+  1. gradlew assembleDebug directo NO empaqueta el JS bundle u2014 Metro + db reverse necesario.
+  2. DnD "Total silence" (set_dnd on u2192 zen_mode=2) mutes STREAM_ALARM en AOSP puro. Usar set_dnd priority (zen_mode=1, "Alarms only") para validar bypass.
+  3. cmd notification set dnd on no funciona (comando correcto: cmd notification set_dnd on).
+  4. ACCESS_NOTIFICATION_POLICY no es concedible vu00eda db pm grant (no es runtime permission). El bypass DnD del canal IMPORTANCE_HIGH + setBypassDnd(true) + USAGE_ALARM funciona sin necesitarlo.
+  5. media volume --stream 4 --set 7 no existe en AOSP. Subir volumen con input keyevent 24 (VOLUME_UP) repetido.
+- **Memorias actualizadas**: handoff.md (Sesiu00f3n 11), itacora.md (esta entrada), ases.md (Spike completado u2705). Commit + push a dev pendientes.
+- **Pendiente para pru00f3xima sesiu00f3n**: Fase 7a (backend device model + FCM). Confirmaciu00f3n en mu00f3vil fu00edsico (opcional, no bloqueante) cuando el owner tenga acceso al dispositivo y la build EAS a4366ee termine.

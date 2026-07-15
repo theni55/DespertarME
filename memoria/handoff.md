@@ -6,51 +6,40 @@
 
 ## Última sesión
 
-**Fecha:** 2026-07-15 · **Sesión 10 — Fix E1 + setup Android SDK local + activación Hyper-V + build EAS #3 en vuelo.**
+**Fecha:** 2026-07-15 · **Sesión 11 — Spike validado en emulador: fix E1 + bypass DnD funcionando ✅.**
 
-**Contexto:** el continuador ejecutó el Paso 1 del handoff de la Sesión 9. Se aplicaron los 4 fixes del crash E1, se instaló el Android SDK completo (JDK 17 + cmdline-tools + platform-tools + emulator + system-image API 34 + build-tools) mediante descargas portable (sin winget/admin), se disparó la activación de Hyper-V vía elevación UAC, y se lanzó build EAS #3 en paralelo como red de seguridad.
+**Contexto:** tras aprobar el diálogo UAC de Hyper-V (Sesión 10), el owner activó VT-x en la BIOS (ASUS ROG STRIX Z370-F → Advanced → CPU Configuration → Intel Virtualization Technology → Enabled). WHPX quedó operativo (`emulator -accel-check` = "WHPX is installed and usable"). El emulador arrancó, la app compiló en local con Gradle, y el fix E1 fue validado end-to-end.
 
 **Logros de la sesión:**
 
-- **Fix E1 aplicado y commiteado** (`e896b88` en `dev`): 4 archivos modificados:
-  1. `AndroidManifest.xml` + `app.json`: añadido `FOREGROUND_SERVICE` (el permiso genérico, no solo el specific `_MEDIA_PLAYBACK`).
-  2. `AlarmModule.kt`: eliminada llamada a `promptPolicyAccess()` de `startAlarm` (innecesaria, manda la app a Settings antes del service).
-  3. `AlarmService.kt`: null-check en `getRingtone()` (`?: return` evita NPE) + guard `Build.VERSION.SDK_INT >= 28` para `isLooping`.
-  - TypeScript compila limpio (`tsc --noEmit`).
-- **Android SDK instalado (portable, sin admin):**
-  - JDK 17 (Temurin portable) en `%LOCALAPPDATA%\jdk-17\jdk-17.0.19+10`
-  - Android SDK en `%LOCALAPPDATA%\Android\Sdk`: platform-tools, platforms;android-34, system-images;android-34;google_apis;x86_64, emulator, build-tools;34.0.0, cmdline-tools (layout `latest/`).
-  - AVD `pixel_6_api34` creado con `avdmanager` (imagen Google APIs x86_64).
-- **Hyper-V disparado** vía `Start-Process -Verb RunAs` (diálogo UAC pendiente de aprobación por el owner).
-- **Build EAS #3 lanzada** (build ID `f486f8c5`, en cola free tier ~1-2h). URL: https://expo.dev/accounts/theni55/projects/despertarme-spike/builds/f486f8c5-d956-4ce9-ab79-2ed12a39a236
-- **Explicación de los 3 caminos de testing** al owner: Camino A (emulador local, ~5 min/build), Camino B (móvil físico + build local vía Gradle, sin EAS), Camino C (EAS cloud build, lento pero sin dependencias locales). El owner eligió Camino A (emulador).
+- **Variables de entorno permanentes** fijadas en perfil User: `JAVA_HOME`, `ANDROID_HOME`, `PATH` (emulator + platform-tools + cmdline-tools).
+- **Emulador arrancado** (`pixel_6_api34`, WHPX, GPU RTX 2080): boot en ~75 s primer intento, ~32 s segundo. Snapshot `default_boot` guardado.
+- **Build local exitoso** (`gradlew assembleDebug`, 2m 29s): APK debug generado en `mobile/android/app/build/outputs/apk/debug/app-debug.apk` (~129 MB). Hito: primera compilación Kotlin del spike en local confirmada limpia (solo warnings de deprecación, sin errores).
+- **APK instalado en emulador** vía `adb install -r` → "Success".
+- **Fix E1 VALIDADO** ✅: "Probar alarma" → app NO crashea, `AlarmService` foreground activo (`isForeground=true`, `category=alarm`, `mediaPlayback`), logcat limpio sin `AndroidRuntime`. El crash de la Sesión 8 estaba causado por falta del permiso `FOREGROUND_SERVICE` → `SecurityException` en `startForeground` (API 28+) → muerte del proceso fuera del try/catch del bridge JS-Native.
+- **Bypass DnD VALIDADO** ✅: con DnD "Alarms only" (`zen_mode=1`, `cmd notification set_dnd priority`) + volumen `STREAM_ALARM` al máximo, el ringtone `TYPE_ALARM` con `USAGE_ALARM` suena (logcat: `AudioTrack: stop(16): called with 91283 frames delivered`, MediaPlayer `state:started`). **No** suena con DnD "Total silence" (`zen_mode=2`) — AOSP mutes `STREAM_ALARM` en ese modo. Hallazgo técnico: `setBypassDnd(true)` del canal sale como `mBypassDnd=false` en dumpsys del emulador but el ringtone suena igual (el bypass del canal afecta a la notificación visual, no al stream de audio).
+- **Parada limpia** ✅: "Parar" → UI "Service: stopped", `dumpsys activity services` sin ServiceRecord, player released, notificación retirada, logcat limpio.
+- **Build EAS nueva lanzada** (build ID `fa4366ee`, con fixes E1 incluidos, commit `0d7dff9`). En cola free tier ~1-2h. URL: https://expo.dev/accounts/theni55/projects/despertarme-spike/builds/fa4366ee-ed46-4bfa-9adb-6b8158b88232
 
-**Bloqueador actual:** el emulador requiere aceleración hardware (Hyper-V o WHPX). La UAC se disparó pero el PC necesita reinicio para activar Hyper-V. Pendiente: que el owner apruebe el diálogo UAC, reinicie el PC, y el continuador verifique `emulator -accel-check` en la próxima sesión.
+**Hallazgos técnicos importantes para el continuador:**
 
-**Memorias actualizadas:** `handoff.md` (esta entrada), `bitacora.md` (Sesión 10). Commit + push a `dev`.
+1. **`gradlew assembleDebug` directo NO empaqueta el JS bundle** dentro del APK. La app abre con Red Box "Unable to load script". Fix: arrancar Metro (`npx expo start`) + `adb reverse tcp:8081 tcp:8081` → la app descarga el JS en vivo del Metro en el host. Para builds standalone (sin Metro), empaquetar el bundle con `react-native bundle` (requiere `@react-native-community/cli`).
+2. **DnD "Total silence"** (`set_dnd on` → `zen_mode=2`) mutes `STREAM_ALARM` en AOSP puro. Usar `set_dnd priority` (`zen_mode=1`, "Alarms only") para validar bypass. En dispositivos físicos reales, los OEM (Samsung/Xiaomi) suelen excluir `STREAM_ALARM` del mute incluso en Total silence.
+3. **`cmd notification set dnd on`** no funciona (comando correcto: `cmd notification set_dnd on`).
+4. **`ACCESS_NOTIFICATION_POLICY`** no es concedible vía `adb pm grant` (no es runtime permission). Pero el bypass DnD del canal `IMPORTANCE_HIGH` + `setBypassDnd(true)` + `USAGE_ALARM` funciona sin necesitarlo (bitacora:410 confirmado en emulador).
+5. **`media volume --stream 4 --set 7`** no existe en AOSP. Subir volumen con `input keyevent 24` (VOLUME_UP) repetido.
+
+**Memorias actualizadas:** `handoff.md` (esta entrada), `bitacora.md` (Sesión 11), `fases.md` (Spike completado ✅). Commit + push a `dev` pendiente.
 
 ---
 
 ## Próximos pasos (ordenados para el continuador)
 
-### Paso 1 — Completar validación del spike (emulador o EAS)
+### Paso 1 — Confirmación en móvil físico (opcional, no bloqueante)
 
-**Estado:** fix E1 commiteado + build EAS #3 en vuelo + Hyper-V pendiente de reinicio. El continuador retoma así:
+**Estado:** spike validado en emulador ✅. La build EAS `fa4366ee` (con fixes E1) está en cola — cuando termine, descargar el APK e instalar en el móvil Android 14 físico del owner para confirmar OEM quirks (Xiaomi/Samsung/etc.) del bypass DnD. El emulador AOSP ya confirmó el flujo estándar; el móvil físico es la confirmación final para quirks de fabricante. No bloquea el avance a Fase 7a.
 
-1. **Verificar estado de la build EAS #3**: si terminó, descargar e instalar APK en el móvil Android 14 del owner. Probar DnD → "Probar alarma" → ¿suena sin crash? → "Parar". Si crash persiste → `adb logcat` (platform-tools ya instalado).
-2. **Verificar Hyper-V**: si ya se aprobó UAC + reinicio → ejecutar `$env:ANDROID_HOME\emulator\emulator.exe -accel-check` para confirmar aceleración activa.
-3. **Si Hyper-V funciona → Camino A (emulador local)**:
-   - Fijar variables de entorno permanentes (`[Environment]::SetEnvironmentVariable`) en perfil User para `JAVA_HOME`, `ANDROID_HOME`, `PATH`.
-   - Arrancar emulador: `emulator -avd pixel_6_api34` (primer boot 2-3 min).
-   - `npx expo run:android` desde `mobile/` → compila en local e instala en emulador.
-   - Validar DnD + "Probar alarma" + "Parar" + `adb logcat` limpio.
-4. **Si Hyper-V no funciona → Camino B (móvil físico + build local)**:
-   - Configurar depuración USB en el móvil (Ajustes → Opciones de desarrollador).
-   - Conectar vía USB + `adb devices` (confirmar que el móvil aparece).
-   - `cd mobile/android && ./gradlew assembleRelease` → produce APK.
-   - `adb install -r app/build/outputs/apk/release/app-release.apk` → instala en el móvil.
-   - Probar DnD + "Probar alarma".
-5. **Camino C (EAS #3) como fallback**: si ni emulador ni USB funcionan, esperar a que termine la build EAS.
+URL build EAS: https://expo.dev/accounts/theni55/projects/despertarme-spike/builds/fa4366ee-ed46-4bfa-9adb-6b8158b88232
 
 ### Paso 2 — Fase 7a (backend)
 
@@ -62,7 +51,7 @@ Ver checklist completo en `fases.md` §Fase 7a. Prioridades:
 
 ### Paso 3 — Fase 7b (app Android v1)
 
-Ver checklist en `fases.md` §Fase 7b. El `AlarmScheduler` (D40) es la pieza nueva central; Android SDK ya instalado (JDK 17 + SDK 34).
+Ver checklist en `fases.md` §Fase 7b. El `AlarmScheduler` (D40) es la pieza nueva central; Android SDK ya instalado (JDK 17 + SDK 34) y emulador funcionando (WHPX). Iteración local confirmada viable (~2m 29s build + Metro + `adb reverse`).
 
 ---
 
@@ -79,7 +68,7 @@ Ver checklist en `fases.md` §Fase 7b. El `AlarmScheduler` (D40) es la pieza nue
 | Fase 4 — Boxeo/Tenis reales | Pendiente (fuera del MVP) |
 | Fase 5 — VoiceNotifier real (Twilio) | ❄️ **Obsoleta** — sustituida por FCM (D37/D40) |
 | Fase 6 — Rediseño visual + landing dinámica | ❄️ **Congelada** — rama `web` |
-| Fase 7 — App móvil | 🔶 **En curso** — Spike: fix E1 aplicado commiteado, build EAS #3 en vuelo, Hyper-V pendiente de reinicio. SDK local instalado. Validación (emulador o dispositivo) pendiente. |
+| Fase 7 — App móvil | 🔶 **En curso** — Spike **validado** ✅ (fix E1 + bypass DnD funcionando en emulador). Build EAS `fa4366ee` en cola. Próximo: Fase 7a (backend device model + FCM). |
 
 Detalle de checkboxes en `fases.md`.
 
