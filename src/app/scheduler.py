@@ -23,7 +23,7 @@ from app.config import settings
 from app.db.session import SessionLocal
 from app.engine.poller import Poller
 from app.engine.state import AlertState
-from app.notifiers import build_notifier
+from app.notifiers import get_notifier
 from app.providers.athletes import AthleteResolver
 from app.providers.espn_ufc import EspnUfcProvider
 
@@ -46,7 +46,7 @@ class PollerScheduler:
         resolver = AthleteResolver(self._provider, redis_client=redis_client)
         return Poller(
             provider=self._provider,
-            notifier=build_notifier(),
+            notifier=get_notifier(),
             state=self._state,
             athlete_resolver=resolver,
         )
@@ -75,6 +75,7 @@ class PollerScheduler:
             id="poll_alerts",
             max_instances=1,
             coalesce=True,
+            misfire_grace_time=120,
         )
         self._scheduler.start()
         logger.info(

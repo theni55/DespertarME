@@ -195,10 +195,30 @@ Sin Android Studio aún → el continuador instala Android Studio + emulador API
   - Tocar "Probar alarma" → suena `TYPE_ALARM` con `USAGE_ALARM`. *(Sesión 11: ✅ MediaPlayer `state:started`, AudioTrack frames delivered, logcat limpio.)*
   - "Parar" → silencio + foreground service termina limpio + notificación desaparece. *(Sesión 11: ✅ service destruido, player released, notificación retirada.)*
 - [ ] **Validar Doze** (para D40): `adb shell dumpsys deviceidle force-idle` + verificar que `setAlarmClock` (cuando se implemente en 7b) despierta puntualmente. *(Pendiente — entra en Fase 7b con `AlarmScheduler`.)*
-- [x] Build EAS → descargar APK → instalar en el **móvil Android 14 físico del owner**. *(Sesión 11: build EAS `fa4366ee` lanzada con fixes, en cola. Confirmación en móvil pendiente — opcional, no bloquea Fase 7a.)*
-- [ ] **Smoke OEM** en el dispositivo real: DnD, silencio total, sonido, parar. Si falla en el dispositivo pero no en emulador → es un quirk del fabricante (Xiaomi/Samsung/etc.) y se aborda con los datos concretos de ese modelo. *(Pendiente — cuando el owner tenga el móvil a mano.)*
+- [x] Build EAS → descargar APK → instalar en el **móvil Android 14 físico del owner**. *(Sesión 11: build EAS `fa4366ee` finalizada e instalada en hardware. Confirmado fix E1 sin crash + bypass DnD funcionando — mismo comportamiento que el emulador AOSP.)*
+- [x] **Smoke OEM** en el dispositivo real: DnD, silencio total, sonido, parar. *(Sesión 11/16: ✅ confirmado en Android 14 físico del owner — sin quirks OEM observados. Spike 100% cerrado: emulador ✅ + físico ✅.)*
 
-### Fase 7a — Backend: device model + JSON endpoints + FCM notifier (D40 ampliado)
+### Fase 7a — Backend: device model + JSON endpoints + FCM notifier (D40 ampliado) ✅ COMPLETADA (Sesión 12)
+
+**Resumen ejecutivo (Sesión 12, 2026-07-16):** pivot User/Twilio → Device/FCM ejecutado end-to-end. 78 tests verdes (10 intactos de ESPN + 15 estimator + 7 athletes + 15 poller reescritos + 8 notifiers FCM + 15 API reescritos + 3 events route + 1 health + 4 ESPN extras), `ruff` / `black` / `mypy` limpios, migración Alembic `f7a0001_devices` aplicada en SQLite dev. Smoke HTTP: server levanta con los 9 endpoints (`/api/devices`, `/api/devices/me`, `/api/devices/me/test-alarm`, `/api/events`, `/api/events/{id}`, `/api/subscriptions`, `/api/alerts`, `/health`).
+
+**Borrados (era User/Twilio/web):** `src/app/auth/` (3 ficheros), `notifiers/twilio.py`, `api/routes/auth.py` + `users.py`, `db/models/users.py`, `scripts/seed_admin.py`, `src/app/web/__pycache__/` (3 .pyc huérfanos), `db/models/subscriptions.py::SportSubscription` + `EventSubscription` (tablas muertas). Deps quitadas: `passlib[bcrypt]`, `bcrypt<5.0`, `pyjwt`, `twilio`, `pydantic[email]` (baja a `pydantic`). Añadida: `firebase-admin>=6.5`.
+
+**Migrados/creados:** `db/models/devices.py` (Device nuevo), `db/models/subscriptions.py`/`alert_log.py` mutados (device_id, fired_at_epoch_hour, UNIQUE `(device_id, bout_id)`, sin previous_bout_id), `api/schemas.py` reescrito (DeviceCreate/Out, EventSummaryOut con image_url:None D42, EventCardOut), `app/security/device.py` (`get_current_device` vía X-Device-Id — estricto, no autocreate), `app/common/ids.py` (`new_uuid` mudado de auth/), `api/routes/devices.py` (POST register/upsert, DELETE me, POST test-alarm), `api/routes/events.py` (GET lista con caché Redis 5 min, GET detalle con `previous_bout_id` server-side E4), `notifiers/base.py` (PushNotifier/PushResult/AlertPayload data-only), `notifiers/dummy.py` (sin phone), `notifiers/fcm.py` (firebase-admin data-only high-priority), `notifiers/__init__.py` (build_notifier gating FCM + get_notifier singleton).
+
+**Bugfixes E2–E8 aplicados en poller/estimator/state/provider:**
+- E2 — `estimator.estimate` ahora acepta `observed_at`; `AlertState.remember_transition/get_transition` persisten el anclaje in→post en Redis (TTL 24 h). El poller pasa `observed_at` al estimador. Test `test_poller_e2_estimation_anchored_to_first_observation` valida que la estimación no se desliza.
+- E3 — `_process_subscription` comprueba el estado del target: si `in` → push `started` (idempotente); si `post` → push `cancelled` + marca sub como `fired`. Tests `test_poller_e3_pushes_started_when_target_in` + `test_poller_e3_pushes_cancelled_when_target_post_and_marks_fired`.
+- E4 — `BoutSubscription` ya no persiste `previous_bout_id`; el poller deriva `prev = card.previous_bout(target)` en cada poll. `api/routes/events.py` calcula `previous_bout_id` server-side (matchNumber+1) y lo devuelve al cliente.
+- E5 — `EspnUfcProvider._request` solo llama `_on_failure()` si `_is_retryable(exc)`: 404 y 4xx (no 429) NO abren el circuit breaker. Test `test_e5_circuit_breaker_does_not_open_on_4xx` confirma con 5 peticiones inválidas.
+- E6 — `AlertLog.fired_at_hour` → `fired_at_epoch_hour` (`int(now.timestamp())//3600`), UNIQUE `(subscription_id, bout_id, fired_at_epoch_hour)` preservada, UNIQUE `(device_id, bout_id)` añadida en `bout_subscriptions`. Idempotencia marcada **tras** éxito (no antes).
+- E7 — `RETRY_DELAYS = (2.0,)` (1 retry corto, antes 1/5/30 s = 36 s). Scheduler `misfire_grace_time=120` para no descartar ticks. Test `test_poller_e7_retries_cut_short_on_failure` valida 2 intentos máx.
+- E8 — `poll_once` agrupa subs por `event_id` y cachea la Card por ciclo: 1 fetch ESPN/evento/ciclo en vez de N. Tests validan múltiples subs del mismo evento con un solo card load.
+- D40 push on-change — el poller solo empuja `update` si la estimación se movió >`MIN_DELTA_SECONDS=60` desde el último push (`AlertState.get_last_estimate/set_last_estimate`). `started`/`cancelled` son idempotentes (una vez por sub+bout).
+
+**Pendiente externo (no bloquea Fase 7b):** Firebase project + service account JSON + `google-services.json` para la app (manual del owner).
+
+**Verificación final:** `ruff check src tests` ✅ · `black --check src tests` ✅ · `mypy src/app` ✅ · `pytest` **78/78 verdes** · `alembic upgrade head` en SQLite dev ✅ · smoke TestClient `/health` + `/openapi.json` 9 paths ✅.
 
 **Eliminar era User/Twilio:**
 

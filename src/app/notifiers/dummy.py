@@ -1,7 +1,7 @@
 """Notifier de prueba (log-only).
 
-No realiza llamadas reales; registra la alerta en log y devuelve éxito.
-Útil para validar el flujo end-to-end en Fase 2b sin proveedor SIM (Fase 5).
+No realiza envíos reales; registra el mensaje en log y devuelve éxito (o fallo
+forzado por `fail_on_token` para tests). Útil para validar plomería sin Firebase.
 """
 
 from __future__ import annotations
@@ -9,27 +9,31 @@ from __future__ import annotations
 import logging
 import uuid
 
-from app.notifiers.base import AlertPayload, CallResult, VoiceNotifier
+from app.notifiers.base import AlertPayload, PushNotifier, PushResult
 
 logger = logging.getLogger(__name__)
 
 
-class DummyNotifier(VoiceNotifier):
+class DummyNotifier(PushNotifier):
     """Notifier que solo registra en log; simula éxito."""
 
-    def __init__(self, *, fail_on_phone: str | None = None) -> None:
-        self._fail_on_phone = fail_on_phone
+    def __init__(self, *, fail_on_token: str | None = None) -> None:
+        self._fail_on_token = fail_on_token
 
-    async def call(self, payload: AlertPayload) -> CallResult:
+    async def send(self, payload: AlertPayload) -> PushResult:
         logger.info(
-            "[DummyNotifier] Llamada a %s: %s vs %s (%s) en %s — %d min",
-            payload.phone,
-            payload.red_name or "?",
-            payload.blue_name or "?",
-            payload.weight_class or "?",
+            "[DummyNotifier] push %s a device=%s token=%s: %s | bout=%s event=%s fighters=%s "
+            "start=%s in_min=%s",
+            payload.message_type,
+            payload.device_id[:8],
+            payload.fcm_token[:12],
             payload.event_name,
+            payload.bout_id,
+            payload.event_id,
+            payload.fighters,
+            payload.estimated_start_at,
             payload.minutes_until_start,
         )
-        if self._fail_on_phone and payload.phone == self._fail_on_phone:
-            return CallResult(success=False, error="forced failure for testing")
-        return CallResult(success=True, call_id=f"dummy-{uuid.uuid4().hex[:8]}")
+        if self._fail_on_token and payload.fcm_token == self._fail_on_token:
+            return PushResult(success=False, error="forced failure for testing")
+        return PushResult(success=True, message_id=f"dummy-{uuid.uuid4().hex[:8]}")

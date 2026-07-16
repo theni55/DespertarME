@@ -1,116 +1,164 @@
-"""Tests de notifiers: TwilioNotifier (SDK mockeado) + factory gated (D30)."""
+"""Tests de notifiers push (Fase 7a, FCM): DummyNotifier + factory gated (D30 patrón)."""
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from app.config import settings
 from app.notifiers import build_notifier
 from app.notifiers.base import AlertPayload
 from app.notifiers.dummy import DummyNotifier
-from app.notifiers.twilio import TwilioNotifier, _build_message, _build_twiml
-
-# --- Payload de ejemplo -------------------------------------------------------
 
 
 def _payload(**overrides: object) -> AlertPayload:
     defaults: dict = {
-        "user_id": "u-1",
-        "phone": "+34600111222",
-        "event_name": "UFC 329",
+        "device_id": "dev-1",
+        "fcm_token": "tok-aaaa1111bbbb2222cccc",
+        "message_type": "update",
+        "event_id": "ev-1",
         "bout_id": "b-1",
-        "red_name": "Conor Test",
-        "blue_name": "Max Fake",
-        "weight_class": "Welterweight",
+        "event_name": "UFC 329",
+        "fighters": "Conor Test vs Max Fake",
+        "estimated_start_at": "2026-07-11T21:30:00+00:00",
         "minutes_until_start": 15,
+        "weight_class": "Welterweight",
     }
     defaults.update(overrides)
     return AlertPayload(**defaults)
 
 
-# --- Mensaje TTS ---------------------------------------------------------------
+# --- AlertPayload.to_data ---------------------------------------------------
 
 
-def test_build_message_includes_fighters_event_and_minutes() -> None:
-    msg = _build_message(_payload())
-    assert "Conor Test" in msg
-    assert "Max Fake" in msg
-    assert "UFC 329" in msg
-    assert "15 minutos" in msg
+def test_payload_to_data_includes_required_fields() -> None:
+    data = _payload().to_data()
+    assert data["type"] == "update"
+    assert data["device_id"] == "dev-1"
+    assert data["event_id"] == "ev-1"
+    assert data["bout_id"] == "b-1"
+    assert data["event_name"] == "UFC 329"
+    assert data["fighters"] == "Conor Test vs Max Fake"
+    assert data["estimated_start_at"] == "2026-07-11T21:30:00+00:00"
+    assert data["minutes_until_start"] == "15"
+    assert data["weight_class"] == "Welterweight"
 
 
-def test_build_message_degrades_without_names() -> None:
-    msg = _build_message(_payload(red_name=None, blue_name=None, minutes_until_start=0))
-    assert "tu peleador" in msg
-    assert "su rival" in msg
-    assert "a punto de empezar" in msg
+def test_payload_to_data_omits_none_fields() -> None:
+    p = _payload(
+        fighters=None, estimated_start_at=None, minutes_until_start=None, weight_class=None
+    )
+    data = p.to_data()
+    assert "fighters" not in data
+    assert "estimated_start_at" not in data
+    assert "minutes_until_start" not in data
+    assert "weight_class" not in data
 
 
-def test_build_twiml_escapes_and_repeats() -> None:
-    twiml = _build_twiml("Combate <A> & B")
-    assert twiml.count("<Say") == 2  # mensaje repetido 2 veces
-    assert "&lt;A&gt;" in twiml
-    assert "&amp;" in twiml
-    assert twiml.startswith("<Response>")
+# --- DummyNotifier ----------------------------------------------------------
 
 
-# --- TwilioNotifier con SDK mockeado -------------------------------------------
+async def test_dummy_notifier_returns_success_and_logs() -> None:
+    notifier = DummyNotifier()
+    result = await notifier.send(_payload())
+    assert result.success is True
+    assert result.message_id is not None
+    assert result.message_id.startswith("dummy-")
 
 
-async def test_twilio_notifier_creates_call_with_twiml() -> None:
-    mock_client = MagicMock()
-    mock_client.calls.create.return_value = MagicMock(sid="CA123")
-    notifier = TwilioNotifier(from_number="+15550001111", client=mock_client)
+async def test_dummy_notifier_forced_failure_on_token() -> None:
+    notifier = DummyNotifier(fail_on_token="tok-aaaa1111bbbb2222cccc")
+    result = await notifier.send(_payload())
+    assert result.success is False
+    assert "forced failure" in (result.error or "")
 
-    result = await notifier.call(_payload())
+
+# --- FcmNotifier con SDK mockeado (sin tocar firebase-admin) ---------------
+
+
+def _make_fcm_notifier_with_mock() -> tuple:
+    """Mockea firebase_admin + messaging para instanciar FcmNotifier sin Firebase real."""
+    fake_app = MagicMock()
+    firebase_admin_mod = MagicMock()
+    # `from firebase_admin import messaging` accede a `firebase_admin.messaging`.
+    messaging_mod = MagicMock()
+    firebase_admin_mod.messaging = messaging_mod
+    # `from firebase_admin import credentials as fb_credentials` igual.
+    creds_mod = MagicMock()
+    firebase_admin_mod.credentials = creds_mod
+    firebase_admin_mod.get_app.side_effect = ValueError("no app")
+    firebase_admin_mod.initialize_app.return_value = fake_app
+
+    msg_obj = MagicMock()
+    messaging_mod.Message.return_value = msg_obj
+    messaging_mod.AndroidConfig.return_value = MagicMock()
+    messaging_mod.send.return_value = "fcm-msg-id-123"
+    creds_mod.Certificate.return_value = MagicMock()
+
+    fake_credentials = {
+        "type": "service_account",
+        "project_id": "test-proj",
+        "private_key": "x",
+        "client_email": "x@test.iam.gserviceaccount.com",
+        "token_uri": "https://oauth2.googleapis.com/token",
+    }
+
+    sys_modules = {
+        "firebase_admin": firebase_admin_mod,
+        "firebase_admin.credentials": creds_mod,
+        "firebase_admin.messaging": messaging_mod,
+    }
+
+    with patch.dict("sys.modules", sys_modules):
+        from app.notifiers.fcm import FcmNotifier
+
+        notifier = FcmNotifier(credentials=fake_credentials)
+        return notifier, messaging_mod
+
+
+async def test_fcm_notifier_send_returns_message_id_on_success() -> None:
+    notifier, messaging_mod = _make_fcm_notifier_with_mock()
+    messaging_mod.send.return_value = "fcm-ok-001"
+
+    result = await notifier.send(_payload())
 
     assert result.success is True
-    assert result.call_id == "CA123"
-    kwargs = mock_client.calls.create.call_args.kwargs
-    assert kwargs["to"] == "+34600111222"
-    assert kwargs["from_"] == "+15550001111"
-    assert "Conor Test" in kwargs["twiml"]
+    assert result.message_id == "fcm-ok-001"
+    # Verifica que send se invoca con token y con data del payload
+    args, _ = messaging_mod.send.call_args
+    msg = args[0]
+    assert msg is not None
+    assert messaging_mod.AndroidConfig.called
+    messaging_mod.send.assert_called_once()
 
 
-async def test_twilio_notifier_returns_failure_on_exception() -> None:
-    mock_client = MagicMock()
-    mock_client.calls.create.side_effect = RuntimeError("twilio down")
-    notifier = TwilioNotifier(from_number="+15550001111", client=mock_client)
+async def test_fcm_notifier_send_returns_failure_on_exception() -> None:
+    notifier, messaging_mod = _make_fcm_notifier_with_mock()
+    messaging_mod.send.side_effect = RuntimeError("fcm down")
 
-    result = await notifier.call(_payload())
+    result = await notifier.send(_payload())
 
     assert result.success is False
-    assert result.call_id is None
-    assert "twilio down" in (result.error or "")
+    assert "fcm down" in (result.error or "")
 
 
-# --- Factory gated por config ---------------------------------------------------
+# --- Factory gated por config ----------------------------------------------
 
 
 def test_build_notifier_returns_dummy_without_credentials(monkeypatch) -> None:
-    monkeypatch.setattr(settings, "twilio_account_sid", "")
-    monkeypatch.setattr(settings, "twilio_auth_token", "")
-    monkeypatch.setattr(settings, "twilio_from_number", "")
+    monkeypatch.setattr(settings, "fcm_credentials_path", None)
+    monkeypatch.setattr(settings, "fcm_credentials_json", None)
 
     notifier = build_notifier()
 
     assert isinstance(notifier, DummyNotifier)
 
 
-def test_build_notifier_returns_twilio_with_credentials(monkeypatch) -> None:
-    monkeypatch.setattr(settings, "twilio_account_sid", "ACxxx")
-    monkeypatch.setattr(settings, "twilio_auth_token", "token")
-    monkeypatch.setattr(settings, "twilio_from_number", "+15550001111")
-
-    notifier = build_notifier()
-
-    assert isinstance(notifier, TwilioNotifier)
-
-
-def test_build_notifier_returns_dummy_with_partial_credentials(monkeypatch) -> None:
-    monkeypatch.setattr(settings, "twilio_account_sid", "ACxxx")
-    monkeypatch.setattr(settings, "twilio_auth_token", "")
-    monkeypatch.setattr(settings, "twilio_from_number", "+15550001111")
+def test_build_notifier_uses_dummy_when_fcm_init_fails(monkeypatch, tmp_path) -> None:
+    # Fichero JSON inválido → no se puede cargar credenciales → Dummy fallback.
+    bad = tmp_path / "bad.json"
+    bad.write_text("not-json", encoding="utf-8")
+    monkeypatch.setattr(settings, "fcm_credentials_path", str(bad))
+    monkeypatch.setattr(settings, "fcm_credentials_json", None)
 
     notifier = build_notifier()
 

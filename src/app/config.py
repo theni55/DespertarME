@@ -1,9 +1,7 @@
 from functools import lru_cache
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
-
-_INSECURE_JWT_DEFAULT = "change-me-please"
 
 
 class Settings(BaseSettings):
@@ -47,15 +45,10 @@ class Settings(BaseSettings):
     poll_prev_post_seconds: int = 5
     default_timezone: str = "Europe/Madrid"
 
-    # Notifier (D23, Fase 5)
-    twilio_account_sid: str = ""
-    twilio_auth_token: str = ""
-    twilio_from_number: str = ""
-
-    # Auth (Fase 3)
-    jwt_secret: str = _INSECURE_JWT_DEFAULT
-    jwt_algorithm: str = "HS256"
-    jwt_access_token_expire_minutes: int = 60
+    # FCM (D40) — credenciales del service account de Firebase.
+    # Se acepta una ruta a un JSON o el JSON inline (preferido en PaaS).
+    fcm_credentials_path: str | None = None
+    fcm_credentials_json: str | None = None
 
     @field_validator("database_url", mode="before")
     @classmethod
@@ -67,16 +60,6 @@ class Settings(BaseSettings):
             if v.startswith("postgresql://"):
                 return v.replace("postgresql://", "postgresql+asyncpg://", 1)
         return v
-
-    @model_validator(mode="after")
-    def _check_production_secrets(self) -> "Settings":
-        """En producción el JWT_SECRET no puede ser el default inseguro."""
-        if self.app_env == "production" and self.jwt_secret == _INSECURE_JWT_DEFAULT:
-            raise ValueError(
-                "JWT_SECRET debe configurarse en producción (no uses el default). "
-                'Genera uno con: python -c "import secrets; print(secrets.token_urlsafe(48))"'
-            )
-        return self
 
 
 @lru_cache

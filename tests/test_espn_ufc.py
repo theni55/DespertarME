@@ -53,8 +53,12 @@ async def test_list_upcoming_events_returns_non_empty_list() -> None:
     respx.get(url=_events_list_url()).respond(json=_load("event_list.json"))
     respx.get(url=_event_url()).respond(json=_load(f"event_{EVENT_ID}.json"))
 
+    # Pasamos un cutoff antiguo para que el filtro de eventos pasados (Fase 7a)
+    # no descarte UFC 329 (que ya pasó respecto a hoy 2026-07-16).
+    from datetime import UTC, datetime
+
     async with EspnUfcProvider() as provider:
-        summaries = await provider.list_upcoming_events()
+        summaries = await provider.list_upcoming_events(min_date=datetime(2026, 1, 1, tzinfo=UTC))
 
     assert len(summaries) >= 1
     summary = summaries[0]
@@ -220,6 +224,29 @@ async def test_circuit_breaker_resets_on_success() -> None:
         with pytest.raises(httpx.HTTPStatusError):
             await provider.get_event_card(EVENT_ID)
         assert not provider.is_circuit_open
+
+
+@respx.mock
+async def test_e5_circuit_breaker_does_not_open_on_4xx() -> None:
+    """E5 — 404 NO cuenta como fallo para el circuit breaker.
+
+    Antes del fix, 5 requests a `event_id` inválido desde el endpoint público
+    `GET /api/events/{id}` bastaban para tumbar poller + API 60 s (DoS trivial).
+    El CB solo debe contar fallos retryables (429/5xx/transporte).
+    """
+    route = respx.get(url=_event_url())
+    route.respond(status_code=404, text="not found")
+
+    async with EspnUfcProvider(
+        max_retries=1, cb_fails=3, cb_open_seconds=60, clock=lambda: 0.0
+    ) as provider:
+        # 5 peticiones a event_id inválido → todas 404 → NO abre el CB.
+        for _ in range(5):
+            with pytest.raises(httpx.HTTPStatusError):
+                await provider.get_event_card(EVENT_ID)
+
+        assert not provider.is_circuit_open
+        assert route.call_count == 5
 
 
 # --- get_athlete: nombre + headshot (MVP launch) ------------------------------

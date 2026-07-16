@@ -20,10 +20,12 @@ facilitar tests con reloj fake.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 import time
 from collections.abc import Callable, Sequence
+from datetime import UTC, datetime
 from typing import Any, cast
 from urllib.parse import urlparse
 
@@ -66,6 +68,14 @@ def _event_id_from_ref(ref: str) -> str | None:
     path = urlparse(ref).path
     m = _EVENT_ID_RE.search(path)
     return m.group(1) if m else None
+
+
+def _parse_event_date(raw: str) -> datetime:
+    """Parsea una fecha ISO de ESPN (ej. `2026-07-11T21:00Z`) a datetime UTC."""
+    value = raw
+    if value.endswith("Z"):
+        value = value[:-1] + "+00:00"
+    return datetime.fromisoformat(value)
 
 
 class EspnUfcProvider(Provider):
@@ -145,12 +155,19 @@ class EspnUfcProvider(Provider):
         return f"{self._base_url}{path}"
 
     async def _request(self, url: str) -> dict[str, Any]:
-        """Request con circuit breaker delante y tenacity (backoff) dentro."""
+        """Request con circuit breaker delante y tenacity (backoff) dentro.
+
+        E5: el circuit breaker solo cuenta fallos *retryables* (429/5xx,
+        TransportError). Los 4xx (p.ej. 404 por `event_id` inválido desde el
+        endpoint público `GET /api/events/{id}`) NO abren el circuito — antes,
+        5 ids inválidos bastaban para tumbar poller + API 60 s (DoS trivial).
+        """
         self._check_circuit()
         try:
             data = await self._request_with_retry(url)
-        except Exception:
-            self._on_failure()
+        except Exception as exc:
+            if _is_retryable(exc):
+                self._on_failure()
             raise
         self._on_success()
         return data
@@ -172,7 +189,18 @@ class EspnUfcProvider(Provider):
 
     # --- Contrato Provider (base.py) -------------------------------------
 
-    async def list_upcoming_events(self) -> Sequence[EventSummary]:
+    async def list_upcoming_events(
+        self, *, min_date: datetime | None = None, max_concurrent: int = 4
+    ) -> Sequence[EventSummary]:
+        """Lista los eventos próximos (no pasados) de la liga.
+
+        Fase 7a:
+        - `min_date` filtra eventos cuya fecha sea anterior (default: ahora UTC).
+          Antes se devolvían todos los del `seasontype`, incluidos pasados.
+        - Los N+1 fetches de detalle se paralelizan con `asyncio.gather` limitado
+          a `max_concurrent` (default 4) en vez de la secuencia original que era
+          N+1 en cola y bloqueaba el endpoint varios segundos.
+        """
         list_url = self._url(f"/sports/mma/leagues/{self._league}/events?seasontype=2")
         data = await self._request(list_url)
         ids: list[str] = []
@@ -181,19 +209,38 @@ class EspnUfcProvider(Provider):
             eid = _event_id_from_ref(ref)
             if eid:
                 ids.append(eid)
-        summaries: list[EventSummary] = []
-        for eid in ids:
-            ev_data = await self._request(
-                self._url(f"/sports/mma/leagues/{self._league}/events/{eid}")
+
+        sem = asyncio.Semaphore(max_concurrent)
+
+        async def _fetch_summary(eid: str) -> EventSummary | None:
+            url = self._url(f"/sports/mma/leagues/{self._league}/events/{eid}")
+            async with sem:
+                try:
+                    ev_data = await self._request(url)
+                except Exception:
+                    logger.warning("No se pudo cargar resumen del evento %s", eid)
+                    return None
+            return EventSummary(
+                id=ev_data["id"],
+                name=ev_data.get("name", ""),
+                date=ev_data.get("date", ""),
             )
-            summaries.append(
-                EventSummary(
-                    id=ev_data["id"],
-                    name=ev_data.get("name", ""),
-                    date=ev_data.get("date", ""),
-                )
-            )
-        return summaries
+
+        raw_summaries = await asyncio.gather(*(_fetch_summary(eid) for eid in ids))
+        summaries = [s for s in raw_summaries if s is not None]
+
+        cutoff = min_date or datetime.now(UTC)
+        upcoming: list[EventSummary] = []
+        for s in summaries:
+            try:
+                ev_dt = _parse_event_date(s.date)
+            except ValueError:
+                logger.warning("Fecha inválida en evento %s: %s", s.id, s.date)
+                continue
+            if ev_dt >= cutoff:
+                upcoming.append(s)
+        upcoming.sort(key=lambda x: x.date)
+        return upcoming
 
     async def get_event_card(self, event_id: str) -> Event:
         url = self._url(f"/sports/mma/leagues/{self._league}/events/{event_id}")

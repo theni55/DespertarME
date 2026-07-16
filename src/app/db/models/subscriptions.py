@@ -1,58 +1,37 @@
-"""Modelos de suscripciones (Fase 2b + 3).
+"""Modelo de suscripción a un combate (Fase 2b + Fase 7a).
 
-- SportSubscription: usuario sigue un deporte (MMA, Boxeo...).
-- EventSubscription: usuario sigue un evento concreto.
-- BoutSubscription: usuario quiere ser avisado X min antes de un combate;
-  es la suscripción que dispara el Poller.
+`BoutSubscription` es la suscripción que dispara el Poller: un Device quiere
+ser avisado X minutos antes de un combate concreto de un evento. El campo
+`previous_bout_id` NO se persiste (E4): se deriva en runtime desde la card
+fresca del evento en cada poll, porque UFC reordena la card el día del evento.
+
+UNIQUE `(device_id, bout_id)` (E6) impide que un tap de re-suscripción genere
+push duplicados para el mismo combate.
 """
 
 from __future__ import annotations
 
-from sqlalchemy import Enum, ForeignKey, Integer, String
+from sqlalchemy import Enum, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.models.base import Base
-
-
-class SportSubscription(Base):
-    __tablename__ = "sport_subscriptions"
-
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    user_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
-    )
-    sport: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
-
-    user: Mapped[User] = relationship(back_populates="sport_subscriptions")  # type: ignore[name-defined]  # noqa: F821
-
-
-class EventSubscription(Base):
-    __tablename__ = "event_subscriptions"
-
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    user_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
-    )
-    event_id: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
-    event_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
-
-    user: Mapped[User] = relationship(back_populates="event_subscriptions")  # type: ignore[name-defined]  # noqa: F821
 
 
 class BoutSubscription(Base):
     """Suscripción de alerta a un combate concreto (la que dispara el Poller)."""
 
     __tablename__ = "bout_subscriptions"
+    __table_args__ = (
+        UniqueConstraint("device_id", "bout_id", name="uq_bout_subscriptions_device_bout"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    user_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    device_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("devices.id", ondelete="CASCADE"), nullable=False, index=True
     )
     event_id: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     bout_id: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     target_match_number: Mapped[int] = mapped_column(Integer, nullable=False)
-    previous_bout_id: Mapped[str | None] = mapped_column(String(50), nullable=True)
-    previous_match_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
     lead_minutes: Mapped[int] = mapped_column(Integer, default=15, nullable=False)
     status: Mapped[str] = mapped_column(
         Enum("active", "fired", "cancelled", name="subscription_status"),
@@ -61,7 +40,6 @@ class BoutSubscription(Base):
         index=True,
     )
 
-    user: Mapped[User] = relationship(back_populates="bout_subscriptions")  # type: ignore[name-defined]  # noqa: F821
     alerts: Mapped[list[AlertLog]] = relationship(  # type: ignore[name-defined]  # noqa: F821
         back_populates="subscription", cascade="all, delete-orphan"
     )

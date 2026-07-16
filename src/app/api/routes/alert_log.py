@@ -1,6 +1,6 @@
-"""Router de log de alertas (Fase 3).
+"""Router de log de alertas (Fase 7a, device model).
 
-Usuario ve sus propias alertas; admin ve todas.
+El device ve solo sus propias alertas (no hay admin diferenciado en el MVP).
 """
 
 from __future__ import annotations
@@ -10,21 +10,25 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.schemas import AlertLogOut
-from app.auth.dependencies import get_current_user
-from app.db.models import AlertLog, User
+from app.db.models import AlertLog
+from app.db.models.devices import Device
 from app.db.session import get_session
+from app.security.device import get_current_device
 
 router = APIRouter(prefix="/api/alerts", tags=["alerts"])
 
 
 @router.get("", response_model=list[AlertLogOut])
 async def list_alerts(
-    user: User = Depends(get_current_user),
+    device: Device = Depends(get_current_device),
     session: AsyncSession = Depends(get_session),
     limit: int = Query(50, ge=1, le=500),
 ) -> list[AlertLog]:
-    stmt = select(AlertLog).order_by(AlertLog.fired_at.desc()).limit(limit)
-    if user.role != "admin":
-        stmt = stmt.where(AlertLog.user_id == user.id)
+    stmt = (
+        select(AlertLog)
+        .where(AlertLog.device_id == device.id)
+        .order_by(AlertLog.fired_at.desc())
+        .limit(limit)
+    )
     result = await session.execute(stmt)
     return list(result.scalars().all())
