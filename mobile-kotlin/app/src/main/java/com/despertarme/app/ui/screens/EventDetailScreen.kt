@@ -20,6 +20,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
@@ -45,11 +46,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.despertarme.app.data.remote.BoutOut
 import com.despertarme.app.ui.theme.BlueCorner
 import com.despertarme.app.ui.theme.RedCorner
@@ -236,15 +239,46 @@ private fun AthleteColumn(name: String?, headshotUrl: String?, cornerColor: Colo
         modifier = Modifier.width(140.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        AsyncImage(
-            model = headshotUrl,
-            contentDescription = name,
-            contentScale = ContentScale.Crop,
+        Box(
             modifier = Modifier
                 .size(80.dp)
                 .clip(CircleShape)
-                .background(cornerColor.copy(alpha = 0.25f)),
-        )
+                .background(cornerColor.copy(alpha = 0.40f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            val display = headshotUrl
+            if (display != null) {
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(display)
+                        .crossfade(true)
+                        .build(),
+                    contentDescription = name,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            } else {
+                // ESPN no resuelve headshot para todos los atletas (debutantes,
+                // prelims). Mostrem avatar amb les inicials sobre el color de la
+                // cantonada — mateix patro que el placeholder SVG de la web (S5).
+                val initials = initialsOf(name)
+                if (initials != null) {
+                    Text(
+                        text = initials,
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 20.sp,
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Filled.Person,
+                        contentDescription = null,
+                        tint = Color.White.copy(alpha = 0.7f),
+                        modifier = Modifier.size(36.dp),
+                    )
+                }
+            }
+        }
         Spacer(modifier = Modifier.height(6.dp))
         Text(
             text = name ?: "TBD",
@@ -255,6 +289,24 @@ private fun AthleteColumn(name: String?, headshotUrl: String?, cornerColor: Colo
             maxLines = 2,
         )
     }
+}
+
+private fun initialsOf(name: String?): String? {
+    if (name.isNullOrBlank()) return null
+    val parts = name.trim().split(' ').filter { it.isNotEmpty() }
+    if (parts.isEmpty()) return null
+    val first = parts.first().firstOrNull() ?: return null
+    val initial = if (parts.size >= 2) {
+        val last = parts.last().firstOrNull() ?: first
+        "$first$last"
+    } else {
+        if (first.toString().length >= 2) {
+            name.take(2)
+        } else {
+            first.toString()
+        }
+    }
+    return initial.uppercase()
 }
 
 private fun formatDate(iso: String): String {
