@@ -73,6 +73,71 @@ adb shell am start -n com.despertarme.app/.MainActivity
 
 ---
 
+## Última sesión (cont.)
+
+**Fecha:** 2026-07-16 · **Sesión 15 (cont.) — Fixes visuales commiteados. Alarma bloqueada: requiere setup Firebase (manual owner, ~30 min).**
+
+### Fixes visuales (commit a055231)
+
+- Home reestructurado: hero `ContentScale.Fit` arriba (poster McGregor vs Holloway completo, ambos peleadores visibles, sin recortar) + zona inferior fija sobre `BackgroundDark` sólido con título + botones. `windowInsetsPadding(WindowInsets.safeDrawing)` para que "Avísame" no quede ocluido bajo las barras del sistema.
+- `AthleteColumn` con placeholder de iniciales para peleadores sin headshot (debutantes/prelims — ESPN no siempre resuelve). Patrón equivalente al SVG placeholder de la web (Sesión 5).
+- Owner aceptó el Home como está: "se quedará así la imagen, no es tan relevante en esta fase".
+- Tap en nueva zona inferior dispara navegación Home→EventDetail: verificado `GET /api/events/600059599` desde puerto nuevo en `uvicorn.out`. Sin FATAL.
+
+### ⚠️ Bloqueo crítico: alarma funcional requiere FCM (manual del owner)
+
+El owner pidió: **"la alarma tiene que funcionar en este v1"** y aclaró el objetivo real de la app:
+
+> "no es para que te avise a la hora que este programada la pecha, el objetivo de esta app era seguir en tiempo real los combates para cuando acabe el anterior avisarte exactamente cuando empieza el siguiente (el tiempo de antes que le pongas)"
+
+Revisando el código del Poller + decisiones D40 confirmé que la app se diseñó literalmente para esto: el backend hace polling de ESPN en vivo (cada 60s) y cuando el combate previo termina (transición `in→post`), recalcula `estimated_start_at = observed_at + 5 min buffer (D18)` y envía push FCM `update` con el nuevo timestamp. La app recibe el push y **reprograma** `AlarmManager.setAlarmClock()` al nuevo momento.
+
+**El flujo es imposible sin FCM:**
+- Con un `AlarmScheduler` de un solo disparo con `bout.date` (lo que yo propuse), la alarma sonaría a la hora programada oficial, no a la real. Si el combate previo se alarga, la alarma suena antes de tiempo. Es solo un calendador — no resuelve el caso de uso central.
+- FCM es la única vía de que el backend informe a la app *"la estimación cambió, reprograma la alarma"*, y se disparará cuando ESPN detecta la transición `in→post` del previo. Cada push `update` lleva `estimated_start_at` fresco.
+
+### Botón "Probar sonido" — se deja
+
+Owner decidió: **dejarlo por ahora para comprobar que funciona (como en el primer spike)**. Se quitará cuando entre FCM y el `AlarmScheduler` real. Por ahora cumple la función de debug que tenía el spike Expo — verificar que `AlarmService` + `setBypassDnd` + `USAGE_ALARM` siguen funcionando tras reinicios/reinstalaciones.
+
+### Decisión de cierre
+
+Parar la sesión aquí. La próxima arranca por **setup Firebase manual del owner (~30 min en console.firebase.google.com):**
+
+1. Crear proyecto `despertarme` en console.firebase.google.com.
+2. Habilitar Cloud Messaging (Engagement → Messaging o Build → Cloud Messaging).
+3. **Service account key Python (backend):** Project settings → Service accounts → Generate new private key → descargar JSON. Guardar contenido en `.env` como `FCM_CREDENTIALS_JSON=< contenido pegado en una sola línea >` (o `FCM_CREDENTIALS_PATH` apuntando al fichero). Sin esto, `build_notifier()` sigue cayendo a `DummyNotifier` y los push se logean pero no se envían.
+4. **`google-services.json` para Android:** Project settings → "Add app" → Android → package name `com.despertarme.app` → descargar y pegar en `mobile-kotlin/app/`.
+5. No hace falta crear campañas ni nada — solo activar la API FCM v1 HTTP y obtener las dos credenciales.
+
+Tras eso, codeo en paralelo:
+- **(a) Backend:** `notifiers/fcm.py` ya soporta firebase-admin cuando las env-vars están — solo necesita el JSON. `build_notifier()` gatea correctamente (fix Critical Sesión 13 ya aplicado).
+- **(b) Cliente Android FCM:** `FirebaseMessagingService` Kotlin que parsea data-only payload `type=update|started|cancelled`, reprograma `AlarmScheduler.schedule(newEstimatedStartAt)` (update), muestra notificación informativa (started/cancelled), o arranca `AlarmService` (started si algo se pasó).
+- **(c) `AlarmScheduler`:** `AlarmManager.setAlarmClock()` a `estimatedStartEpochMillis − leadMinutes*60_000`. Persistencia del `PendingAlarm` en DataStore (para que `BootReceiver` lo reprograme tras reboot). Método `schedule()` que cancela antes la alarma anterior — solo puede haber una programada.
+- **(d) `AlarmReceiver` + verify-then-ring:** al disparar, fetch `GET /api/events/{eventId}` → comprobar que el combate sigue `pre` y `bout.date` plausible → arrancar `AlarmService` (sonido). Si ya empezó (`bout.date < now`), callarlo. Si se movió más de 5 min, reprogramar. Self-healing ante FCM perdidos.
+- **(e) `AlarmActivity` full-screen (post-MVP):** "X vs Y — UFC {event} empieza en ~N min" + botón "Descartar" (stop service).
+- **(f) `BootReceiver`** (`RECEIVE_BOOT_COMPLETED` ya en manifest): reprogramar tras reboot.
+- **(g) Redis:** `docker compose up -d` para desbloquear el poller (AlertState con idempotencia D16).
+
+### Objetivo del producto (registro permanente)
+
+> **El objetivo de DespertarME es avisar al usuario X minutos antes de que un combate de una tarjeta escalonada (MMA/Boxeo/Tenis) empiece realmente, siguiendo en tiempo real el combate anterior y recalculando el inicio estimado en cada transición de estado.**
+
+- **No** debe avisar a la hora oficial programada (eso ya lo hace cualquier calendador).
+- **No** depende de horarios fijos — sigue `pre → in → post` del combate previo y estima `start_objetivo ≈ now + restante + 5 min buffer` (D18).
+- **La alarma local exacta** (`AlarmManager.setAlarmClock` en Android / AlarmKit en iOS 26+ según D40) es la fuente de verdad del "cuándo sonar", independiente del backend. El backend **solo** la mantiene fresca vía push FCM `update` con `estimated_start_at`.
+- **Verify-then-ring** (D40): al disparar la alarma, la app verifica que el combate sigue `pre` con estimación plausible antes de sonar, evitando sonar si se retrasó o canceló.
+- **Bypass DnD / silencio obligatorio** (spike Sesión 11 validado en Android 14 físico): canal `IMPORTANCE_HIGH` + `setBypassDnd(true)` + `AudioAttributes.USAGE_ALARM` + foreground service `mediaPlayback`. iOS vía AlarmKit (no requiere Critical Alert Entitlement).
+
+Sin FCM, las dos últimas (reprogramar en tiempo real y verify-then-ring con timestamp fresco) no son posibles. Setup Firebase es el desbloqueante.
+
+### Commits
+
+- `a055231` ya aplicado: fix visual Home + placeholder headshots + insets.
+- Esta sesión-cierre commitea solo memorias: `docs(memoria): Sesion 15 (cont.) - alarma bloqueada por FCM (setup owner pendiente)`.
+
+---
+
 ## Sesión 14 (anterior)
 
 **Fecha:** 2026-07-16 · **Sesión 14 — Decisión: pivot a Kotlin nativo puro (sin Expo/RN) para la app Android. Plan de ejecución consolidado.**

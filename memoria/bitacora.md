@@ -672,3 +672,31 @@ plataforma (Vercel/CF Pages descartados: serverless no soporta el scheduler
   - **SQLite verificado**: device `e57d6077-7ef4-4e68-bb99-8d9d8a2ae174` registrado por la app (platform=android, locale=es-ES). DataStore persiste el UUID.
 - **Pendiente para próxima sesión** (Paso 2 de Fase 7b, camino crítico D40): `AlarmScheduler` (`AlarmManager.setAlarmClock()` a `estimated_start_at − lead_minutes`) + `AlarmReceiver` + verify-then-ring (fetch `GET /api/events/{id}` al disparar → sonar / reprogramar / silenciar) + `AlarmActivity` full-screen + `BootReceiver`. Esto convierte el botón "Avisarme" en una alarma local real que sonará a la hora estimada — hoy solo persiste la suscripción en BD pero no dispara sonido. Después pantallas restantes (Mis Alertas, Eventos lista, Ajustes) y tramo FCM.
 - **Memorias actualizadas**: `decisiones.md` (D43 + D44), `fases.md` (§7b/7c reescritas con stack Kotlin real + checkboxes del Paso 1 marcados), `handoff.md` (esta sesión + corrección crítica "Android Studio IDE no está; SDK portable sí está"), `bitacora.md` (esta entrada). Commit final único pendiente.
+
+## Sesión 15 (cont.) — Fixes visuales + bloqueo alarma por FCM (2026-07-16)
+
+- Owner probó la app en emulador tras commits `c8efde3` (scaffold) + `c226107` (memorias Sesión 15). Reportó 4 issues: (1) botón "Avísame" no visible en Home (oculto bajo gesture nav bar por `enableEdgeToEdge` sin compensar insets), (2) hero de Home demasiado grande / recorta a los peleadores (`ContentScale.Crop` full-screen), (3) peleadores sin foto muestran círculo vacío (ESPN no resuelve headshot para debutantes/prelims), (4) tras darle back no podía volver a combates (consecuencia directa de #1 — sin botón visible, sin navegación).
+
+- **Fixes aplicados (commit a055231):**
+  - Home reestructurado en Column vertical con 2 zonas: hero `ContentScale.Fit` + `weight(1f)` arriba (poster completo, ambos peleadores visibles sin recortar) + zona inferior fija sobre `BackgroundDark` sólido con título + botones. Sin overlay degradado (sobraba cuando el hero no es full-screen).
+  - `windowInsetsPadding(WindowInsets.safeDrawing)` aplicado al Column padre para que los botones no queden tras las barras del sistema.
+  - `AthleteColumn` con placeholder de iniciales (mayúsculas, primera+última) sobre el color de la esquina (rojo/azul con alpha 0.40) cuando `headshot_url == null`. Si el nombre también es null, usa `Icons.Filled.Person`. Equivalente al SVG placeholder de la web (Sesión 5).
+  - Build SUCCESSFUL (55s, solo warning cosmético `Icons.Filled.ArrowBack` deprecated). APK reinstalado. App arranca sin FATAL. Tap en zona inferior (540, 2050) dispara nueva navegación Home→EventDetail visible en `uvicorn.out` (puerto nuevo, `GET /api/events/600059599`).
+
+- **Owner aceptó el Home como está**: "se quedará así la imagen, no es tan relevante en esta fase". El resto funciona.
+
+- **Bloqueo alarma — redescubrimiento del objetivo central de la app:**
+  - Owner pidió "la alarma tiene que funcionar en este v1" y aclaró: **"no es para que te avise a la hora que este programada la pecha, el objetivo de esta app era seguir en tiempo real los combates para cuando acabe el anterior avisarte exactamente cuando empieza el siguiente (el tiempo de antes que le pongas)"**.
+  - Revisando `poller.py` y `decisiones.md` D40 confirmé que la app fue diseñada para exactamente eso: el backend hace polling de ESPN en vivo (cada 60s), cuando el combate previo transiciona `in→post`, recalcula `estimated_start_at` y envía push FCM `update` con el timestamp fresco a la app; la app recibe y reprograma la alarma local `AlarmManager.setAlarmClock()`. Sin FCM este bucle es imposible.
+  - Un `AlarmScheduler` de un solo disparo con `bout.date` (lo que yo proponía) **no resuelve el caso de uso** — solo te avisa a la hora oficial, como cualquier calendador. Si el combate previo se alarga, la alarma suena antes de tiempo y no hay forma de corregirlo.
+  - **FCM es el desbloqueante**: los push `update` son la única vía de que el backend avise a la app *"la estimación cambió, reprograma"*.
+
+- **Botón "Probar sonido"**: owner pidió dejarlo por ahora ("para comprobar que funciona, como en el primer spike"). Se quitará cuando entre FCM y `AlarmScheduler` real. Por ahora sigue como debug manual que arranca `AlarmService`.
+
+- **Decisión de cierre**: parar la sesión. La próxima arranca por setup Firebase manual del owner (~30 min en console.firebase.google.com): proyecto `despertarme`, service account key Python, `google-services.json` en `mobile-kotlin/app/`. Detalles en `handoff.md`.
+
+- **Objetivo del producto grabado para futuras sesiones**: avisar X minutos antes de que un combate empiece realmente, siguiendo en vivo el combate previo y recalculando el inicio estimado en cada transición de estado. No es un calendador. La alarma local exacta (Android `setAlarmClock` / iOS AlarmKit D40) es la fuente de verdad del cuándo sonar, y el backend la mantiene fresca vía push FCM `update` con `estimated_start_at`. Verify-then-ring al disparar (D40). Bypass DnD obligatorio (validado Sesión 11).
+
+- **Pendiente para próxima sesión**: (1) owner crea proyecto Firebase + service account key Python + `google-services.json` Android; (2) backend FCM ya funcionará una vez set `FCM_CREDENTIALS_JSON` en `.env` (código en `notifiers/fcm.py` desde Sesión 12 + fix Critical Sesión 13, solo falta la credencial); (3) cliente Android FCM `FirebaseMessagingService` que parsea `update|started|cancelled` y reprograma `AlarmScheduler`; (4) `AlarmScheduler` + `AlarmReceiver` + verify-then-ring + `AlarmActivity` full-screen + `BootReceiver`; (5) Redis `docker compose up -d` para desbloquear el poller.
+
+- **Sin commits de código Kotlin en esta sesión-cierre**. Solo se va a commitear la actualización de memorias.
