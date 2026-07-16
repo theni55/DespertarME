@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">DespertarME</string>
+    <string name="wake_me_up">Avísame</string>
+    <string name="events">Eventos</string>
+    <string name="notify_me">Avisarme</string>
+    <string name="cancel">Cancelar</string>
+    <string name="loading">Cargando…</string>
+    <string name="error_failed_to_load">No se pudo cargar el evento</string>
+    <string name="error_failed_to_subscribe">No se pudo crear la alerta</string>
+    <string name="notification_channel_alarm">Alarma DespertarME</string>
+    <string name="alarm_notification_text">Alarma sonando</string>
+    <string name="red_corner">Esquina roja</string>
+    <string name="blue_corner">Esquina azul</string>
+    <string name="vs">vs</string>
+    <string name="rounds">rounds</string>
+    <string name="minutes_before">min antes</string>
+    <string name="subscription_created">Alerta creada: %1$s vs %2$s — %3$d min</string>
+    <string name="alarm_sound_test">Probar sonido</string>
+</resources>
