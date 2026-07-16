@@ -6,76 +6,110 @@
 
 ## Última sesión
 
-**Fecha:** 2026-07-16 · **Sesión 14 — Decisión: pivot a Kotlin nativo puro (sin Expo/RN) para la app Android. Plan de ejecución consolidado (ver "Próximos pasos").**
+**Fecha:** 2026-07-16 · **Sesión 15 — Scaffold Kotlin Compose (`mobile-kotlin/`) + Home/EventDetail navegables + smoke emulador OK. D43 + D44 registradas.**
 
-**Contexto:** el owner preguntó si, teniendo Android Studio, se podía quitar Expo para simplificar el desarrollo. Análisis: la funcionalidad crítica del MVP (AlarmScheduler, AlarmService, AlarmActivity, bypass DnD, FCM) es Kotlin sí o sí — Expo solo cubría la capa de pantallas a cambio de mantener dos runtimes (JS + nativo), el bridge, Metro, Node y EAS (que ya dio problemas: build ERRORED por lock, colas ~2h). **Decisión del owner: quitar Expo e ir a Kotlin nativo + Jetpack Compose.** Coste asumido: iOS (Fase 7d, post-MVP) será rewrite SwiftUI en vez de reutilizar pantallas TS (la alarma iOS requería módulo Swift/AlarmKit nativo de todos modos).
+**Contexto:** el owner confirmó en Sesión 14 el pivot a Kotlin nativo puro (sin Expo/RN) y pidió que esta sesión entregara visualmente lo que la web mostraba: Home con "Avísame" → pantalla de combates con nombres, fotos y datos de la API, y selector de minutos de aviso. El handoff Sesión 14 decía que este PC no tenía Android Studio, pero la verificación real reveló que **sí hay SDK Android portable + JDK 17 + AVD `pixel_6_api34`** (instalados en Sesiones 10-11) — solo falta el IDE Android Studio, que no es necesario para compilar con `gradlew`. D44 registrada para aclararlo a futuros continuadores.
 
-⚠️ **Pendiente de registrar D43** en `decisiones.md` (supersede el stack RN+Expo de D37; no editar D37) y de reescribir §7b/7c en `fases.md` — primer paso de la próxima sesión de ejecución.
+**Hecho en esta sesión:**
 
-**Hallazgo de entorno (verificado en la máquina del owner):** el setup de emulador de las sesiones 10-11 se hizo en la máquina del compañero. En este PC NO hay Android Studio, ni SDK, ni adb, ni AVD; Java es 1.8 (insuficiente, Android Studio trae JDK 17 embebido); hipervisor activo ✅; Node presente (dejará de hacer falta al quitar Expo); `mobile/node_modules` ausente (irrelevante tras el pivot); backend local listo (venv + `.env` efectivo apunta a SQLite).
+1. `git mv mobile mobile-expo` (spike Expo preservado en WD, sin tocar histórico).
+2. Scaffold `mobile-kotlin/` Compose **a mano** (sin wizard GUI, sin Node): `settings.gradle.kts`, `build.gradle.kts`, `gradle/libs.versions.toml` (version catalog), wrapper Gradle 8.11.1 (jar+scripts copiados del spike), `debug.keystore` generado con `keytool`. Stack: Compose BOM 2024.12 + Kotlin 2.0.21 + AGP 8.7.3 + Retrofit 2.11 (converter `kotlinx-serialization` **oficial** de Retrofit, no el de Jake Wharton que no resolvió) + Coil 2.7 + DataStore Preferences 1.1 + Navigation Compose 2.8 + Material3. minSdk 26 / targetSdk 34 / compileSdk 34. Paquete `com.despertarme.app`.
+3. Código Kotlin Compose completo para 1+1 pantallas:
+   - `DespertarMeApp.kt` (Application: canal `IMPORTANCE_HIGH` + `setBypassDnd` al crear — mismo del spike).
+   - `MainActivity.kt` (single-activity Compose + NavHost `home → event/{eventId}`).
+   - `ui/theme/` (tokens:`#E50914`, `#0A0A0A`, sans-serif — Inter sin embeber todavía).
+   - `ui/screens/HomeScreen.kt`: hero `drawable-nodpi/hero.webp` (extraído de la rama `web`, D36/D42 — el póster oficial UFC 329) + veil degradado + botón rojo "Avísame" (navega a EventDetail del próximo evento) + botón secundario "Probar sonido" (arranca `AlarmService` portado del spike).
+   - `ui/screens/EventDetailScreen.kt`: `LazyColumn` de combates, cada `BoutCard` con `matchNumber` + chip `cardSegment` (main/prelims) + `weightClass` + `periods`; columnas rojo/azul con `AsyncImage` (Coil) para `headshot_url` + `name` (placeholder si TBD); `FlowRow` de `FilterChip` para selector 5/10/15/30/60; botón "Avisarme" → `POST /api/subscriptions` con `X-Device-Id`; cambia a "Avisando ✓" tras suscripción; Snackbar "Alerta creada: X vs Y — N min".
+   - `ui/viewmodel/EventDetailViewModel.kt` + `Factory` (inyección manual de `AppContainer` — `viewModel()` default no acepta constructor custom).
+   - `data/remote/`: `DespertarApi` (Retrofit interface) + DTOs `@Serializable` (`EventCardOut`, `BoutOut`, `BoutAthleteOut`, `DeviceCreate`, `BoutSubscriptionCreate`...) + `DeviceIdInterceptor` (header `X-Device-Id`).
+   - `data/DeviceStorage.kt`: DataStore Preferences, UUID v4 persistente.
+   - `data/AppContainer.kt`: único `OkHttpClient` con `baseUrl=http://10.0.2.2:8000/`, registro best-effort en `ensureRegistered()` con token placeholder `no-fcm-yet-{uuid}` hasta el tramo FCM.
+   - `alarm/AlarmService.kt` portado del spike a paquete `com.despertarme.app.alarm` (mismo `TYPE_ALARM` + `USAGE_ALARM` + `setBypassDnd` + `mediaPlayback` foreground validado Sesión 11).
+4. `AndroidManifest.xml` con `usesCleartextTraffic=true` (necesario para HTTP en API 28+ — sin esto la app traga IOException silenciosamente) + permisos completos (FOREGROUND_SERVICE_MEDIA_PLAYBACK, USE_EXACT_ALARM, USE_FULL_SCREEN_INTENT, RECEIVE_BOOT_COMPLETED, los del spike).
+5. **3 iteraciones de build** hasta `BUILD SUCCESSFUL` — 3 fixes aplicados:
+   - `signingConfigs.getByName("debug")` en lugar de `create("debug")` (AGP ya crea uno por defecto).
+   - `com.squareup.retrofit2:converter-kotlinx-serialization` (oficial Retrofit 2.11) en lugar de `com.jakewharton.retrofit:retrofit2-kotlinx-serialization-converter` (este no exponía el import `retrofit2.converter.kotlinx.serialization.asConverterFactory`).
+   - `androidx.compose.foundation.layout.FlowRow` + `@OptIn(ExperimentalLayoutApi::class)` (no está en `androidx.compose.material3`).
+   - `Image(painterResource(R.drawable.hero), ...)` en HomeScreen en lugar de `AsyncImage(model: Painter?, ...)` (Coil rechaza Painter como model: `IllegalArgumentException: Unsupported type: Painter`).
+6. **Smoke emulador** `pixel_6_api34` arrancado + `adb reverse tcp:8000 tcp:8000` (puente emulador→host, complementa 10.0.2.2 AOSP nativo). APK 21.9 MB instalado. App arranca sin FATAL, Activity visible.
+7. **Backend SQLite levantado** con `cwd` en raíz del repo (no `src/` — si no, pydantic-settings no encuentra `.env` y cae a defaults Postgres asyncpg rechazado por no haber Docker; error visible en `uvicorn.err`). `alembic upgrade head` aplicado.
+8. **Smoke end-to-end verificado**:
+   - `GET /health` → 200 `{"status":"ok","env":"development"}`.
+   - `POST /api/devices` (curl simulación app) → 201 Created.
+   - `POST /api/subscriptions` (curl) → 201 Created con suscripción `edf42792-dc44-41fc-a04b-e9c2f839741c` (Du Plessis vs Usman, lead 15 min).
+   - `GET /api/events/600059599` → 200 con 12 combates reales y nombres de peleadores (Ezra Elliott vs Damien Anderson, etc.).
+   - `GET /api/subscriptions` → 200 devuelve la sub nueva.
+   - **Tráfico real de la app en `uvicorn.out`**: desde puerto 55980 (app) → `POST /api/devices` + `GET /api/events` (registro + LaunchedEffect Home). Desde puerto 56063 (tras `adb tap 540 2150`) → `GET /api/events/600059599` (navegación Home→EventDetail exitosa, card cargada en la app).
+   - **SQLite verificado**: device `e57d6077-7ef4-4e68-bb99-8d9d8a2ae174` registrado por la app (platform=android, locale=es-ES). La app ya persistió su UUID en DataStore.
 
-**Verificación backend para testing sin deps externas:** arranca y sirve `GET /api/events` y `GET /api/events/{id}` **sin Redis** (caché con bypass try/except en `events.py:99-103`, resolver degradado a L1 en memoria) y **sin Firebase** (cae a `DummyNotifier`, `notifiers/__init__.py:27-45`). El poller sí necesita Redis para disparar alertas (idempotencia en `engine/state.py`), pero sin él la API sigue viva — se difiere al tramo FCM.
+**Decisiones nuevas:** D43 (pivot a Kotlin nativo + Compose, supersede D37) y D44 (nota técnica entorno del owner: SDK portable sin IDE Android Studio, compilar vía `gradlew`).
+
+**Pendiente de la próxima sesión** (Paso 2 + 3 de Fase 7b, ver `fases.md`):
+1. **`AlarmScheduler`** (`AlarmManager.setAlarmClock()` a `estimated_start_at − lead_minutes`) + `AlarmReceiver` + verify-then-ring (fetch `GET /api/events/{id}` al disparar → sonar / reprogramar / silenciar) + `AlarmActivity` full-screen + `BootReceiver` (re-programar tras reinicio). Doze validation con `dumpsys deviceidle force-idle`. Esto es lo que falta para que el botón "Avisarme" realmente programe la alarma local que sonará a la hora estimada del combate — hoy solo persiste la suscripción en BD.
+2. Pantallas restantes: Mis Alertas, Eventos lista, Ajustes, AlarmScreen dedicado.
+3. Tramo FCM: Firebase project + `google-services.json` + Redis (`docker compose up -d` para desbloquear poller).
+4. Validación en hardware físico + deploy Railway.
+
+**⚠️ Nota operativa para futuras sesiones:** env vars `JAVA_HOME` (JDK 17 Temurin portable) + `ANDROID_HOME` + `PATH` (emulator + platform-tools + cmdline-tools) ya están fijados en perfil User. Para compilar `mobile-kotlin/`:
+```powershell
+$env:JAVA_HOME = "C:\Users\pacor\AppData\Local\jdk-17\jdk-17.0.19+10"
+$env:Path = "$env:JAVA_HOME\bin;$env:LOCALAPPDATA\Android\Sdk\platform-tools;$env:LOCALAPPDATA\Android\Sdk\emulator;$env:Path"
+& "X:\Project IA\DespertarME\mobile-kotlin\gradlew.bat" -p "X:\Project IA\DespertarME\mobile-kotlin" assembleDebug --no-daemon --console=plain
+```
+Para levantar el backend:
+```powershell
+.\.venv\Scripts\Activate.ps1   # ⚠️ cwd debe ser raíz del repo, no src/
+# .env: DATABASE_URL=sqlite+aiosqlite:///./avisador.db
+alembic upgrade head
+uvicorn app.main:app --reload   # o --host 0.0.0.0 para emulador
+```
+Para el emulador:
+```powershell
+emulator -avd pixel_6_api34
+adb reverse tcp:8000 tcp:8000   # puente emulador→host
+adb install -r mobile-kotlin\app\build\outputs\apk\debug\app-debug.apk
+adb shell am start -n com.despertarme.app/.MainActivity
+```
 
 ---
 
-## Sesión 13 (anterior)
+## Sesión 14 (anterior)
 
-**Fecha:** 2026-07-16 · **Sesión 13 — Code review de Fase 7a + 4 fixes bloqueantes ✅. Plan hacia el MVP Android consolidado.**
+**Fecha:** 2026-07-16 · **Sesión 14 — Decisión: pivot a Kotlin nativo puro (sin Expo/RN) para la app Android. Plan de ejecución consolidado.**
 
-**Contexto:** review multi-eje (skill `code-review-and-quality`) del commit `6470b24` (Fase 7a, ~2.400 líneas) mergeado a `dev` por el compañero. Veredicto: diseño sólido (idempotencia en profundidad, fixes E2–E8 bien razonados, suite reescrita de calidad) pero con 1 bug crítico + 2 required + 1 de higiene, todos arreglados en esta sesión.
+**Contexto:** el owner preguntó si, teniendo Android Studio, se podía quitar Expo para simplificar el desarrollo. Análisis: la funcionalidad crítica del MVP (AlarmScheduler, AlarmService, AlarmActivity, bypass DnD, FCM) es Kotlin sí o sí — Expo solo cubría la capa de pantallas a cambio de mantener dos runtimes (JS + nativo), el bridge, Metro, Node y EAS (que ya dio problemas: build ERRORED por lock, colas ~2h). **Decisión del owner: quitar Expo e ir a Kotlin nativo + Jetpack Compose.**
 
-**Fixes aplicados (con test de regresión cada uno):**
+⚠️ **D43 registrada en Sesión 15** (no en 14). §7b/7c reescritas en Sesión 15 con el stack Kotlin real.
 
-1. **[Critical] FCM roto en producción** (`notifiers/fcm.py`): la app Firebase se inicializa con nombre propio (`despertarme-fcm`) pero `messaging.send(message, False)` sin `app=` resuelve contra la app *default* (inexistente) → `ValueError` en **cada** envío real. Los tests no lo veían porque mockean `messaging` entero. Fix: `send(message, False, self._app)` + `get_app(name="despertarme-fcm")` para reutilizar la app nombrada al re-instanciar. Assert de regresión en `test_fcm_notifier_send_returns_message_id_on_success`.
-2. **[Required] Caché de events ignoraba `include_past_hours`** (`api/routes/events.py`): clave fija `events:upcoming:ufc` → una query con cutoff distinto servía/poblaba la lista de otra durante el TTL. Fix: solo la query default (`include_past_hours == 0`, la que usa la app) lee/escribe caché. Test nuevo `test_list_events_cache_only_applies_to_default_query` (fakeredis inyectado en los singletons del router).
-3. **[Required] Normalización asimétrica del `device_id`**: el registro hace `.strip().lower()` (`schemas.py`) pero la auth solo `.strip()` (`security/device.py`) → un cliente con UUID en mayúsculas se registraba bien y luego recibía 401 siempre. Fix: misma normalización en `get_current_device`. Test nuevo `test_device_header_is_case_insensitive`.
-4. **[Higiene] `inst_user_settings.tmp` eliminado**: temporal del instalador de Android Studio (con rutas locales del compañero) commiteado por accidente en `f2ad55e`. Borrado + `*.tmp` en `.gitignore`.
-
-**Hallazgos de la review NO arreglados (deuda consciente, para 7b/7c):**
-
-- **alert_log UNIQUE traga auditoría**: `(subscription_id, bout_id, fired_at_epoch_hour)` era de la era fire-once; con D40 puede haber varios `update` (o `update`+`started`) del mismo sub/bout en la misma hora → el 2º insert choca con IntegrityError y el push queda enviado pero sin auditar. Propuesta: añadir `message_type` al UNIQUE (migración pequeña).
-- **`POST /api/devices` es upsert sin auth con ID de cliente**: quien conozca un `device_id` puede sobrescribir su `fcm_token`. Aceptable MVP (UUID opaco), pero sin rate-limiting y `min_length=32` admite no-UUIDs. Propuesta: validar UUID v4 estricto.
-- Nits: `attempts` en `_log_alert` registra siempre el máximo; `session` inyectada sin uso en events; `downgrade()` de la migración recrearía ENUMs sin valores en PG (best-effort, irrelevante); `get_transition` posiblemente dead code.
-
-**Verificación:** 80 tests verdes (78 + 2 nuevos), ruff/black/mypy limpios.
+**Hallazgo de entorno (verificado Sesión 15):** el handoff Sesión 14 decía que este PC NO tenía Android Studio, ni SDK, ni adb, ni AVD; Java 1.8. Era **incorrecto** — en Sesiones 10-11 el SDK Android portable + JDK 17 + AVD `pixel_6_api34` ya estaban instalados (sin IDE Android Studio GUI, pero suficientes para compilar/arrancar emulador vía CLI). Ver D44 para el detalle exacto. Hipervisor activo ✅. Sin Android Studio IDE → `winget install Google.AndroidStudio` si se quiere el wizard GUI, pero no es necesario para compilar.
 
 ---
 
-## Próximos pasos (plan aprobado Sesión 14 — app Android Kotlin nativo, deps externas al mínimo y al final)
+## Próximos pasos (plan aprobado Sesión 14, ejecutado parcialmente Sesión 15)
 
-Requisito de instalación: **solo Android Studio** (trae SDK, emulador, adb, JDK 17, Kotlin, Gradle). Sin Node, sin Metro, sin EAS, sin Docker hasta el tramo FCM.
+### Paso 1 — Scaffold + Home/EventDetail navegables ✅ (Sesión 15)
+- Renombrado `mobile/` → `mobile-expo/` (preserva spike).
+- Scaffold Kotlin Compose compilando en `mobile-kotlin/` con `gradlew assembleDebug` (sin IDE).
+- Backend SQLite levantado, emulador arrancado, APK instalado, smoke end-to-end OK (registro + list events + navigation + event detail fetch desde la app).
+- D43 + D44 registradas en `decisiones.md`. §7b/7c reescritas en `fases.md`.
 
-### Paso 1 — Preparación (1 sesión)
+### Paso 2 — `AlarmScheduler` + verify-then-ring (próxima sesión, camino crítico D40)
+- `AlarmManager.setAlarmClock()` a `estimated_start_at − lead_minutes` + `AlarmReceiver` + verify-then-ring (fetch `GET /api/events/{id}` al disparar → sonar/reprogramar/silenciar). Refactor `AlarmService`: sonido custom `res/raw/alarm.ogg` + `AlarmActivity` full-screen. `BootReceiver` para re-programar tras reboot.
+- Doze: `adb shell dumpsys deviceidle force-idle` → `setAlarmClock` despierta puntualmente.
 
-1. Instalar **Android Studio** (`winget install Google.AndroidStudio`) + crear AVD Google APIs **API 34** (D41; hipervisor ya activo en la máquina del owner).
-2. Registrar **D43** en `decisiones.md`: pivot a Kotlin nativo + Jetpack Compose, supersede el stack RN+Expo de D37. Justificación: MVP Android-only, código crítico ya nativo, menos capas de fallo (un lenguaje, una toolchain), FCM con SDK `firebase-messaging` directo, builds locales sin EAS. Coste: iOS 7d será rewrite SwiftUI.
-3. Reescribir **§7b/7c en `fases.md`**: Compose + Navigation + ViewModel, Retrofit/Ktor, DataStore para `device_id`, `firebase-messaging` directo, `./gradlew assembleRelease` local.
-4. **Scaffold Kotlin** reemplazando el spike Expo en `mobile/` (el spike queda en historial git): paquete `com.despertarme.app`, minSdk 26 / target 34, portar `AlarmService.kt` casi tal cual; descartar `App.tsx`, `AlarmModule.kt`, `AlarmPackage.kt`, `package.json` y config Expo.
-5. **Backend local**: `alembic upgrade head` + `uvicorn` con SQLite (ya configurado, sin Docker). El emulador alcanza el host en `http://10.0.2.2:8000`.
-6. **Smoke en emulador**: app arranca + alarma de prueba suena → primer checkbox de 7b.
-
-### Paso 2 — Fase 7b core (camino crítico, ~2-3 sesiones)
-
-1. **`AlarmScheduler`** (`AlarmManager.setAlarmClock()` a `estimated_start − lead`) + **verify-then-ring** (fetch `GET /api/events/{id}` al sonar → sonar/reprogramar/silenciar). Refactor `AlarmService`: `res/raw/alarm.ogg` custom + `AlarmActivity` full-screen. Permisos: `USE_EXACT_ALARM`, `USE_FULL_SCREEN_INTENT`, `RECEIVE_BOOT_COMPLETED`.
-2. **Todo probable en emulador SIN FCM ni Redis** (gracias a D40: la alarma local es la fuente de verdad). Doze: `adb shell dumpsys deviceidle force-idle`.
-
-### Paso 3 — Pantallas Compose (~1-2 sesiones)
-
-Home (hero McGregor D42 + "Avísame") / Eventos / EventDetail (selector lead 5/10/15/30/60) / Mis Alertas / Ajustes (test-alarm) / AlarmScreen. Tokens: Inter, `#E50914`, `#0A0A0A`. `device_id` UUID en DataStore + `POST /api/devices`. Solo necesita emulador + backend SQLite.
+### Paso 3 — Pantallas Compose restantes (~1-2 sesiones)
+- Eventos lista, Mis Alertas, Ajustes (con test-alarm real), AlarmScreen modal.
 
 ### Paso 4 — Tramo FCM (aquí entran las deps externas)
-
-1. **Firebase** (manual owner, ~30 min): proyecto + service account JSON → `FCM_CREDENTIALS_JSON` (backend) + `google-services.json` → `mobile/app/`.
-2. **Redis** (`docker compose up -d`, ya definido en el repo): desbloquea el poller (idempotencia).
-3. Cliente FCM nativo (`firebase-messaging`): `update` → reprogramar alarma; `started`/`cancelled` → notificación informativa.
+- Firebase (manual owner, ~30 min): proyecto + service account JSON → `FCM_CREDENTIALS_JSON` (backend) + `google-services.json` → `mobile-kotlin/app/`.
+- Redis (`docker compose up -d`): desbloquea el poller (idempotencia D16).
+- Cliente FCM nativo (`firebase-messaging`): `update` → reprogramar alarma; `started`/`cancelled` → notificación informativa.
 
 ### Paso 5 — Validación final + deploy (Fase 7c)
-
-Móvil físico (bypass DnD real + quirks OEM) → Railway (PG + Redis + `FCM_CREDENTIALS_JSON`) → APK release local (`./gradlew assembleRelease`) → smoke end-to-end.
+- Móvil físico (bypass DnD real + quirks OEM) → Railway (PG + Redis + `FCM_CREDENTIALS_JSON`) → `./gradlew assembleRelease` local → smoke end-to-end.
 
 ### Paso 6 — Deuda de la review Sesión 13 (oportunista, no bloquea)
-
-`message_type` en el UNIQUE de alert_log · UUID v4 estricto en `DeviceCreate` · nits listados en Sesión 13. Pedir al compañero PRs más pequeñas en 7b.
+- `message_type` en el UNIQUE de `alert_log` · UUID v4 estricto en `DeviceCreate` · nits listados en Sesión 13.
 
 ---
 
@@ -92,7 +126,7 @@ Móvil físico (bypass DnD real + quirks OEM) → Railway (PG + Redis + `FCM_CRE
 | Fase 4 — Boxeo/Tenis reales | Pendiente (fuera del MVP) |
 | Fase 5 — VoiceNotifier real (Twilio) | ❄️ **Obsoleta** — sustituida por FCM (D37/D40) |
 | Fase 6 — Rediseño visual + landing dinámica | ❄️ **Congelada** — rama `web` |
-| Fase 7 — App móvil | 🔶 **En curso** — Spike ✅, Fase 7a (backend Device/FCM) ✅ + review con 4 fixes ✅. **Sesión 14: pivot a Kotlin nativo puro (sin Expo, D43 pendiente de registrar).** Próximo: instalar Android Studio + scaffold Kotlin + AlarmScheduler D40. |
+| Fase 7 — App móvil | 🔶 **En curso** — Spike ✅, Fase 7a (backend Device/FCM) ✅ + review con 4 fixes ✅. **Sesión 15: pivot a Kotlin nativo puro (D43) ejecutado. Scaffold `mobile-kotlin/` Compose + Home/EventDetail navegables + smoke emulador OK. Próximo: `AlarmScheduler` D40 + pantallas restantes.** |
 
 Detalle de checkboxes en `fases.md`.
 
@@ -100,7 +134,7 @@ Detalle de checkboxes en `fases.md`.
 
 ## Ramas
 
-- `dev` (activa): backend API-only + `mobile/` spike + memoria viva. Sesión 14 (plan pivot Kotlin nativo) en handoff; el scaffold Kotlin reemplazará el spike Expo en la próxima sesión.
+- `dev` (activa): backend API-only + `mobile-expo/` spike (preservado) + `mobile-kotlin/` Compose nuevo + memoria viva.
 - `main`: sincronizada con `dev` hasta Fase MVP-launch (el pivot 7a aún no está en main).
 - `web` (congelada en `dcf62f8`): landing, admin web, `/app/*`. `git checkout web` para consultarla.
 
@@ -110,15 +144,42 @@ Detalle de checkboxes en `fases.md`.
 
 ```powershell
 .\.venv\Scripts\Activate.ps1
+# ⚠️ cwd debe ser raíz del repo, no src/ (si no, .env no se carga y cae a Postgres asyncpg)
 # .env: DATABASE_URL=sqlite+aiosqlite:///./avisador.db
 alembic upgrade head
-uvicorn app.main:app --reload
+uvicorn app.main:app --reload         # usar --host 0.0.0.0 para emulador
 ```
 
 - `http://localhost:8000/health` → `{"status":"ok"}`
 - `http://localhost:8000/docs` → Swagger UI (9 endpoints: devices, events, subscriptions, alerts, health)
 
 **La web solo existe en la rama `web`.**
+
+---
+
+## Cómo compilar y arrancar la app Android (en este PC)
+
+```powershell
+# Env vars (ya en perfil User — explícito para SESIONES posteriores o si reinicia):
+$env:JAVA_HOME = "C:\Users\pacor\AppData\Local\jdk-17\jdk-17.0.19+10"
+$env:Path = "$env:JAVA_HOME\bin;$env:LOCALAPPDATA\Android\Sdk\platform-tools;$env:LOCALAPPDATA\Android\Sdk\emulator;$env:Path"
+
+# Compilar
+& "X:\Project IA\DespertarME\mobile-kotlin\gradlew.bat" -p "X:\Project IA\DespertarME\mobile-kotlin" assembleDebug --no-daemon --console=plain
+
+# Emulador + puente + instalar + arrancar
+emulator -avd pixel_6_api34 -no-snapshot-save -no-boot-anim
+# (en otra terminal) esperar boot:
+adb wait-for-device & adb shell 'while [[ -z $(getprop sys.boot_completed) ]]; do sleep 1; done; exit' ; echo ready
+adb reverse tcp:8000 tcp:8000
+adb install -r mobile-kotlin\app\build\outputs\apk\debug\app-debug.apk
+adb shell pm grant com.despertarme.app android.permission.POST_NOTIFICATIONS
+adb shell am start -n com.despertarme.app/.MainActivity
+
+# Diagnóstico
+adb logcat -d *:E | findstr /C:"FATAL" /C:"AndroidRuntime"
+adb logcat -d | findstr /C:"DespertarMe"
+```
 
 ---
 

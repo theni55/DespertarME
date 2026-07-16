@@ -278,49 +278,83 @@ Sin Android Studio aún → el continuador instala Android Studio + emulador API
 - [ ] **Añadir tests para los bugs E2/E3/E4** (lead < 5 en post, target ya empezado, previo incoherente) — hoy sin cobertura.
 - [ ] Verificación completa: `ruff`/`black`/`mypy`/`pytest`.
 
-### Fase 7b — App Android v1 (Expo + Android Studio + emulador + dev build, D40/D41)
+### Fase 7b — App Android v1 Kotlin nativo + Jetpack Compose (D40/D41/D43) 🔶 en curso
 
-**Setup (Android Studio ya instalado — adelantado en D41):**
+**Stack definitivo (D43, pivot desde Expo/RN de D37):** Compose BOM 2024.12 + Kotlin 2.0.21 + AGP 8.7.3 + Gradle 8.11.1 (compila con `gradlew assembleDebug` desde CLI, sin IDE — D44), Retrofit 2.11 + `converter-kotlinx-serialization` oficial, Coil 2.7, DataStore Preferences 1.1, Navigation Compose 2.8, Material3, `firebase-messaging` en el tramo FCM. `mobile/` spike Expo renombrado a `mobile-expo/` (preservado en git, no se toca); nuevo scaffold en `mobile-kotlin/` paquete `com.despertarme.app`.
 
-- [ ] Verificar que Android Studio + emulador API 34 funciona (ya debería estar desde el spike).
-- [ ] `npx expo prebuild --platform android --clean` si se tocó `app.json` (bare workflow, ver `expo doctor` en handoff Sesión 8).
+**Paso 1 — Scaffold + Home/EventDetail navegables (Sesión 15) ✅**
 
-**Native module — alarma local + sonido:**
+- [x] `git mv mobile mobile-expo` (preserva spike Expo en WD, refs en historial).
+- [x] Scaffold `mobile-kotlin/` a mano (sin wizard IDE): `settings.gradle.kts`, `build.gradle.kts`, `gradle/libs.versions.toml`, wrapper Gradle 8.11.1 (jar+scripts copiados del spike), `debug.keystore` generado con `keytool`.
+- [x] `DespertarMeApp.kt` (Application: canal `IMPORTANCE_HIGH` + `setBypassDnd` al crear).
+- [x] `MainActivity.kt` (single-activity Compose + `enableEdgeToEdge`).
+- [x] `ui/theme/`: tokens color (`#E50914`, `#0A0A0A`) + Typography sans-serif (Inter sin embeber todavía) + `DespertarTheme` dark-first.
+- [x] `AlarmService.kt` portado del spike a paquete `com.despertarme.app.alarm` (mismo `TYPE_ALARM` + `USAGE_ALARM` + `setBypassDnd` validado en Sesión 11).
+- [x] `AndroidManifest.xml` con `usesCleartextTraffic=true` (necesario para `http://10.0.2.2:8000/` en API 28+), permisos `FOREGROUND_SERVICE_MEDIA_PLAYBACK` + `USE_EXACT_ALARM` + `USE_FULL_SCREEN_INTENT` + `RECEIVE_BOOT_COMPLETED` + los del spike.
+- [x] `data/remote/`: interfaces Retrofit `DespertarApi` (9 endpoints) + DTOs `@Serializable` (`EventCardOut`, `BoutOut`, `BoutAthleteOut`, `DeviceCreate`, `BoutSubscriptionCreate`) + `DeviceIdInterceptor` (header `X-Device-Id`).
+- [x] `data/DeviceStorage.kt`: DataStore Preferences con UUID v4 persistente (`ensureDeviceId()` + `getDeviceId()` + `fcmToken()`).
+- [x] `data/AppContainer.kt`: single OkHttpClient con baseUrl `http://10.0.2.2:8000/`, Json con `ignoreUnknownKeys`, registro best-effort en `ensureRegistered()` (placeholder token `no-fcm-yet-{uuid}` hasta tramo FCM).
+- [x] `ui/viewmodel/EventDetailViewModel.kt` + `EventDetailViewModelFactory` (inyección manual de `AppContainer`).
+- [x] `ui/screens/HomeScreen.kt`: hero `drawable-nodpi/hero.webp` (extraído de la rama `web`, D36/D42) + `Modifier.background` veil degradado + botón "Avísame" (navega a EventDetail del próximo evento) + botón secundario "Probar sonido" (arranca `AlarmService`).
+- [x] `ui/screens/EventDetailScreen.kt`: `LazyColumn` de combates, cada `BoutCard` con `matchNumber` + `cardSegment` chip + `weightClass` + `periods`; columnas rojo/azul con `AsyncImage` (Coil) para `headshot_url` + `name`; `FlowRow` de `FilterChip` para selector 5/10/15/30/60; botón "Avisarme" → `POST /api/subscriptions`; estado "Avisando ✓" tras suscripción; Snackbar "Alerta creada: X vs Y — N min" vía `SnackbarHostState` + `LaunchedEffect`.
+- [x] `MainActivity.kt` con `AppGraph` (NavHost home → event/{eventId}): resuelve próximo evento concurrente en `LaunchedEffect`, pasa `container` y `vm` por factory.
 
-- [ ] **`AlarmScheduler`** (nuevo, D40): receiver `AlarmReceiver` + `AlarmManager.setAlarmClock()` que programa la alarma local a `estimated_start_at − lead_minutes`. Al disparar, verify-then-ring: fetch a `GET /api/events/{id}` → si el target sigue en `pre` y la estimación es < lead → arranca `AlarmService`; si ya empezó → notifica sin sonido; si se canceló/reprogramó → reprograma la alarma local. Permiso `USE_EXACT_ALARM` (auto-concedido en Play por ser alarm app, sin fricción de usuario).
-- [ ] **Refactor del `AlarmService` del spike**: añadir sonido custom embebido (`res/raw/alarm.ogg`, ~200-500KB, en vez de `RingtoneManager.TYPE_ALARM` por defecto) + `AlarmActivity` (full-screen intent con `setShowWhenLocked`/`setTurnScreenOn` — ya no está en el spike, entra ahora con emulador para iterar).
-- [ ] Permisos `AndroidManifest.xml`: se mantienen los del spike + añadir `USE_FULL_SCREEN_INTENT`, `USE_EXACT_ALARM`, `RECEIVE_BOOT_COMPLETED` (para re-programar alarmas tras reinicio). ⚠️ `FOREGROUND_SERVICE_DATA_SYNC` del plan original está **descartado** — tipo erróneo/restringido en Android 14+. Se usa `mediaPlayback` (ya probado en el spike) o `specialUse`.
-- [ ] Cliente FCM: `@reactnative-firebase/messaging`. Handler background: recibir `update` → reprogramar `AlarmManager.setAlarmClock` (NO arrancar el service — la alarma local se encarga). Handler foreground: recibir `update` → actualizar UI; recibir `started`/`cancelled` → mostrar notificación informativa. `google-services.json` en `mobile/android/app/`.
-- [ ] `expo-secure-store` para `device_id` (UUID v4 generado en 1ª launch).
+**Build verification (Sesión 15):**
+- [x] 3 iteraciones de `./gradlew assembleDebug` en local — BUILD SUCCESSFUL (1:43 primera con descarga Gradle 8.11.1 + deps, 22-46s posteriores incremental). Tres fixes aplicados: `getByName("debug")` en lugar de `create` (AGP ya tiene default), converter oficial `com.squareup.retrofit2:converter-kotlinx-serialization` en lugar de Jake Wharton, import `FlowRow` desde `androidx.compose.foundation.layout` + `@OptIn(ExperimentalLayoutApi::class)`, y `Image(painterResource(...))` en HomeScreen en lugar de `AsyncImage(model: Painter?, ...)` (Coil no soporta Painter como model).
+- [x] APK debug 21.9 MB en `app/build/outputs/apk/debug/app-debug.apk`.
 
-**Pantallas (Expo Router Tabs: Home / Eventos / Mis Alertas / Ajustes):**
-- [ ] **Home**: póster del próximo evento (hero full-bleed) + botón primario **"Avísame"** (→ EventDetail destacado) + botón secundario **"Eventos"** (→ lista).
-- [ ] **Eventos**: lista de próximos UFC (card con imagen, fecha, nombre) desde `GET /api/events`.
-- [ ] **EventDetail**: tarjeta de combates (foto+nombre, borde rojo/azul por esquina, matchNumber, segmento, peso), selector fijo de minutos (5/10/15/30/60). ⚠️ El backend debe validar `lead >= 5` si no se arregló E2 en Fase 7a. Botón "Avisarme" → `POST /api/subscriptions` (sin mandar `previous_bout_id` — lo deriva el backend, E4).
-- [ ] **Mis Alertas**: suscripciones activas (botón cancelar) + historial desde `GET /api/alerts`.
-- [ ] **Ajustes**: timezone, estado de permisos, botón "Probar alarma" → `POST /api/devices/me/test-alarm`, info diagnóstico FCM.
-- [ ] **AlarmScreen** (modal full-screen): "McGregor vs Holloway — UFC 329 empieza en ~15 min" + botón "Descartar" (para el sonido). Se abre desde el `AlarmReceiver` vía `AlarmActivity`.
+**Smoke en emulador `pixel_6_api34` (Sesión 15):**
+- [x] `adb install -r app-debug.apk` → Success.
+- [x] `adb shell pm grant com.despertarme.app android.permission.POST_NOTIFICATIONS`.
+- [x] `adb shell am start -n com.despertarme.app/.MainActivity` → activity visible (`topResumedActivity=com.despertarme.app/.MainActivity`), sin `FATAL` en logcat (tras fixes de `usesCleartextTraffic=true` + `Image` en lugar de `AsyncImage(Painter)`).
+- [x] Backend SQLite levantado: `.venv/Scripts/python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 8000` con cwd en raíz del repo (no `src/` — si no, pydantic-settings no encuentra `.env` y cae a defaults Postgres asyncpg rechazado). `alembic upgrade head` aplicado.
+- [x] `adb reverse tcp:8000 tcp:8000` (puente emulador→host, además del `10.0.2.2` AOSP nativo).
+- [x] Verificado en `uvicorn.out`: app realiza `POST /api/devices` (registro UUID) + `GET /api/events` (LaunchedEffect) desde puerto 55980, y tras `adb shell input tap 540 2150` → `GET /api/events/600059599` desde puerto 56063 (navegación Home→EventDetail exitosa, card con 12 combates reales UFC Fight Night Du Plessis vs Usman 2026-07-18).
+- [x] Verificado en SQLite: device `e57d6077-7ef4-4e68-bb99-8d9d8a2ae174` registrado por la app (platform=android, locale=es-ES, fcm_token=`no-fcm-yet-...`).
 
-**Diseño y estado:**
-- [ ] Design tokens: Inter (fuente), rojo UFC `#E50914`, fondo oscuro `#0A0A0A` (reusados de la web D35/D36).
-- [ ] Estado server: TanStack Query. `device_id` en `expo-secure-store`.
-- [ ] Tests: Jest + React Native Testing Library (pantallas principales + `AlarmScheduler`).
-- [ ] Validar en emulador: navegación, API, pantallas, flujo completo crear/cancelar alerta, verify-then-ring, Doze (`dumpsys deviceidle force-idle`).
-- [ ] **Confirmación en móvil físico**: bypass-silent con `setAlarmClock` (D40) + OEM quirks.
+**Paso 2 — AlarmScheduler + AlarmActivity + verify-then-ring (próxima sesión)**
 
-### Fase 7c — Deploy + smoke real
+- [ ] **`AlarmScheduler`** (nuevo, D40): `AlarmManager.setAlarmClock()` a `estimated_start_at − lead_minutes`. Requiere permiso `USE_EXACT_ALARM` (auto-concedido en Play por ser alarm app, ya en manifest). Persistencia de alarmas programadas en DataStore (para re-programar tras reboot).
+- [ ] **`AlarmReceiver`** (BroadcastReceiver): al disparar la alarma → verify-then-ring: fetch rápido a `GET /api/events/{id}` → si target sigue `pre` y estimación < lead → arranca `AlarmService` + abre `AlarmActivity` (full-screen intent); si ya `in` → notifica sin sonido; si `post`/`cancelled` → silencio.
+- [ ] **`AlarmActivity`** (full-screen): "X vs Y — UFC {event} empieza en ~N min" + botón "Descartar" (stop service). `setShowWhenLocked` + `setTurnScreenOn` + `USE_FULL_SCREEN_INTENT`.
+- [ ] **BootReceiver** (`RECEIVE_BOOT_COMPLETED`): re-programa alarmas tras reinicio del dispositivo.
+- [ ] **Doze validation**: `adb shell dumpsys deviceidle force-idle` → verify `setAlarmClock` despierta puntualmente.
 
-- [ ] Backend en Railway (D33) con env-vars: `FCM_CREDENTIALS`, `FCM_PROJECT_ID`.
-- [ ] Firebase project + `google-services.json` en EAS.
-- [ ] Build EAS free tier → APK interno para el owner.
+**Paso 3 — Pantallas restantes (~1-2 sesiones)**
+
+- [ ] **Eventos** (lista `GET /api/events`) por separado de Home — actualmente Home salta directo al próximo evento.
+- [ ] **Mis Alertas**: `GET /api/subscriptions` + `DELETE /api/subscriptions/{id}` + `GET /api/alerts` historial.
+- [ ] **Ajustes**: timezone, estado permisos, "Probar alarma" → `POST /api/devices/me/test-alarm` (esto requiere FCM, por ahora está el botón "Probar sonido" en Home que arranca `AlarmService` directamente).
+- [ ] **AlarmScreen** (modal full-screen) — descrito arriba en AlarmActivity.
+- [ ] Sonido custom embebido `res/raw/alarm.ogg` (~200-500KB) en lugar de `RingtoneManager.TYPE_ALARM` del spike.
+
+**Paso 4 — Tramo FCM (deps externas, D40)**
+
+- [ ] Firebase project (manual owner): service account JSON → `FCM_CREDENTIALS_JSON` backend + `google-services.json` en `mobile-kotlin/app/`.
+- [ ] Plugin `com.google.gms.google-services` + dep `com.google.firebase:firebase-messaging` (en `build.gradle.kts` y `libs.versions.toml`).
+- [ ] Cliente FCM: `FirebaseMessagingService` handler. Background: `update` → reprogramar `AlarmScheduler`; `started`/`cancelled` → notificación informativa. Foreground: `update` → actualizar UI.
+- [ ] Redis: `docker compose up -d` para desbloquear poller (idempotencia D16).
+
+**Paso 5 — Validación final + deploy (Fase 7c)**
+
+- [ ] Móvil físico Android 14 (bypass DnD real + OEM quirks del owner).
+- [ ] Backend en Railway (D33): env-vars `FCM_CREDENTIALS_JSON` + `FCM_PROJECT_ID` + PG + Redis add-ons.
+- [ ] `./gradlew assembleRelease` local → APK release.
+- [ ] Smoke end-to-end: crear alerta → alarma local suena a la hora estimada en hardware físico con DnD/silencio.
+
+### Fase 7c — Deploy + smoke real (Sesión 14 plan, reescrito con stack Kotlin)
+
+- [ ] Backend en Railway (D33) con env-vars: `FCM_CREDENTIALS_JSON` o `FCM_CREDENTIALS_PATH` + `FCM_PROJECT_ID`.
+- [ ] Firebase project + `google-services.json` en `mobile-kotlin/app/`.
+- [ ] `./gradlew assembleRelease` local → APK interno para el owner (sin EAS cloud).
 - [ ] Smoke: crear alerta, verificar que la alarma local suena en hardware Android físico con DnD/silencio.
 
-### Fase 7d — iOS (post-MVP, D40 vía AlarmKit)
+### Fase 7d — iOS (post-MVP, D40 vía AlarmKit — rewrite SwiftUI, no reutiliza TS de D37)
 
-- [ ] Mismo código Expo con build iOS via EAS.
+- [ ] App iOS nativa SwiftUI (no Expo, D43 pivot descarta reutilizar pantallas TS). Build via Xcode (no EAS).
 - [ ] **AlarmKit** (iOS 26+, WWDC25 sesión 230): `AlarmManager.schedule(id:configuration:)` con `Alarm.Schedule.fixed(date)`, título custom, sonido custom, botón secundario con App Intent para abrir la app. El sistema garantiza bypass de silencio y focus sin Critical Alert Entitlement — solo requiere `NSAlarmKitUsageDescription` en el plist y opt-in del usuario. Ciclo de vida completo: cancelar/reprogramar por id (mismo patrón que `setAlarmClock` en Android).
 - [ ] Requisito mínimo iOS 26 (adopción mayoritaria esperada para cuando se ejecute esta fase). Sin fallback a Critical Alert — el entitlement es discrecional de Apple y lento.
-- [ ] Mismo módulo conceptual `AlarmScheduler` con backend Swift nativo (módulo Expo custom o library de la comunidad si existe).
+- [ ] Mismo contrato API + Retrofit-equivalente en Swift (async/await + URLSession), mismo `device_id` UUID v4ersistente en Keychain.
 
 
 
