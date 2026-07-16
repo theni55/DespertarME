@@ -29,7 +29,10 @@ async def get_current_device(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Falta header X-Device-Id",
         )
-    device_id = x_device_id.strip()
+    # Misma normalización que DeviceCreate._validate_device_id (strip + lower):
+    # el registro persiste el id en minúsculas, así que la auth debe normalizar
+    # igual o un cliente que mande el UUID en mayúsculas recibiría 401 siempre.
+    device_id = x_device_id.strip().lower()
     result = await session.execute(select(Device).where(Device.id == device_id))
     device = result.scalar_one_or_none()
     if device is None:

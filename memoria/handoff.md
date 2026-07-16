@@ -6,53 +6,53 @@
 
 ## Última sesión
 
-**Fecha:** 2026-07-16 · **Sesión 12 — Fase 7a backend Device/FCM: código listo ✅. Pivot User/Twilio → Device/FCM ejecutado end-to-end.**
+**Fecha:** 2026-07-16 · **Sesión 13 — Code review de Fase 7a + 4 fixes bloqueantes ✅. Plan hacia el MVP Android consolidado.**
 
-**Contexto:** tras cerrar el spike Android móvil (emulador + físico) en la Sesión 11, se arrancó la Fase 7a. El plan se cerró con el owner (3 bloques: limpieza bitácora, cierre spike en memorias, Fase 7a con 8 tandas) y se ejecutó sin contratiempos. 78 tests verdes, ruff/black/mypy limpios, migración Alembic en SQLite dev, server levanta con 9 endpoints.
+**Contexto:** review multi-eje (skill `code-review-and-quality`) del commit `6470b24` (Fase 7a, ~2.400 líneas) mergeado a `dev` por el compañero. Veredicto: diseño sólido (idempotencia en profundidad, fixes E2–E8 bien razonados, suite reescrita de calidad) pero con 1 bug crítico + 2 required + 1 de higiene, todos arreglados en esta sesión.
 
-**Logres de la sesión:**
+**Fixes aplicados (con test de regresión cada uno):**
 
-- **Bloque 1 — Bitácora Sesión 11 limpiada**: la sección tenía escapes Unicode literales (`u00f3` como texto real, no como carácter) y caracteres de control (`\x07` BEL) que rompían legibilidad. Reescrito con texto limpio UTF-8.
-- **Bloque 2 — Spike 100% cerrado en memoria**: `handoff.md` actualizado (móvil físico confirmó fix E1 + bypass DnD), `fases.md` checkboxes `Build EAS → móvil` y `Smoke OEM` marcados ✅, `decisiones.md` añadida **D42** (Home póster estático McGregor MVP + mejora post-MVP póster dinámico vía `image_url` en `EventSummaryOut`).
-- **Bloque 3 — Fase 7a backend** (8 tandas):
-  - **Tanda 0 (prep):** `Base.metadata.naming_convention` añadida, `app/common/ids.py` con `new_uuid()` mudado de `auth/dependencies.py`, imports migrados en 2 ficheros.
-  - **Tanda 1 (deps+config):** `pyproject.toml` quita `passlib`, `bcrypt`, `pyjwt`, `twilio`, baja `pydantic[email]`→`pydantic`, añade `firebase-admin>=6.5`. `config.py` borra `jwt_*` (3), `twilio_*` (3) y `_check_production_secrets` juntos; añade `fcm_credentials_path`/`fcm_credentials_json`.
-  - **Tanda 2 (borrado):** eliminados `auth/`, `notifiers/twilio.py`, `api/routes/auth.py` + `users.py`, `db/models/users.py`, `scripts/seed_admin.py`, `web/__pycache__/` (3 .pyc huérfanos), `SportSubscription` + `EventSubscription` del modelo (tablas muertas).
-  - **Tanda 3 (migración Alembic a mano):** `alembic/versions/f7a0001_devices_fase_7a_*.py` (down_revision `a3657c6166f0`). Drop-and-recreate (destructivo: el pivot User→Device no tiene datos migrables). Crea `devices`, recrea `bout_subscriptions` (device_id FK, UNIQUE (device_id,bout_id), sin previous_bout_id) y `alert_log` (device_id, fired_at_epoch_hour). En PG dropea ENUMs `user_role`/`subscription_status`/`alert_status` explícito. Aplicada en SQLite dev: tablas y UNIQUE verificados.
-  - **Tanda 4 (modelos+schemas):** `Device` model creado, `BoutSubscription`/`AlertLog` mutados, `schemas.py` reescrito (DeviceCreate/Out, BoutSubscriptionCreate sin previous_bout_id con `lead_minutes≥5`, BoutSubscriptionOut/AlertLogOut con device_id, EventSummaryOut con `image_url:None` D42, EventCardOut con previous_bout_id server-side).
-  - **Tanda 5 (security+API):** `app/security/device.py` con `get_current_device` (header X-Device-Id estricto, 401/403). `api/routes/devices.py` (POST register/upsert, DELETE me, POST test-alarm). `api/routes/events.py` (GET con caché Redis 5 min, GET detalle con previous_bout_id E4). `main.py` con nuevo wiring devuelto a 5 routers.
-  - **Tanda 6 (notifiers FCM):** `base.py` mutado (PushNotifier/PushResult/AlertPayload data-only con `type` update/started/cancelled/fire), `dummy.py` sin phone, `fcm.py` nuevo (firebase-admin data-only high-priority + asyncio.to_thread), `__init__.py` build_notifier gating + get_notifier singleton compartido por scheduler y test-alarm.
-  - **Tanda 7 (engine bugfixes E2–E8):** `estimator.estimate` añade `observed_at` (E2). `state.py` añade `remember_transition/get_transition` (E2 anclaje in→post, TTL 24 h), `get_last_estimate/set_last_estimate` (D40 push on-change). `poller.py` reescrito: User→Device, E3 guard target (`in`→started, `post`→cancelled+mark fired), E4 previo derivado de card fresca, E2 observed_at pasado al estimador, E6 idempotencia tras éxito + `fired_at_epoch_hour`, E7 retries a `(2.0,)`, E8 agrupa subs por `event_id` con caché de Card, D40 push on-change con `MIN_DELTA_SECONDS=60`. `espn_ufc.py` E5 (`_on_failure` solo si `_is_retryable`) + `list_upcoming_events` filtra pasados por fecha + paraleliza con `asyncio.gather` limitado a 4. `scheduler.py` `misfire_grace_time=120` + `get_notifier()`.
-  - **Tanda 8 (tests+lint+types):** `tests/conftest.py` añade scheduler/Firebase deshabilitado via env, `FakeNotifier` capturador, `FakeProvider` con `set_target_state/set_prev_state` independientes (E3), `make_device` helper. `tests/test_api.py` reescrito (15 tests con X-Device-Id, sin register/login/JWT). `tests/test_poller.py` reescrito (15 tests cubriendo E2/E3/E4/E6/E7 + D40 push on-change). `tests/test_notifiers.py` reescrito (8 tests FCM con firebase_admin mockeado + build_notifier gating). `tests/test_espn_ufc.py` añadido `test_e5_circuit_breaker_does_not_open_on_4xx` + ajustado `test_list_upcoming_events_returns_non_empty_list` (cutoff fijo). **Nuevo `tests/test_events_route.py`** (3 tests: lista image_url=None, detalle previous_bout_id server-side, 503 si provider cae). Total: **78 tests verdes** (54 preexistentes reescritos + 24 nuevos). ruff/black/mypy limpios.
+1. **[Critical] FCM roto en producción** (`notifiers/fcm.py`): la app Firebase se inicializa con nombre propio (`despertarme-fcm`) pero `messaging.send(message, False)` sin `app=` resuelve contra la app *default* (inexistente) → `ValueError` en **cada** envío real. Los tests no lo veían porque mockean `messaging` entero. Fix: `send(message, False, self._app)` + `get_app(name="despertarme-fcm")` para reutilizar la app nombrada al re-instanciar. Assert de regresión en `test_fcm_notifier_send_returns_message_id_on_success`.
+2. **[Required] Caché de events ignoraba `include_past_hours`** (`api/routes/events.py`): clave fija `events:upcoming:ufc` → una query con cutoff distinto servía/poblaba la lista de otra durante el TTL. Fix: solo la query default (`include_past_hours == 0`, la que usa la app) lee/escribe caché. Test nuevo `test_list_events_cache_only_applies_to_default_query` (fakeredis inyectado en los singletons del router).
+3. **[Required] Normalización asimétrica del `device_id`**: el registro hace `.strip().lower()` (`schemas.py`) pero la auth solo `.strip()` (`security/device.py`) → un cliente con UUID en mayúsculas se registraba bien y luego recibía 401 siempre. Fix: misma normalización en `get_current_device`. Test nuevo `test_device_header_is_case_insensitive`.
+4. **[Higiene] `inst_user_settings.tmp` eliminado**: temporal del instalador de Android Studio (con rutas locales del compañero) commiteado por accidente en `f2ad55e`. Borrado + `*.tmp` en `.gitignore`.
 
-**Pendientes externos (no bloquea Fase 7b):** Firebase project + service account key JSON + `google-services.json` para la app (manual del owner). Deploy Railway (cuenta del owner).
+**Hallazgos de la review NO arreglados (deuda consciente, para 7b/7c):**
 
-**Memorias actualizadas:** `handoff.md` (esta entrada), `bitacora.md` (Sesión 12), `fases.md` (Fase 7a completada con resumen ejecutivo), `decisiones.md` (D42). Commit + push a `dev` pendientes.
+- **alert_log UNIQUE traga auditoría**: `(subscription_id, bout_id, fired_at_epoch_hour)` era de la era fire-once; con D40 puede haber varios `update` (o `update`+`started`) del mismo sub/bout en la misma hora → el 2º insert choca con IntegrityError y el push queda enviado pero sin auditar. Propuesta: añadir `message_type` al UNIQUE (migración pequeña).
+- **`POST /api/devices` es upsert sin auth con ID de cliente**: quien conozca un `device_id` puede sobrescribir su `fcm_token`. Aceptable MVP (UUID opaco), pero sin rate-limiting y `min_length=32` admite no-UUIDs. Propuesta: validar UUID v4 estricto.
+- Nits: `attempts` en `_log_alert` registra siempre el máximo; `session` inyectada sin uso en events; `downgrade()` de la migración recrearía ENUMs sin valores en PG (best-effort, irrelevante); `get_transition` posiblemente dead code.
+
+**Verificación:** 80 tests verdes (78 + 2 nuevos), ruff/black/mypy limpios.
 
 ---
 
-## Próximos pasos (ordenados para el continuador)
+## Próximos pasos (plan MVP Android, ordenado por dependencia)
 
-### Paso 1 — Fase 7b (app Android v1, D40/D41)
+El camino crítico es la **Fase 7b**; todo lo demás son horas, no días.
 
-Ver checklist completo en `fases.md` §Fase 7b. El backend de Fase 7a está listo para consumir. Piezas nuevas:
-
-1. `AlarmScheduler` con `AlarmManager.setAlarmClock()` programado a `estimated_start_at − lead` (D40). Verify-then-ring: al disparar, fetch `GET /api/events/{id}` (disponible ahora) → si target sigue `pre` y estimación < lead → arranca `AlarmService` (refactor del spike con sonido custom + `AlarmActivity` full-screen). Si ya empezó → notificación silenciosa. Si cancelado → reprogramar la alarma local.
-2. Refactor `AlarmService` del spike: sonido custom embebido `res/raw/alarm.ogg` (en vez de `RingtoneManager.TYPE_ALARM` por defecto), `AlarmActivity` full-screen intent (`setShowWhenLocked`/`setTurnScreenOn`).
-3. Cliente FCM: `@reactnative-firebase/messaging`. Handler background: `update` → `AlarmManager.setAlarmClock` (NO arrancar service). Handler foreground: `update` → actualizar UI; `started`/`cancelled` → notificación informativa. `google-services.json` en `mobile/android/app/`.
-4. `expo-secure-store` para `device_id` (UUID v4 generado en 1ª launch).
-5. Pantallas Expo Router Tabs: Home (hero + botón "Avísame" + "Eventos"), Eventos (desde `GET /api/events`), EventDetail (`GET /api/events/{id}`), Mis Alertas, Ajustes (con `POST /api/devices/me/test-alarm`), AlarmScreen modal.
-6. Design tokens: Inter, rojo UFC `#E50914`, fondo oscuro `#0A0A0A` (reusados de la web D35/D36). Home usa `hero.webp` de McGregor estática (D42) hasta que ESPN proporcione `image_url`.
-
-### Paso 2 — Firebase (manual del owner, paralelo a 7b)
+### Paso 0 — Firebase (manual del owner, ~30 min, desbloquea el smoke real)
 
 1. Crear proyecto Firebase.
-2. Service account key JSON (Python) → `FCM_CREDENTIALS_JSON` o path a un fichero.
-3. `google-services.json` para la app Android (entra en `mobile/android/app/`).
+2. Service account key JSON → env-var `FCM_CREDENTIALS_JSON` (backend; sin ella cae a `DummyNotifier`).
+3. `google-services.json` → `mobile/android/app/` (app).
 
-### Paso 3 — Fase 7c (deploy + smoke real)
+### Paso 1 — Fase 7b (app Android v1, D40/D41 — el grueso, ~3-5 sesiones)
 
-Backend en Railway con PG + Redis add-ons, `FCM_CREDENTIALS_JSON` env-var. Build EAS → APK. Smoke end-to-end: crear alerta → alarma local suena en hardware Android con DnD activo.
+Ver checklist completo en `fases.md` §Fase 7b. Hoy `mobile/` solo tiene el spike (1 pantalla, sonido). Prioridad dentro de 7b: **el `AlarmScheduler` + verify-then-ring es lo que valida el MVP; las pantallas son trabajo mecánico.**
+
+1. **Nativo (Kotlin):** `AlarmScheduler` con `AlarmManager.setAlarmClock()` a `estimated_start − lead` + verify-then-ring (fetch `GET /api/events/{id}` al sonar → sonar/reprogramar/silenciar). Refactor `AlarmService` del spike: `res/raw/alarm.ogg` custom + `AlarmActivity` full-screen. Permisos nuevos: `USE_EXACT_ALARM`, `USE_FULL_SCREEN_INTENT`, `RECEIVE_BOOT_COMPLETED`.
+2. **JS/TS:** cliente FCM (`@reactnative-firebase/messaging`; background `update` → reprogramar alarma, NO arrancar service), `device_id` UUID en `expo-secure-store` + `POST /api/devices`, TanStack Query.
+3. **Pantallas (Expo Router Tabs):** Home (hero McGregor D42 + "Avísame"), Eventos, EventDetail (selector lead 5/10/15/30/60), Mis Alertas, Ajustes (test-alarm), AlarmScreen modal. Tokens: Inter, `#E50914`, `#0A0A0A`.
+4. **Validación:** emulador (flujo completo + Doze `dumpsys deviceidle force-idle`) → móvil físico (bypass DnD + quirks OEM).
+
+### Paso 2 — Fase 7c (deploy + smoke real, ~1 sesión)
+
+Backend en Railway (PG + Redis + `FCM_CREDENTIALS_JSON`). Build EAS → APK. Smoke end-to-end: crear alerta → poller detecta fin del previo → push `update` → alarma local suena con DnD activo.
+
+### Paso 3 — Deuda de la review (oportunista, no bloquea)
+
+`message_type` en el UNIQUE de alert_log · UUID v4 estricto en `DeviceCreate` · nits listados arriba. Pedir al compañero PRs más pequeñas en 7b (las "tandas" son fronteras naturales de commit).
 
 ---
 
@@ -69,7 +69,7 @@ Backend en Railway con PG + Redis add-ons, `FCM_CREDENTIALS_JSON` env-var. Build
 | Fase 4 — Boxeo/Tenis reales | Pendiente (fuera del MVP) |
 | Fase 5 — VoiceNotifier real (Twilio) | ❄️ **Obsoleta** — sustituida por FCM (D37/D40) |
 | Fase 6 — Rediseño visual + landing dinámica | ❄️ **Congelada** — rama `web` |
-| Fase 7 — App móvil | 🔶 **En curso** — Spike **100% cerrado** ✅ (emulador + móvil físico), **Fase 7a (backend Device/FCM) código listo** ✅, sesión sin Firebase real todavía. Próximo: Fase 7b (app Android con AlarmScheduler D40). |
+| Fase 7 — App móvil | 🔶 **En curso** — Spike ✅, Fase 7a (backend Device/FCM) ✅ **+ review con 4 fixes aplicados** ✅. Próximo: Firebase (owner) + Fase 7b (app Android con AlarmScheduler D40). |
 
 Detalle de checkboxes en `fases.md`.
 
@@ -77,8 +77,8 @@ Detalle de checkboxes en `fases.md`.
 
 ## Ramas
 
-- `dev` (activa): backend API-only + `mobile/` spike + memoria viva. Commit + push de la Sesión 12 pendiente.
-- `main`: sincronizada con `dev`.
+- `dev` (activa): backend API-only + `mobile/` spike + memoria viva. Sesión 13 (review + fixes) commiteada y pusheada.
+- `main`: sincronizada con `dev` hasta Fase MVP-launch (el pivot 7a aún no está en main).
 - `web` (congelada en `dcf62f8`): landing, admin web, `/app/*`. `git checkout web` para consultarla.
 
 ---
@@ -105,7 +105,7 @@ uvicorn app.main:app --reload
 .\.venv\Scripts\Activate.ps1            # activar venv
 alembic upgrade head                    # aplicar migraciones (SQLite dev)
 uvicorn app.main:app --reload            # servidor dev (API-only)
-pytest -v                                # tests (78 verdes en dev)
+pytest -v                                # tests (80 verdes en dev)
 python scripts/probe_espn.py              # smoke ESPN en vivo
 ruff check src tests                      # lint
 black --check src tests scripts           # formato

@@ -90,9 +90,13 @@ async def list_events(
     """
     provider = _get_provider()
     cutoff = datetime.now(UTC) - timedelta(hours=include_past_hours)
+    # La caché solo aplica a la query default (include_past_hours=0, la que usa
+    # la app): la clave es única y cachear variantes con otros cutoffs serviría
+    # resultados de una query distinta durante el TTL.
+    cacheable = include_past_hours == 0
     # Intentamos caché
     raw_cache: str | None = None
-    if _redis is not None:
+    if cacheable and _redis is not None:
         try:
             raw_cache = await _redis.get(EVENTS_LIST_CACHE_KEY)
         except Exception:
@@ -118,8 +122,8 @@ async def list_events(
         EventSummaryOut(id=s.id, name=s.name, date=_parse_iso_z(s.date), image_url=None)
         for s in summaries
     ]
-    # Guardar en caché (best-effort)
-    if _redis is not None and out:
+    # Guardar en caché (best-effort, solo la query default)
+    if cacheable and _redis is not None and out:
         import json
 
         try:

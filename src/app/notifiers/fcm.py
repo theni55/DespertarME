@@ -68,8 +68,11 @@ class FcmNotifier(PushNotifier):
                 "FcmNotifier requiere FCM_CREDENTIALS_PATH o FCM_CREDENTIALS_JSON configurados."
             )
         cred_obj = fb_credentials.Certificate(creds)
+        # App con nombre propio para no colisionar con una posible app default
+        # de otro componente. Si ya existe (re-instanciación del notifier en el
+        # mismo proceso), se reutiliza en vez de re-inicializar.
         try:
-            self._app = firebase_admin.get_app()
+            self._app = firebase_admin.get_app(name="despertarme-fcm")
         except ValueError:
             self._app = firebase_admin.initialize_app(cred_obj, name="despertarme-fcm")
         logger.info("FcmNotifier inicializado con proyecto=%s", creds.get("project_id"))
@@ -84,7 +87,10 @@ class FcmNotifier(PushNotifier):
         start = time.monotonic()
         try:
             # SDK síncrono → asyncio.to_thread para no bloquear el event loop.
-            msg_id = await asyncio.to_thread(self._messaging.send, message, False)
+            # `app=self._app` es obligatorio: la app se inicializa con nombre
+            # propio ("despertarme-fcm") y sin el kwarg `messaging.send` resuelve
+            # contra la app *default*, que no existe → ValueError en cada envío.
+            msg_id = await asyncio.to_thread(self._messaging.send, message, False, self._app)
             return PushResult(
                 success=True,
                 message_id=str(msg_id),

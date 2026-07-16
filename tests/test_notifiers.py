@@ -129,6 +129,10 @@ async def test_fcm_notifier_send_returns_message_id_on_success() -> None:
     assert msg is not None
     assert messaging_mod.AndroidConfig.called
     messaging_mod.send.assert_called_once()
+    # Regresión (review Fase 7a): la app se inicializa con nombre propio
+    # ("despertarme-fcm"), así que `messaging.send` DEBE recibirla explícita;
+    # sin ella resuelve contra la app default (inexistente) y todo envío falla.
+    assert args[2] is notifier._app
 
 
 async def test_fcm_notifier_send_returns_failure_on_exception() -> None:

@@ -601,3 +601,28 @@ plataforma (Vercel/CF Pages descartados: serverless no soporta el scheduler
 - **Memorias actualizadas**: `handoff.md` (esta entrada), `bitacora.md` (esta entrada), `fases.md` (Fase 7a marcada completada con resumen ejecutivo inline), `decisiones.md` (D42 + ítem 6 en pendientes). Commit + push a `dev` pendientes.
 
 - **Pendiente para próxima sesión**: Fase 7b — app Android v1 con `AlarmScheduler` (`setAlarmClock` + verify-then-ring D40), refactor `AlarmService` (sonido custom + `AlarmActivity` full-screen), cliente FCM `@reactnative-firebase/messaging`, Expo Router Tabs (Home con `hero.webp` estático D42 / Eventos / Mis Alertas / Ajustes), `expo-secure-store` para `device_id`.
+
+## Sesión 13 — Code review Fase 7a + 4 fixes bloqueantes (2026-07-16)
+
+- **Contexto**: el compañero (theni55) pusheó a `dev` la Sesión 12 completa (5 commits, `1018cbc..6470b24`): fix E1 del spike + docs Sesiones 10-11 + el commit grande `6470b24` con la Fase 7a (~2.400 líneas). El owner pidió traer los cambios, explicarlos y hacer review formal.
+
+- **Review multi-eje** (skill `code-review-and-quality`) del commit `6470b24`. Veredicto: **request changes** — diseño sólido (idempotencia Redis+UNIQUE en profundidad, E2–E8 bien razonados y testeados, consciencia del MissingGreenlet async) pero 1 Critical + 2 Required + 1 higiene. Verificación del estado recibido: 78 tests verdes, ruff/black/mypy limpios — los tests no podían detectar el bug crítico porque mockean `firebase_admin.messaging` entero.
+
+- **Fixes aplicados (cada uno con test de regresión):**
+  1. **[Critical] FCM app nombrada vs default** (`notifiers/fcm.py`): `initialize_app(cred, name="despertarme-fcm")` crea app *nombrada* pero `messaging.send(message, False)` sin `app=` resuelve contra la *default* (inexistente) → `ValueError: The default Firebase app does not exist` en el 100% de envíos reales. Habría explotado en el primer smoke de Fase 7c. Fix: `send(message, False, self._app)` + `get_app(name="despertarme-fcm")` en init para reutilizar app existente al re-instanciar. Assert de regresión: `args[2] is notifier._app` en test de éxito.
+  2. **[Required] Caché de events cruzada** (`api/routes/events.py`): clave fija `events:upcoming:ufc` sin `include_past_hours` → el primer request poblaba la caché con su cutoff y durante 5 min todas las variantes recibían esa lista. Fix: flag `cacheable = include_past_hours == 0` — solo la query default (la de la app) lee/escribe. Test nuevo: `test_list_events_cache_only_applies_to_default_query` (fakeredis inyectado en singletons del router, pre-poblado con lista distinta, verifica bypass para query no-default y hit para default).
+  3. **[Required] Normalización asimétrica del device_id**: `DeviceCreate._validate_device_id` hace `.strip().lower()` pero `get_current_device` solo `.strip()` → cliente con UUID en mayúsculas se registraba OK (persistido lowercase) y recibía 401 en toda llamada autenticada. Fix: `.strip().lower()` también en la auth. Test nuevo: `test_device_header_is_case_insensitive`.
+  4. **[Higiene] `inst_user_settings.tmp`**: temporal del instalador de Android Studio (UTF-16, con rutas locales `C:\Users\pacor\...` del compañero) commiteado por accidente en `f2ad55e` ("emulador"). `git rm` + `*.tmp` en `.gitignore`.
+
+- **Hallazgos NO arreglados (deuda consciente, registrada en handoff Paso 3):**
+  - **Consider — alert_log UNIQUE traga auditoría**: `(subscription_id, bout_id, fired_at_epoch_hour)` es de la era fire-once; con D40 varios `update` (o `update`+`started`) del mismo sub/bout en la misma hora → 2º insert choca (IntegrityError→rollback) y el push queda enviado pero sin fila de auditoría. Propuesta: añadir `message_type` al UNIQUE.
+  - **Consider — `POST /api/devices` upsert sin auth con ID de cliente**: quien conozca un `device_id` puede sobrescribir su `fcm_token` (secuestro de alertas). Aceptable MVP (UUID opaco) pero sin rate-limiting y `min_length=32` admite no-UUIDs. Propuesta: validación UUID v4 estricta.
+  - **Nits**: `attempts` en `_log_alert` registra siempre el máximo aunque el push salga al 1er intento; `session` inyectada sin uso (noqa) en events; `downgrade()` de la migración recrearía ENUMs sin valores en PG (best-effort, irrelevante); `get_transition` en `state.py` posiblemente dead code; commit de 2.400 líneas demasiado grande — pedir tandas como commits en 7b.
+
+- **Plan MVP Android consolidado en handoff** (qué falta para app funcional): Paso 0 Firebase (manual owner, ~30 min) → Paso 1 Fase 7b (la app, 3-5 sesiones, camino crítico = `AlarmScheduler` + verify-then-ring) → Paso 2 Fase 7c (Railway + EAS + smoke) → Paso 3 deuda review oportunista.
+
+- **Verificación final**: **80 tests verdes** (78 + `test_device_header_is_case_insensitive` + `test_list_events_cache_only_applies_to_default_query`), ruff ✅, black ✅, mypy ✅ (37 ficheros).
+
+- **Memorias actualizadas**: `handoff.md` (Sesión 13 + plan MVP por dependencias + estado global), `bitacora.md` (esta entrada). Commit + push a `dev`.
+
+- **Pendiente para próxima sesión**: Firebase (owner) en paralelo; arrancar Fase 7b por el native module (`AlarmScheduler` + refactor `AlarmService` + permisos), después cliente FCM + pantallas.

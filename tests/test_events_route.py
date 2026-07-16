@@ -97,3 +97,52 @@ def test_get_event_detail_returns_503_when_provider_fails(client: TestClient) ->
     # Sin respx.mock → httpx intenta la red real y falla → el router captura.
     resp = client.get("/api/events/does-not-exist")
     assert resp.status_code == 503
+
+
+@respx.mock
+def test_list_events_cache_only_applies_to_default_query(client: TestClient) -> None:
+    """Regresión (review Fase 7a): la clave de caché es única y no incluye
+    `include_past_hours`, así que solo la query default (0) puede leer/escribir
+    caché. Antes, una query con otro cutoff servía la lista cacheada de la
+    default (y viceversa) durante el TTL."""
+    from fakeredis import aioredis as fakeredis_aio
+
+    from app.providers.espn_ufc import EspnUfcProvider
+
+    respx.get(url=f"{BASE}/sports/mma/leagues/{LEAGUE}/events?seasontype=2").respond(
+        json=_load("event_list.json")
+    )
+    respx.get(url=f"{BASE}/sports/mma/leagues/{LEAGUE}/events/{EVENT_ID}").respond(
+        json=_load(f"event_{EVENT_ID}.json")
+    )
+
+    events_route._provider = EspnUfcProvider()
+    fake_redis = fakeredis_aio.FakeRedis(decode_responses=True)
+    events_route._redis = fake_redis
+
+    # Pre-poblar la caché con una lista distinta a la del provider.
+    cached_list = json.dumps(
+        [
+            {
+                "id": "cached-ev",
+                "name": "CACHED",
+                "date": "2026-01-01T00:00:00+00:00",
+                "image_url": None,
+            }
+        ]
+    )
+    import asyncio
+
+    asyncio.run(fake_redis.set(events_route.EVENTS_LIST_CACHE_KEY, cached_list))
+
+    # Query NO default → debe ignorar la caché y responder desde el provider.
+    resp = client.get("/api/events", params={"include_past_hours": 24 * 365})
+    assert resp.status_code == 200, resp.text
+    ids = [e["id"] for e in resp.json()]
+    assert "cached-ev" not in ids
+    assert EVENT_ID in ids
+
+    # Query default → sí lee la caché.
+    resp = client.get("/api/events")
+    assert resp.status_code == 200
+    assert [e["id"] for e in resp.json()] == ["cached-ev"]

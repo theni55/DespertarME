@@ -220,6 +220,8 @@ Sin Android Studio aún → el continuador instala Android Studio + emulador API
 
 **Verificación final:** `ruff check src tests` ✅ · `black --check src tests` ✅ · `mypy src/app` ✅ · `pytest` **78/78 verdes** · `alembic upgrade head` en SQLite dev ✅ · smoke TestClient `/health` + `/openapi.json` 9 paths ✅.
 
+**Code review post-merge (Sesión 13, 2026-07-16) — 4 fixes aplicados:** review multi-eje del commit `6470b24` con veredicto request-changes. Arreglados con test de regresión: (1) **Critical** — `FcmNotifier` inicializaba app Firebase *nombrada* pero `messaging.send` sin `app=` resolvía contra la default inexistente → 100% de envíos reales fallarían (`send(message, False, self._app)`); (2) caché de `GET /api/events` con clave única servía resultados de una query a otra con distinto `include_past_hours` (ahora solo cachea la default); (3) auth de `X-Device-Id` no normalizaba a lowercase como el registro → 401 con UUIDs en mayúsculas; (4) `inst_user_settings.tmp` (temporal de Android Studio) fuera del repo + `*.tmp` en `.gitignore`. **80 tests verdes** tras los fixes. Deuda registrada en handoff Paso 3: `message_type` en UNIQUE de alert_log (los `update` D40 del mismo sub/hora chocan y se pierden filas de auditoría), UUID v4 estricto en `DeviceCreate`, nits menores.
+
 **Eliminar era User/Twilio:**
 
 - [ ] **Preparación previa (antes de borrar `auth/`)**: mover `new_uuid()` de `auth/dependencies.py:57` a un util neutro (lo importa `subscriptions.py:13` y `auth.py:11` — si se borra `auth/` en bloque, `subscriptions.py` deja de importar).

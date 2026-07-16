@@ -76,3 +76,6 @@ logs/
 
 # OS
 Thumbs.db
+
+# Temporales de instaladores (p.ej. Android Studio deja inst_user_settings.tmp)
+*.tmp

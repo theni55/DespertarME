@@ -164,6 +164,18 @@ def test_subscriptions_unknown_device_unauthorized(app_client: TestClient) -> No
     assert resp.status_code == 401
 
 
+def test_device_header_is_case_insensitive(app_client: TestClient) -> None:
+    """Regresión (review Fase 7a): el registro normaliza el device_id a
+    minúsculas, así que la auth debe aceptar el UUID en mayúsculas también."""
+    _register_device(app_client, device_id="AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE")
+    resp = app_client.get(
+        "/api/subscriptions",
+        headers={"X-Device-Id": "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"},
+    )
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
 def test_deactivate_device_me(app_client: TestClient) -> None:
     _register_device(app_client)
     headers = _headers("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")
