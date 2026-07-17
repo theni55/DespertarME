@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "523788685631",
+    "project_id": "despertarme-73d00",
+    "storage_bucket": "despertarme-73d00.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:523788685631:android:b1354c4e26ca2c4df8438a",
+        "android_client_info": {
+          "package_name": "com.despertarme.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB4EVZkhixPPiV5sdv53HwUGb62qI3VStU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
