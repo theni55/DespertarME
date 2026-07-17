@@ -1,5 +1,6 @@
 package com.despertarme.app.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,7 +20,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -58,6 +59,7 @@ import com.despertarme.app.ui.theme.BlueCorner
 import com.despertarme.app.ui.theme.RedCorner
 import com.despertarme.app.ui.theme.SurfaceDark
 import com.despertarme.app.ui.theme.TextSecondary
+import com.despertarme.app.ui.theme.UfcRed
 
 private val LEAD_OPTIONS = listOf(5, 10, 15, 30, 60)
 
@@ -83,7 +85,7 @@ fun EventDetailScreen(
                 title = { Text(state.event?.name ?: "Evento") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Filled.ArrowBack, contentDescription = "Volver")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver")
                     }
                 },
             )
@@ -123,6 +125,9 @@ fun EventDetailScreen(
                     items(state.event.bouts, key = { it.id }) { bout ->
                         BoutCard(
                             bout = bout,
+                            // El backend lista los combates en orden cronologico:
+                            // el primero es el proximo en suceder (evento futuro).
+                            isNext = bout.id == state.event.bouts.firstOrNull()?.id,
                             subscribed = state.subscribedBouts.contains(bout.id),
                             onSubscribe = { lead -> onSubscribe(bout, lead) },
                         )
@@ -138,6 +143,7 @@ fun EventDetailScreen(
 @Composable
 private fun BoutCard(
     bout: BoutOut,
+    isNext: Boolean,
     subscribed: Boolean,
     onSubscribe: (Int) -> Unit,
 ) {
@@ -146,9 +152,24 @@ private fun BoutCard(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = SurfaceDark),
+        border = if (isNext) BorderStroke(1.dp, UfcRed) else null,
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
+                if (isNext) {
+                    Text(
+                        text = "PRÓXIMO",
+                        color = Color.White,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.sp,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(UfcRed)
+                            .padding(horizontal = 6.dp, vertical = 2.dp),
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                }
                 Text(
                     text = "#${bout.matchNumber}",
                     color = TextSecondary,
@@ -156,15 +177,7 @@ private fun BoutCard(
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 if (bout.cardSegment != null) {
-                    Text(
-                        text = bout.cardSegment,
-                        color = TextSecondary,
-                        fontSize = 12.sp,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(Color.White.copy(alpha = 0.08f))
-                            .padding(horizontal = 6.dp, vertical = 2.dp),
-                    )
+                    SegmentBadge(segment = bout.cardSegment)
                 }
                 Spacer(modifier = Modifier.width(8.dp))
                 if (bout.weightClass != null) {
@@ -231,6 +244,24 @@ private fun BoutCard(
             }
         }
     }
+}
+
+@Composable
+private fun SegmentBadge(segment: String) {
+    // "main" en rojo de marca, prelims en azul apagado — antes gris plano.
+    val isMain = segment.startsWith("main", ignoreCase = true)
+    val bg = if (isMain) UfcRed.copy(alpha = 0.22f) else BlueCorner.copy(alpha = 0.18f)
+    val fg = if (isMain) UfcRed else BlueCorner
+    Text(
+        text = segment.uppercase(),
+        color = fg,
+        fontSize = 11.sp,
+        fontWeight = FontWeight.SemiBold,
+        modifier = Modifier
+            .clip(RoundedCornerShape(4.dp))
+            .background(bg)
+            .padding(horizontal = 6.dp, vertical = 2.dp),
+    )
 }
 
 @Composable

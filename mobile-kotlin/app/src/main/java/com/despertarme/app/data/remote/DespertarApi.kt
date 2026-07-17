@@ -1,9 +1,11 @@
 package com.despertarme.app.data.remote
 
 import retrofit2.http.Body
+import retrofit2.http.DELETE
 import retrofit2.http.GET
 import retrofit2.http.POST
 import retrofit2.http.Path
+import retrofit2.http.Query
 
 interface DespertarApi {
 
@@ -21,4 +23,10 @@ interface DespertarApi {
 
     @GET("/api/subscriptions")
     suspend fun listSubscriptions(): List<BoutSubscriptionOut>
+
+    @DELETE("/api/subscriptions/{id}")
+    suspend fun deleteSubscription(@Path("id") id: String)
+
+    @GET("/api/alerts")
+    suspend fun listAlerts(@Query("limit") limit: Int = 50): List<AlertLogOut>
 }

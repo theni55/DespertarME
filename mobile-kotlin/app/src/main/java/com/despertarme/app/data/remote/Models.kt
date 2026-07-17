@@ -69,6 +69,20 @@ data class BoutSubscriptionCreate(
 )
 
 @Serializable
+data class AlertLogOut(
+    val id: String,
+    @SerialName("subscription_id") val subscriptionId: String,
+    @SerialName("device_id") val deviceId: String,
+    @SerialName("bout_id") val boutId: String,
+    @SerialName("fired_at") val firedAt: String,
+    @SerialName("fired_at_epoch_hour") val firedAtEpochHour: Long,
+    val status: String,
+    val attempts: Int,
+    @SerialName("notifier_response") val notifierResponse: String? = null,
+    val payload: String? = null,
+)
+
+@Serializable
 data class BoutSubscriptionOut(
     val id: String,
     @SerialName("device_id") val deviceId: String,

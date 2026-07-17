@@ -19,6 +19,7 @@ class AlarmService : Service() {
         const val NOTIFICATION_ID = 1
         const val CHANNEL_ID = "despertarme.alarm"
         const val ACTION_START = "com.despertarme.app.action.START_ALARM"
+        const val ACTION_STOP = "com.despertarme.app.action.STOP_ALARM"
         private const val WAKE_TAG = "despertarme:alarm"
     }
 
@@ -26,6 +27,11 @@ class AlarmService : Service() {
     private var wakeLock: PowerManager.WakeLock? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == ACTION_STOP) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+            return START_NOT_STICKY
+        }
         if (intent?.action != ACTION_START) {
             stopSelf()
             return START_NOT_STICKY

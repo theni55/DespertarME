@@ -24,6 +24,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -41,7 +45,11 @@ fun HomeScreen(
     isLoading: Boolean,
     onNextEvent: () -> Unit,
     onTestAlarm: () -> Unit,
+    onStopAlarm: () -> Unit,
 ) {
+    // Toggle local: "Probar sonido" arranca el service y el mismo boton pasa a
+    // "Parar sonido" — sin el toggle no habia forma de silenciar desde la app.
+    var testPlaying by remember { mutableStateOf(false) }
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -114,11 +122,14 @@ fun HomeScreen(
                 }
                 Spacer(modifier = Modifier.height(10.dp))
                 OutlinedButton(
-                    onClick = onTestAlarm,
+                    onClick = {
+                        if (testPlaying) onStopAlarm() else onTestAlarm()
+                        testPlaying = !testPlaying
+                    },
                     shape = RoundedCornerShape(50),
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text(text = "Probar sonido")
+                    Text(text = if (testPlaying) "Parar sonido" else "Probar sonido")
                 }
             }
         }

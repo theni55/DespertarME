@@ -6,8 +6,20 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -16,20 +28,34 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.despertarme.app.alarm.AlarmService
 import com.despertarme.app.data.AppContainer
 import com.despertarme.app.data.remote.EventSummaryOut
 import com.despertarme.app.ui.screens.EventDetailScreen
+import com.despertarme.app.ui.screens.EventListScreen
 import com.despertarme.app.ui.screens.HomeScreen
+import com.despertarme.app.ui.screens.SettingsScreen
+import com.despertarme.app.ui.screens.SubscriptionsScreen
 import com.despertarme.app.ui.theme.DespertarTheme
+import com.despertarme.app.ui.theme.SurfaceDark
+import com.despertarme.app.ui.theme.TextSecondary
+import com.despertarme.app.ui.theme.UfcRed
 import com.despertarme.app.ui.viewmodel.EventDetailViewModel
+import com.despertarme.app.ui.viewmodel.EventDetailViewModelFactory
 import com.despertarme.app.ui.viewmodel.EventListLoader
+import com.despertarme.app.ui.viewmodel.EventListViewModel
+import com.despertarme.app.ui.viewmodel.EventListViewModelFactory
+import com.despertarme.app.ui.viewmodel.SubscriptionsViewModel
+import com.despertarme.app.ui.viewmodel.SubscriptionsViewModelFactory
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
@@ -47,7 +73,11 @@ class MainActivity : ComponentActivity() {
         setContent {
             DespertarTheme {
                 Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                    AppGraph(container = container, onTestAlarm = ::startTestAlarm)
+                    AppGraph(
+                        container = container,
+                        onTestAlarm = ::startTestAlarm,
+                        onStopAlarm = ::stopTestAlarm,
+                    )
                 }
             }
         }
@@ -57,64 +87,153 @@ class MainActivity : ComponentActivity() {
         val intent = Intent(this, AlarmService::class.java).apply { action = AlarmService.ACTION_START }
         startForegroundService(intent)
     }
+
+    private fun stopTestAlarm() {
+        val intent = Intent(this, AlarmService::class.java).apply { action = AlarmService.ACTION_STOP }
+        startService(intent)
+    }
 }
+
+private data class TopLevelDestination(
+    val route: String,
+    val label: String,
+    val icon: ImageVector,
+)
+
+private val TOP_LEVEL_DESTINATIONS = listOf(
+    TopLevelDestination("home", "Home", Icons.Filled.Home),
+    TopLevelDestination("events", "Eventos", Icons.Filled.CalendarMonth),
+    TopLevelDestination("subscriptions", "Mis Alertas", Icons.Filled.Notifications),
+    TopLevelDestination("settings", "Ajustes", Icons.Filled.Settings),
+)
 
 @Composable
 private fun AppGraph(
     container: AppContainer,
     onTestAlarm: () -> Unit,
+    onStopAlarm: () -> Unit,
 ) {
     val navController = rememberNavController()
-    val vm: EventDetailViewModel = viewModel(factory = com.despertarme.app.ui.viewmodel.EventDetailViewModelFactory(container))
+    val detailVm: EventDetailViewModel = viewModel(factory = EventDetailViewModelFactory(container))
+    val eventsVm: EventListViewModel = viewModel(factory = EventListViewModelFactory(container))
+    val subsVm: SubscriptionsViewModel = viewModel(factory = SubscriptionsViewModelFactory(container))
 
     // Resolve the next event ahead of time so Home's "Avísame" can navigate
     // straight into EventDetail without blocking the UI.
     var nextEvent by remember { mutableStateOf<EventSummaryOut?>(null) }
     var resolvingNext by remember { mutableStateOf(true) }
     LaunchedEffect(Unit) {
-        kotlinx.coroutines.withContext(Dispatchers.IO) {
+        withContext(Dispatchers.IO) {
             nextEvent = EventListLoader(container).nextEvent()
             resolvingNext = false
         }
     }
 
-    NavHost(navController = navController, startDestination = "home") {
-        composable("home") {
-            HomeScreen(
-                isLoading = resolvingNext && nextEvent == null,
-                onNextEvent = {
-                    val event = nextEvent
-                    if (event != null) {
-                        vm.clearSnack()
-                        navController.navigate("event/${event.id}")
-                    }
-                },
-                onTestAlarm = onTestAlarm,
-            )
-        }
-        composable("event/{eventId}") { backStackEntry ->
-            val eventId = backStackEntry.arguments?.getString("eventId") ?: "none"
-            LaunchedEffect(eventId) { vm.load(eventId) }
-            val state by vm.state.collectAsState()
-            val snack by vm.snackMessage.collectAsState()
-            EventDetailScreen(
-                state = state,
-                snackbarMessage = snack,
-                onDismissSnack = { vm.clearSnack() },
-                onBack = { navController.popBackStack() },
-                onSubscribe = { bout, lead ->
-                    val eventIdForSub = state.event?.id ?: eventId
-                    val red = bout.red?.name ?: "TBD"
-                    val blue = bout.blue?.name ?: "TBD"
-                    vm.subscribe(
-                        boutId = bout.id,
-                        eventId = eventIdForSub,
-                        matchNumber = bout.matchNumber,
-                        leadMinutes = lead,
-                        fighterNames = red to blue,
+    val backStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = backStackEntry?.destination?.route
+
+    Scaffold(
+        bottomBar = {
+            NavigationBar(containerColor = SurfaceDark) {
+                TOP_LEVEL_DESTINATIONS.forEach { destination ->
+                    NavigationBarItem(
+                        selected = currentRoute == destination.route,
+                        onClick = { navController.navigateTopLevel(destination.route) },
+                        icon = { Icon(destination.icon, contentDescription = destination.label) },
+                        label = { Text(destination.label) },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = UfcRed,
+                            selectedTextColor = UfcRed,
+                            unselectedIconColor = TextSecondary,
+                            unselectedTextColor = TextSecondary,
+                            indicatorColor = UfcRed.copy(alpha = 0.12f),
+                        ),
                     )
-                },
-            )
+                }
+            }
+        },
+    ) { padding ->
+        NavHost(
+            navController = navController,
+            startDestination = "home",
+            modifier = Modifier.padding(padding),
+        ) {
+            composable("home") {
+                HomeScreen(
+                    isLoading = resolvingNext && nextEvent == null,
+                    onNextEvent = {
+                        val event = nextEvent
+                        if (event != null) {
+                            detailVm.clearSnack()
+                            navController.navigate("event/${event.id}")
+                        }
+                    },
+                    onTestAlarm = onTestAlarm,
+                    onStopAlarm = onStopAlarm,
+                )
+            }
+            composable("events") {
+                val state by eventsVm.state.collectAsState()
+                LaunchedEffect(Unit) { eventsVm.load() }
+                EventListScreen(
+                    state = state,
+                    onEventClick = { event ->
+                        detailVm.clearSnack()
+                        navController.navigate("event/${event.id}")
+                    },
+                )
+            }
+            composable("subscriptions") {
+                val state by subsVm.state.collectAsState()
+                val snack by subsVm.snackMessage.collectAsState()
+                LaunchedEffect(Unit) { subsVm.load() }
+                SubscriptionsScreen(
+                    state = state,
+                    snackbarMessage = snack,
+                    onDismissSnack = { subsVm.clearSnack() },
+                    onCancel = { subId -> subsVm.cancel(subId) },
+                )
+            }
+            composable("settings") {
+                val deviceId by container.deviceId.collectAsState()
+                SettingsScreen(
+                    deviceId = deviceId,
+                    onTestAlarm = onTestAlarm,
+                    onStopAlarm = onStopAlarm,
+                )
+            }
+            composable("event/{eventId}") { entry ->
+                val eventId = entry.arguments?.getString("eventId") ?: "none"
+                LaunchedEffect(eventId) { detailVm.load(eventId) }
+                val state by detailVm.state.collectAsState()
+                val snack by detailVm.snackMessage.collectAsState()
+                EventDetailScreen(
+                    state = state,
+                    snackbarMessage = snack,
+                    onDismissSnack = { detailVm.clearSnack() },
+                    onBack = { navController.popBackStack() },
+                    onSubscribe = { bout, lead ->
+                        val eventIdForSub = state.event?.id ?: eventId
+                        val red = bout.red?.name ?: "TBD"
+                        val blue = bout.blue?.name ?: "TBD"
+                        detailVm.subscribe(
+                            boutId = bout.id,
+                            eventId = eventIdForSub,
+                            matchNumber = bout.matchNumber,
+                            leadMinutes = lead,
+                            fighterNames = red to blue,
+                        )
+                    },
+                )
+            }
         }
+    }
+}
+
+private fun NavHostController.navigateTopLevel(route: String) {
+    navigate(route) {
+        popUpTo(graph.findStartDestination().id) { saveState = true }
+        launchSingleTop = true
+        restoreState = true
     }
 }
