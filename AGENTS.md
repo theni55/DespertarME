@@ -24,6 +24,7 @@ Este archivo (`AGENTS.md`) es la chuleta ejecutable: comandos, prerequisitos, re
 | [Fases de implementación](memoria/fases.md) | Roadmap por fases con checkboxes. Marca los sub-items al completarlos y refleja el avance en handoff.md. |
 | [Convenciones del proyecto](memoria/convenciones.md) | Reglas de código, commits, testing y estilo que todo continuador debe respetar. |
 | [Bitácora de sesiones](memoria/bitacora.md) | Registro cronológico de cada sesión de trabajo: qué se hizo y qué quedó pendiente. |
+| [Plan MVP visual + funcional — App Android (para Fable 5)](memoria/plan-mvp-android-fable5.md) | Plan por fases con checkboxes para completar un MVP visual y funcional de la app Android (Kotlin/Compose) en `mobile-kotlin/`, pensado para cargarlo en Fable 5 vía `/goal`. |
 <!-- MEMORIA-INDEX:END -->
 
 ## Prerequisitos
