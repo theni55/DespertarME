@@ -3,6 +3,9 @@ package com.despertarme.app.ui.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.despertarme.app.DespertarMeApp
+import com.despertarme.app.alarm.PendingAlarm
+import com.despertarme.app.alarm.PendingAlarmStorage
 import com.despertarme.app.data.AppContainer
 import com.despertarme.app.data.remote.EventSummaryOut
 import com.despertarme.app.ui.screens.EventDetailState
@@ -86,7 +89,29 @@ class EventDetailViewModel(
                 _state.value = _state.value.copy(
                     subscribedBouts = _state.value.subscribedBouts + sub.boutId,
                 )
-                _snack.value = "Alerta creada: ${fighterNames.first} vs ${fighterNames.second} — $leadMinutes min"
+                _snack.value = "Te avisaremos $leadMinutes min antes cuando el backend detecte el inicio real"
+
+                // D45: NO programamos la alarma al suscribirse. Solo persistimos
+                // un PendingAlarm centinela con triggerAtMillis=0 y fired=false.
+                // El primer push FCM con datos del combate previo programará la
+                // alarma al momento adecuado (con cushion +1 min).
+                val card = _state.value.event ?: return@launch
+                val bout = card.bouts.firstOrNull { it.id == boutId } ?: return@launch
+                val app = DespertarMeApp.instance
+                PendingAlarmStorage.put(
+                    app,
+                    PendingAlarm(
+                        boutId = bout.id,
+                        eventId = eventId,
+                        triggerAtMillis = 0L,
+                        leadMinutes = leadMinutes,
+                        fighterRed = bout.red?.name,
+                        fighterBlue = bout.blue?.name,
+                        eventName = card.name,
+                        boutMatchNumber = bout.matchNumber,
+                        fired = false,
+                    ),
+                )
             } catch (t: Throwable) {
                 _snack.value = "No se pudo crear la alerta: ${t.message ?: "error"}"
             }

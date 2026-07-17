@@ -72,13 +72,12 @@ async def _seed_device_and_sub(
 
 
 @freeze_time("2026-07-11T20:00:00+00:00")
-async def test_poller_no_push_when_estimation_far_and_no_movement(
+async def test_poller_no_push_when_prev_pre(
     db_session, fake_provider, fake_redis
 ) -> None:
-    """Con prev en `pre` la estimación = fecha programada (21:30). Now=20:00 está
-    lejos, pero además no hay último push, así que el primer poll SÍ empuja `update`
-    (no hay base de comparación). Verificamos que ese primer push se hace y luego
-    el segundo poll no empuja (misma estimación)."""
+    """D45 — cuando el combate previo sigue en `pre`, no se dispara ningún push
+    porque no hay información real de inicio (el backend espera a que el prev
+    transicione a `in` o `post`)."""
     await _seed_device_and_sub(db_session)
     fake_provider.set_prev_state("pre")
     fake_provider.set_target_state("pre")
@@ -87,13 +86,8 @@ async def test_poller_no_push_when_estimation_far_and_no_movement(
     poller = Poller(provider=fake_provider, notifier=notifier, state=state, retry_delays=())
 
     fired = await poller.poll_once(db_session, now=datetime.now(UTC))
-    assert fired == 1  # primer push (no hay last_estimate)
-    assert notifier.pushes[0].message_type == "update"
-    await state.get_last_estimate(notifier.pushes[0].bout_id, "comp-target")
-    # 2º poll sin moverse → no push
-    fired2 = await poller.poll_once(db_session, now=datetime.now(UTC))
-    assert fired2 == 0
-    assert len(notifier.pushes) == 1
+    assert fired == 0
+    assert len(notifier.pushes) == 0
 
 
 @freeze_time("2026-07-11T21:26:00+00:00")
@@ -113,7 +107,8 @@ async def test_poller_pushes_update_when_prev_post(db_session, fake_provider, fa
     assert notifier.pushes[0].message_type == "update"
     # estimado == now + 300 s (buffer D18: 5 min) dentro del rango
     assert notifier.pushes[0].estimated_start_at is not None
-    pushed_start = datetime.fromisoformat(notifier.pushes[0].estimated_start_at)
+    val = int(notifier.pushes[0].estimated_start_at)
+    pushed_start = datetime.fromtimestamp(val / 1000, tz=UTC)
     assert abs((pushed_start - (now + timedelta(seconds=300))).total_seconds()) < 1
 
 
@@ -133,7 +128,8 @@ async def test_poller_e2_estimation_anchored_to_first_observation(
     # Primer poll a las 21:26. La estimación ancla = 21:26 + 300 s = 21:31.
     first_now = datetime(2026, 7, 11, 21, 26, tzinfo=UTC)
     await poller.poll_once(db_session, now=first_now)
-    first_est = datetime.fromisoformat(notifier.pushes[-1].estimated_start_at)
+    val_f = int(notifier.pushes[-1].estimated_start_at)
+    first_est = datetime.fromtimestamp(val_f / 1000, tz=UTC)
     assert abs((first_est - (first_now + timedelta(seconds=300))).total_seconds()) < 1
 
     # Segundo poll 14 min después: estimación	anclada sigue siendo 21:31 (no 21:45).
@@ -142,7 +138,8 @@ async def test_poller_e2_estimation_anchored_to_first_observation(
     await state.set_last_estimate(sub.id, sub.bout_id, first_est - timedelta(minutes=2))
     await poller.poll_once(db_session, now=datetime(2026, 7, 11, 21, 40, tzinfo=UTC))
     assert len(notifier.pushes) == 1
-    second_est = datetime.fromisoformat(notifier.pushes[-1].estimated_start_at)
+    val_s = int(notifier.pushes[-1].estimated_start_at)
+    second_est = datetime.fromtimestamp(val_s / 1000, tz=UTC)
     # second_est sigue ≈ 21:31 (anclaje), NO 21:45 (now+300s)
     assert abs((second_est - first_est).total_seconds()) < 1
     assert abs((second_est - (first_now + timedelta(seconds=300))).total_seconds()) < 1

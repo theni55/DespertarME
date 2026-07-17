@@ -65,8 +65,12 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        container = AppContainer(applicationContext)
-        // Register the device best-effort before UI renders; fast (SQLite-side on backend).
+
+        // Usar el AppContainer singleton del Application (lo comparten receivers/services).
+        val app = application as DespertarMeApp
+        container = app.container
+
+        // Registrar el device best-effort antes de que la UI rinda.
         runCatching {
             kotlinx.coroutines.runBlocking { withContext(Dispatchers.IO) { container.ensureRegistered() } }
         }

@@ -6,6 +6,35 @@
 
 ## Última sesión
 
+**Fecha:** 2026-07-17 · **Sesión 18 — Fase G: modelo de alarma revisado D45. Alarma local reprogramada en tiempo real vía FCM, cushion siempre +1 min, ring-once con flag `fired`. Backend modificado para suprimir pushes `update` cuando el combate previo está en `pre` y para wired `BUFFER_INTERCOMBATE_SECONDS` (ahora 600s) al EstimatorEngine. `estimated_start_at` ahora viaja como epoch millis en el payload FCM.**
+
+**Contexto:** el owner pidió revisar el modelo de alarma de la Sesión 17. Tras grilling iterativo (plan mode) se llegó al modelo D45: la alarma local NO se programa al suscribirse; el backend solo manda push `update` cuando el combate previo transiciona `pre→in` o `in→post` (no en `pre`). La app programa la alarma al recibir el push, con cushion siempre +1 min y ring-once (flag `fired=true`). Lead=30 suena al recibir primer push (pre→in) + cushion; lead=10/15 suenan juntos al acabar el previo (~9 min aviso); lead=5 suena ~4 min antes. Sin fallback a fecha oficial de ESPN (decisión del owner). Opción 60 min eliminada del selector.
+
+**Hecho en esta sesión:**
+
+1. **Backend `poller.py`** — (a) Guard D45: skip push `update` cuando `prev_status.state == "pre"` (solo se pushea cuando prev está `in` o `post`). (b) `estimated_start_at` ahora es epoch millis (str de un int), no ISO string — Android parse con `toLongOrNull()`.
+2. **Backend `scheduler.py`** — `EstimatorConfig(buffer_intercombate_seconds=settings.buffer_intercombate_seconds)` wired al Poller. Antes el estimador usaba su hardcoded 300s ignorando `.env`.
+3. **`.env` + `.env.example`** — `BUFFER_INTERCOMBATE_SECONDS=300` → `600` (10 min reales entre combates, confirmado por el owner).
+4. **`tests/test_poller.py`** — 3 tests ajustados (guard pre-vs-push, epoch millis parse). 80/80 verdes.
+5. **Android `PendingAlarm.kt`** — añadido campo `fired: Boolean = false`.
+6. **Android `EventDetailViewModel.kt`** — eliminada la pre-programación al suscribirse. Ahora solo persiste `PendingAlarm(triggerAtMillis=0L, fired=false)` como centinela. Snackbar: *"Te avisaremos N min antes cuando el backend detecte el inicio real"*.
+7. **Android `EventDetailScreen.kt`** — `LEAD_OPTIONS` reducido a `listOf(5, 10, 15, 30)` (quitado 60 — "demasiado difícil de predecir").
+8. **Android `DespertarMeFirebaseService.handleUpdate()`** — reescrito con lógica D45: si `fired=true` → ignora. Si lead>=30 y ya programado → ignora. Si lead>=30 → `trigger = now + 60s`. Si lead<30 → `trigger = max(now+60s, est-lead+60s)`. Siempre cushion +1 min.
+9. **Android `DespertarMeFirebaseService.cancelAlarmAndNotify()`** — ahora marca `fired=true` antes de cancelar.
+10. **Android `AlarmReceiver.kt`** — simplificado: sin verify-then-ring (ya no necesario, las alarmas solo se programan con estimación real del backend). Marca `fired=true` al disparar.
+11. **`memoria/decisiones.md`** — registrada D45 con el modelo completo.
+12. **Verificación:** ruff ✅ · pytest 80/80 ✅ · `gradlew assembleDebug` BUILD SUCCESSFUL ✅.
+
+**Pendiente de la próxima sesión:**
+1. **Redis + Docker Desktop** — arrancar `docker compose up -d` para desbloquear el poller del backend y poder enviar pushes `update` reales.
+2. **Smoke end-to-end con evento real** — con Docker operativo: suscribirse a un combate, esperar a que el poller detecte transiciones, verificar que la alarma se programa/reprograma vía FCM, validar ring-once y Doze.
+3. **Validación en hardware físico del owner** — bypass DnD real + OEM quirks.
+4. **Fase 7c (deploy Railway)** — pendiente cuando el owner tenga cuenta.
+
+---
+
+## Sesión 17 (anterior)
+
 **Fecha:** 2026-07-17 · **Sesión 17 — Fases B+C+D del plan MVP Android completadas: backend local operativo (fix SSL corporativo), bottom nav + 4 pantallas navegables, suscribir/cancelar E2E verificado en emulador.**
 
 **Contexto:** goal de OpenCode agrupando Fases B, C y D de `memoria/plan-mvp-android-fable5.md` (decisión del owner: "agrupar b c y d").
@@ -251,7 +280,7 @@ Sin FCM, las dos últimas (reprogramar en tiempo real y verify-then-ring con tim
 | Fase 4 — Boxeo/Tenis reales | Pendiente (fuera del MVP) |
 | Fase 5 — VoiceNotifier real (Twilio) | ❄️ **Obsoleta** — sustituida por FCM (D37/D40) |
 | Fase 6 — Rediseño visual + landing dinámica | ❄️ **Congelada** — rama `web` |
-| Fase 7 — App móvil | 🔶 **En curso** — Spike ✅, Fase 7a (backend Device/FCM) ✅, scaffold Kotlin (D43) ✅. **Sesión 17: Fases B/C/D del plan MVP completadas — bottom nav + 4 pantallas (Home/Eventos/Mis Alertas/Ajustes) + suscribir/cancelar E2E en emulador. Próximo: Fase E (alarma un solo disparo, `AlarmScheduler` D40).** |
+| Fase 7 — App móvil | 🔶 **En curso** — Spike ✅, Fase 7a (backend Device/FCM) ✅, scaffold Kotlin (D43) ✅. **Sesión 18: Fase G completada — modelo de alarma revisado D45 (FCM + ring-once + cushion siempre +1 min). Firebase configurado y operativo. Backend modificado (guard prev==pre, epoch millis en payload, buffer wired 600s). Android: AlarmScheduler/AlarmReceiver/AlarmActivity/BootReceiver/FCM service implementados con lógica D45. Próximo: Docker Desktop para Redis + smoke E2E con evento real.** |
 
 Detalle de checkboxes en `fases.md`.
 

@@ -755,3 +755,53 @@ plataforma (Vercel/CF Pages descartados: serverless no soporta el scheduler
   - Quirk PowerShell documentado de paso: `adb exec-out screencap -p > file.png` corrompe el PNG (PS 5.1 convierte binario a texto) — usar `adb shell screencap /sdcard/x.png` + `adb pull`.
 
 - **Pendiente próxima sesión:** Fase E (alarma v1 un solo disparo: `AlarmScheduler` + `AlarmReceiver` + verify-then-ring básico + `AlarmActivity` + `BootReceiver` + Doze) → Fase F (validación MVP) → Fase G bloqueada por Firebase manual del owner.
+
+## Sesión 18 — Fase G: modelo de alarma revisado D45 (revisión tras grilling con el owner) (2026-07-17)
+
+- **Contexto:** el owner pidió revisar el modelo de alarma; la Sesión 17 había cableado FCM pero con pre-programación al suscribir basada en el `bout.date` oficial de ESPN. El owner explicó con un ejemplo concreto que quería **NO crear alarma al suscribir**, sino solo cuando el backend detecta datos reales del combate previo (transiciones `pre→in` o `in→post`). Tras grilling iterativo en plan mode (6 rondas de preguntas), se refinó el modelo D45.
+
+- **Decisiones del owner (D45):**
+  - Cushion **siempre +1 min** sobre el trigger calculado (evita que `setAlarmClock` con timestamp "ahora mismo" no suene).
+  - Lead 30: suena al recibir primer push (previo `pre→in`) + cushion 1 min (~29-39 min aviso).
+  - Lead 10/15: suenan juntos al acabar el previo (~9 min aviso, "pequeña mentira para el usuario, para que piense que hay más variedad").
+  - Lead 5: suena ~4 min después de que acabe el previo.
+  - Lead 60: ELIMINADO por "demasiado difícil de predecir".
+  - Sin fallback a la fecha oficial de ESPN (decisión del owner: "asumo el riesgo" si FCM no entrega).
+  - `BUFFER_INTERCOMBATE_SECONDS` pasa de 300 a 600 (10 min reales entre combates, confirmado por el owner).
+  - Ring-once: flag `PendingAlarm.fired` se marca cuando `AlarmReceiver` se dispara. Pushes FCM posteriores para el mismo bout se ignoran.
+  - Backend **NO envía push `update` cuando `prev_state == "pre"`** (sería la fecha oficial de ESPN sin datos reales — programaría la alarma prematura).
+
+- **Cambios backend:**
+  - `src/app/engine/poller.py`: guard D45 — si `prev_state == "pre"` → `return False` (no pushear). `estimated_start_at` ahora es `str(int(estimate.start_at.timestamp() * 1000))` (epoch millis, no ISO string).
+  - `src/app/scheduler.py`: añadido `EstimatorEngine(EstimatorConfig(buffer_intercombate_seconds=settings.buffer_intercombate_seconds))` wired al `Poller()`. Antes usaba `EstimatorConfig` default hardcodeado (300s), ignorando el `.env`.
+  - `.env` + `.env.example`: `BUFFER_INTERCOMBATE_SECONDS=300` → `600`.
+  - `tests/test_poller.py`: 3 tests ajustados (guard pre-vs-push → 0 pushes esperados; epoch millis → parse con `datetime.fromtimestamp(val/1000, tz=UTC)`). 80/80 tests verdes.
+
+- **Cambios Android (Kotlin):**
+  - `PendingAlarm.kt`: añadido campo `fired: Boolean = false`.
+  - `EventDetailViewModel.subscribe()`: eliminada la llamada a `AlarmScheduler.schedule()`. Solo persiste `PendingAlarm(triggerAtMillis=0L, fired=false)` via `PendingAlarmStorage.put()`.
+  - `EventDetailScreen.kt`: `LEAD_OPTIONS = listOf(5, 10, 15, 30)` (quitado 60).
+  - `DespertarMeFirebaseService.handleUpdate()`: reescrito con lógica D45:
+    - Si `existing.fired` → ignora (ring-once).
+    - Si `lead>=30 && triggerAtMillis>0` → ignora (programa solo en el primer push).
+    - Si `lead>=30` → `trigger = now + 60_000` (suena ~1 min cushion).
+    - Si `lead<30` → `trigger = max(now+60_000, estimatedStartMs - lead*60_000 + 60_000)`.
+  - `DespertarMeFirebaseService.cancelAlarmAndNotify()`: marca `fired=true` antes de cancelar.
+  - `AlarmReceiver.kt`: reescrito — sin verify-then-ring (ya no necesario). Marca `fired=true` al disparar, arranca `AlarmService` + `AlarmActivity`.
+  - `SubscriptionsViewModel.cancel()`: sin cambios (ya cancela alarma local vía `AlarmScheduler.cancel()`).
+  - Build: `gradlew assembleDebug` → BUILD SUCCESSFUL.
+
+- **Smoke parcial (sin Docker/Redis):** el poller del backend no puede correr (Redis requiere Docker Desktop, no disponible en esta máquina). El humo se limita a:
+  - Compilación backend (ruff clean, pytest 80/80 ✅).
+  - Compilación Android (assembleDebug BUILD SUCCESSFUL ✅).
+  - Verificación lógica via tests del poller (guard D45, epoch millis).
+  - Quedan pendientes de smoke real: suscribir → esperar push real del poller → alarma programada → suena.
+
+- **Hallazgos técnicos en esta sesión:**
+  1. `settings.buffer_intercombate_seconds` estaba definido en config.py pero nunca se enrutaba al `EstimatorEngine` — usaba siempre el default hardcodeado 300s.
+  2. `AlertPayload.estimated_start_at` es `str | None` — el poller mandaba `estimate.start_at.isoformat()` (ISO datetime), que Android no puede parsear con `toLongOrNull()`. Cambiado a `str(int(epoch_millis))` para simplicidad en Android.
+  3. `myep` da exit 1 sin output en esta máquina — posible venv corrupto o dependencia mypy faltante (no investigado; ruff y pytest cubren).
+
+- **Memorias actualizadas:** `handoff.md` (nueva sesión), `bitacora.md` (esta entrada), `fases.md` (Fase G marcada + links D45), `decisiones.md` (D45), `plan-mvp-android-fable5.md` (Fase E/G actualizadas).
+
+- **Pendiente próxima sesión:** arrancar Docker Desktop (`docker compose up -d`) para tener Redis → poller activo → primer smoke E2E con evento real de ESPN → validar ring-once y Doze. Validación en hardware físico del owner.

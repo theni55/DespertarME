@@ -61,7 +61,7 @@ import com.despertarme.app.ui.theme.SurfaceDark
 import com.despertarme.app.ui.theme.TextSecondary
 import com.despertarme.app.ui.theme.UfcRed
 
-private val LEAD_OPTIONS = listOf(5, 10, 15, 30, 60)
+private val LEAD_OPTIONS = listOf(5, 10, 15, 30)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

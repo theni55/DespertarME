@@ -27,6 +27,9 @@ class DeviceStorage(private val context: Context) {
     }
 
     suspend fun getDeviceId(): String? = context.deviceDataStore.data.first()[DEVICE_ID_KEY]
-
     suspend fun fcmToken(): String? = context.deviceDataStore.data.first()[FCM_TOKEN_KEY]
+
+    suspend fun setFcmToken(token: String) {
+        context.deviceDataStore.edit { it[FCM_TOKEN_KEY] = token }
+    }
 }

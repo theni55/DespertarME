@@ -21,6 +21,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from app.config import settings
 from app.db.session import SessionLocal
+from app.engine.estimator import EstimatorConfig, EstimatorEngine
 from app.engine.poller import Poller
 from app.engine.state import AlertState
 from app.notifiers import get_notifier
@@ -44,10 +45,16 @@ class PollerScheduler:
         redis_client = aioredis.from_url(settings.redis_url, decode_responses=True)
         self._state = AlertState(client=redis_client)
         resolver = AthleteResolver(self._provider, redis_client=redis_client)
+        # D45: pasar buffer_intercombate_seconds al EstimatorEngine para que
+        # respete la configuración del `.env` (antes se hardcodeaba en 300s).
+        estimator = EstimatorEngine(
+            EstimatorConfig(buffer_intercombate_seconds=settings.buffer_intercombate_seconds)
+        )
         return Poller(
             provider=self._provider,
             notifier=get_notifier(),
             state=self._state,
+            estimator=estimator,
             athlete_resolver=resolver,
         )
 

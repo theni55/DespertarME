@@ -312,13 +312,13 @@ Sin Android Studio aún → el continuador instala Android Studio + emulador API
 - [x] Verificado en `uvicorn.out`: app realiza `POST /api/devices` (registro UUID) + `GET /api/events` (LaunchedEffect) desde puerto 55980, y tras `adb shell input tap 540 2150` → `GET /api/events/600059599` desde puerto 56063 (navegación Home→EventDetail exitosa, card con 12 combates reales UFC Fight Night Du Plessis vs Usman 2026-07-18).
 - [x] Verificado en SQLite: device `e57d6077-7ef4-4e68-bb99-8d9d8a2ae174` registrado por la app (platform=android, locale=es-ES, fcm_token=`no-fcm-yet-...`).
 
-**Paso 2 — AlarmScheduler + AlarmActivity + verify-then-ring (próxima sesión)**
+**Paso 2 — AlarmScheduler + AlarmActivity + verify-then-ring (Sesión 18 ✅, modelo revisado D45)**
 
-- [ ] **`AlarmScheduler`** (nuevo, D40): `AlarmManager.setAlarmClock()` a `estimated_start_at − lead_minutes`. Requiere permiso `USE_EXACT_ALARM` (auto-concedido en Play por ser alarm app, ya en manifest). Persistencia de alarmas programadas en DataStore (para re-programar tras reboot).
-- [ ] **`AlarmReceiver`** (BroadcastReceiver): al disparar la alarma → verify-then-ring: fetch rápido a `GET /api/events/{id}` → si target sigue `pre` y estimación < lead → arranca `AlarmService` + abre `AlarmActivity` (full-screen intent); si ya `in` → notifica sin sonido; si `post`/`cancelled` → silencio.
-- [ ] **`AlarmActivity`** (full-screen): "X vs Y — UFC {event} empieza en ~N min" + botón "Descartar" (stop service). `setShowWhenLocked` + `setTurnScreenOn` + `USE_FULL_SCREEN_INTENT`.
-- [ ] **BootReceiver** (`RECEIVE_BOOT_COMPLETED`): re-programa alarmas tras reinicio del dispositivo.
-- [ ] **Doze validation**: `adb shell dumpsys deviceidle force-idle` → verify `setAlarmClock` despierta puntualmente.
+- [x] **`AlarmScheduler`** (nuevo, D40): `AlarmManager.setAlarmClock()` a `estimated_start_at − lead_minutes`. Requiere permiso `USE_EXACT_ALARM` (auto-concedido en Play por ser alarm app, ya en manifest). Persistencia de alarmas programadas en DataStore (para re-programar tras reboot).
+- [x] **`AlarmReceiver`** (BroadcastReceiver): al disparar la alarma → arranca `AlarmService` + abre `AlarmActivity` (full-screen intent). Marca `fired=true` para ring-once D45. Sin verify-then-ring (ya no necesario: la alarma solo se programa con estimación real del backend, no con fecha oficial de ESPN).
+- [x] **`AlarmActivity`** (full-screen): "X vs Y — UFC {event} empieza en ~N min" + botón "Descartar" (stop service). `setShowWhenLocked` + `setTurnScreenOn`. Compose.
+- [x] **BootReceiver** (`RECEIVE_BOOT_COMPLETED`): re-programa alarmas tras reinicio del dispositivo.
+- [ ] **Doze validation**: `adb shell dumpsys deviceidle force-idle` → verify `setAlarmClock` despierta puntualmente. (Pendiente — necesita emulador con Docker operativo para smoke completo).
 
 **Paso 3 — Pantallas restantes ✅ COMPLETADO (Sesión 17, 2026-07-17 — Fases B/C/D del plan `plan-mvp-android-fable5.md`)**
 

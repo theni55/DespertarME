@@ -191,6 +191,18 @@ class Poller:
                 # E2: anclar la transición in→post al primer momento observado.
                 observed_at = await self._state.remember_transition(event_id, prev.id, now)
 
+        # D45 — No pushear cuando el combate previo sigue en `pre` (no arrancó).
+        # El primer push útil llega cuando el prev transiciona a `in` (lead>=30
+        # dispara la alarma) o `post` (lead<30 dispara/reprograma). Pushear la
+        # fecha oficial de ESPN aquí programaría la alarma local prematura —
+        # el owner quiere "alarma solo cuando el backend detecte el inicio real".
+        if prev is not None and prev_bout_status is not None and prev_bout_status.state == "pre":
+            logger.debug(
+                "Suscripción %s: previo en `pre`, sin info real; skip push",
+                sub_id,
+            )
+            return False
+
         estimate = self._estimator.estimate(card, target, prev_bout_status, now, observed_at)
 
         # D40 push on-change: comparar con la última estimación pusheada.
@@ -211,7 +223,8 @@ class Poller:
             bout_id=bout_id,
             event_name=card.event_name,
             fighters=self._format_fighters(target),
-            estimated_start_at=estimate.start_at.isoformat(),
+            # D45: epoch millis (no ISO string) — la app Android parse con toLongOrNull().
+            estimated_start_at=str(int(estimate.start_at.timestamp() * 1000)),
             minutes_until_start=max(0, int((estimate.start_at - now).total_seconds() // 60)),
             weight_class=target.weight_class,
         )

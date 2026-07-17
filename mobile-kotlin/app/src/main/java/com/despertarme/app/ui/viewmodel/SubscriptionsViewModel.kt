@@ -3,6 +3,8 @@ package com.despertarme.app.ui.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.despertarme.app.DespertarMeApp
+import com.despertarme.app.alarm.AlarmScheduler
 import com.despertarme.app.data.AppContainer
 import com.despertarme.app.data.remote.AlertLogOut
 import com.despertarme.app.data.remote.BoutSubscriptionOut
@@ -65,6 +67,11 @@ class SubscriptionsViewModel(
                     subscriptions = _state.value.subscriptions.filterNot { it.sub.id == subId },
                 )
                 _snack.value = "Alerta cancelada"
+
+                val current = _state.value.subscriptions.firstOrNull { it.sub.id == subId }?.sub
+                if (current != null) {
+                    AlarmScheduler.cancel(DespertarMeApp.instance, current.boutId)
+                }
             } catch (t: Throwable) {
                 _snack.value = "No se pudo cancelar: ${t.message ?: "error"}"
             }

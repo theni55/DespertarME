@@ -63,4 +63,23 @@ class AppContainer(context: Context) {
         }
         return id
     }
+
+    suspend fun registerFcmToken(token: String) {
+        val id = storage.ensureDeviceId()
+        deviceIdFlow.value = id
+        try {
+            api.registerDevice(
+                DeviceCreate(
+                    deviceId = id,
+                    fcmToken = token,
+                    platform = "android",
+                    timezone = "Europe/Madrid",
+                    locale = "es-ES",
+                ),
+            )
+            Log.i("DespertarMe", "FCM token registrado con el backend")
+        } catch (t: Throwable) {
+            Log.e("DespertarMe", "registerFcmToken failed", t)
+        }
+    }
 }

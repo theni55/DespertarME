@@ -62,6 +62,10 @@ dmypy.json
 .env.*
 !.env.example
 
+# Firebase service account keys (NUNCA committear)
+.firebase-service-account.json
+*.firebase-adminsdk-*.json
+
 # Docker
 docker-compose.override.yml
 

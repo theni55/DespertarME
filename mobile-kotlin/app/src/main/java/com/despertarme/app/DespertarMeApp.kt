@@ -6,11 +6,22 @@ import android.app.NotificationManager
 import android.content.Context
 import android.media.AudioAttributes
 import com.despertarme.app.alarm.AlarmService
+import com.despertarme.app.data.AppContainer
 
 class DespertarMeApp : Application() {
 
+    @Volatile
+    var isContainerReady: Boolean = false
+        private set
+
+    lateinit var container: AppContainer
+        private set
+
     override fun onCreate() {
         super.onCreate()
+        instance = this
+        container = AppContainer(this)
+        isContainerReady = true
         ensureAlarmChannel()
     }
 
@@ -34,5 +45,10 @@ class DespertarMeApp : Application() {
             .setUsage(AudioAttributes.USAGE_ALARM)
             .build()
         nm.createNotificationChannel(channel)
+    }
+
+    companion object {
+        lateinit var instance: DespertarMeApp
+            private set
     }
 }

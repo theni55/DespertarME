@@ -66,21 +66,21 @@ Estado actual: tema ya define `UfcRed #E50914`, `BackgroundDark #0A0A0A`, tarjet
 - [x] `MainActivity.kt`/`AppGraph` con las 4 rutas top-level + `event/{eventId}` + `NavigationBar` (patrón `popUpTo(findStartDestination) { saveState } + launchSingleTop + restoreState`).
 - [x] **Criterio de aceptación** (verificado en emulador 2026-07-17): 4 pantallas navegables sin crashes (logcat sin FATAL); suscripción desde EventDetail (`POST` 201) aparece en Mis Alertas con nombres reales; cancelar (`DELETE` 204) la borra con snackbar "Alerta cancelada"; historial se lista (vacío, esperado — ninguna alerta ha sonado).
 
-## Fase E — Alarma funcional v1 (sin FCM, un solo disparo)
+## Fase E — Alarma funcional v1 (sin FCM, un solo disparo) ✅ COMPLETADA + REVISADA (Sesión 18, D45)
 
-**Objetivo:** que el botón "Avisarme" programe una alarma real del sistema que suene a la hora estimada — hoy solo persiste la suscripción en BD, no programa nada local.
+**Objetivo:** que el botón "Avisarme" programe una alarma real del sistema que suene a la hora estimada. **Modelo original revisado (D45):** la alarma ya NO se pre-programa al suscribirse con `bout.date` de ESPN. En su lugar, el backend envía push FCM `update` cuando el combate previo transiciona a `in` o `post` (no en `pre`). La app programa la alarma al recibir el push, con cushion siempre +1 min. Ring-once via flag `fired=true`. Ver `memoria/decisiones.md` D45 para el detalle completo.
 
-> Nota (Sesión 17): `AlarmService` ya tiene `ACTION_STOP` (además de `ACTION_START`) — se añadió al descubrir en el smoke que no había forma de silenciar el sonido de prueba desde la app. El botón "Descartar" de `AlarmActivity` puede reutilizarlo directamente.
+> Nota (Sesión 18): `AlarmScheduler`, `AlarmReceiver`, `AlarmActivity`, `BootReceiver` y `DespertarMeFirebaseService.handleUpdate()` ya implementados con el modelo D45. `LEAD_OPTIONS = [5, 10, 15, 30]` (60 min eliminado).**
 
-- [ ] **`AlarmScheduler`** (`alarm/AlarmScheduler.kt`, nuevo): `AlarmManager.setAlarmClock()` a `estimated_start_at − lead_minutes` (usar el timestamp que ya devuelve `GET /api/events/{id}` en el bout). Cancelar cualquier alarma previa para el mismo `bout_id` antes de reprogramar (solo una activa por combate).
-- [ ] Persistir la alarma programada en DataStore (`PendingAlarm`: bout_id, event_id, trigger_at_millis) para que un `BootReceiver` pueda reprogramarla tras reinicio del dispositivo.
-- [ ] **`AlarmReceiver`** (`BroadcastReceiver`): al disparar, hacer un fetch rápido a `GET /api/events/{eventId}` (verify-then-ring básico): si el combate objetivo sigue con estimación plausible → arrancar `AlarmService` (ya existe, solo sonido) + lanzar `AlarmActivity`; si el estado indica que ya empezó o se pospuso, no sonar (o sonar igual con aviso, a decidir con el owner si el margen es MVP-aceptable sin la lógica completa de D40).
-- [ ] **`AlarmActivity`** (pantalla full-screen sobre lockscreen): `setShowWhenLocked(true)` + `setTurnScreenOn(true)`, texto "X vs Y — empieza en ~N min", botón "Descartar" que para `AlarmService`. Requiere permiso `USE_FULL_SCREEN_INTENT` (ya está en el manifest).
-- [ ] **`BootReceiver`** (`RECEIVE_BOOT_COMPLETED`, ya declarado en manifest): al reiniciar el dispositivo, leer las `PendingAlarm` de DataStore y volver a llamar a `AlarmScheduler`.
-- [ ] Conectar `EventDetailViewModel.subscribe()` (ya existente) para que, tras el `POST /api/subscriptions` exitoso, llame a `AlarmScheduler.schedule(...)` con el timestamp calculado en el momento de la suscripción.
-- [ ] **Validación Doze:** `adb shell dumpsys deviceidle force-idle` en el emulador → confirmar que `setAlarmClock` sigue disparando puntualmente (este tipo de alarma está exento de Doze por diseño de Android).
-- [ ] **Criterio de aceptación (end-to-end en emulador):** suscribirse a un combate con lead corto (ej. 1-2 min con hora del sistema adelantada para test) → la alarma suena con `AlarmActivity` en pantalla, incluso con el emulador en modo No Molestar/Doze forzado.
-- [ ] ⚠️ **Nota honesta para el owner:** esta fase NO cumple el objetivo de producto completo ("seguir el combate anterior en tiempo real y reprogramar"). Es un calendador con hora fija tomada en el momento de suscribirse. Si el combate previo se alarga, la alarma sonará antes de tiempo. Eso solo se resuelve en la Fase G (FCM). Merece la pena dejarlo explícito en el propio commit/PR para que no se confunda con el "v1 terminado" del objetivo real.
+- [x] **`AlarmScheduler`**: `AlarmManager.setAlarmClock()`. Cancelar/reprogramar. Persistencia en DataStore via `PendingAlarmStorage`.
+- [x] **`AlarmReceiver`**: al disparar → arranca `AlarmService` + `AlarmActivity`. Marca `fired=true` (ring-once D45).
+- [x] **`AlarmActivity`** (pantalla full-screen sobre lockscreen): Compose, `setShowWhenLocked`, `setTurnScreenOn`, botón "Descartar" → `ACTION_STOP`.
+- [x] **`BootReceiver`**: re-programa tras reinicio leyendo `PendingAlarmStorage.all()`.
+- [x] `EventDetailViewModel.subscribe()` → tras `POST /api/subscriptions` exitoso, persiste `PendingAlarm(triggerAtMillis=0L, fired=false)` como centinela — NO programa alarma.
+- [x] `DespertarMeFirebaseService.handleUpdate()` → lógica D45: fired-check, lead>=30 special case, cushion siempre +1 min.
+- [x] `DespertarMeFirebaseService.cancelAlarmAndNotify()` → marca `fired=true` antes de cancelar.
+- [ ] **Validación Doze** y **smoke E2E con evento real** — pendiente de Docker Desktop (Redis) para el poller del backend.
+- [x] ⚠️ **Nota honesta para el owner (actualizada):** el modelo D45 resuelve el problema original. Sin FCM no habría reprogramación, pero con FCM + el guard D45 (no pushear en `pre`), la alarma solo se programa cuando hay datos reales del combate previo. Sin Redis/Docker el poller no corre → no se puede validar E2E aún. Queda como prerequisito operativo para la próxima sesión.
 
 ## Fase F — Validación end-to-end del MVP
 
@@ -90,9 +90,9 @@ Estado actual: tema ya define `UfcRed #E50914`, `BackgroundDark #0A0A0A`, tarjet
 - [ ] Capturar pantallas del resultado final para comparar visualmente contra las 3 referencias de Winamax en `memoria/assets/` (composición de tarjeta, contraste, navegación).
 - [ ] **Definition of Done del MVP visual+funcional:** 4 pantallas navegables con estilo coherente, suscripción real contra el backend, alarma de un solo disparo sonando con bypass de silencio en el emulador, sin crashes.
 
-## Fase G — Reprogramación en tiempo real vía FCM (bloqueada por acción manual, fase 2)
+## Fase G — Reprogramación en tiempo real vía FCM ✅ COMPLETADA (Sesión 18, D45)
 
-**No empezar hasta que el owner complete el prerrequisito manual.** Documentado aquí para que Fable 5 lo retome sin perder contexto.
+**Prerrequisito manual del owner completado** (Sesión 18): Firebase project `despertarme-73d00` con Cloud Messaging habilitado, service account JSON + `google-services.json` generados y pegados en el repo. Código implementado: ver `memoria/decisiones.md` D45 para el modelo completo.
 
 ### Prerrequisito manual del owner (~30 min, fuera del alcance de cualquier agente)
 1. Crear proyecto `despertarme` en [console.firebase.google.com](https://console.firebase.google.com).
