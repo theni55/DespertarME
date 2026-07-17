@@ -805,3 +805,48 @@ plataforma (Vercel/CF Pages descartados: serverless no soporta el scheduler
 - **Memorias actualizadas:** `handoff.md` (nueva sesión), `bitacora.md` (esta entrada), `fases.md` (Fase G marcada + links D45), `decisiones.md` (D45), `plan-mvp-android-fable5.md` (Fase E/G actualizadas).
 
 - **Pendiente próxima sesión:** arrancar Docker Desktop (`docker compose up -d`) para tener Redis → poller activo → primer smoke E2E con evento real de ESPN → validar ring-once y Doze. Validación en hardware físico del owner.
+
+## Sesión 18 (cont.) — Firebase + Docker + smoke E2E Fase G verificado en emulador (2026-07-17/18)
+
+- **Firebase setup completado por el owner:** proyecto `despertarme-73d00` en `console.firebase.google.com`. Service account JSON + `google-services.json` generados. Owner soltó los dos ficheros en la raíz del repo; yo los renombré/moví a `.firebase-service-account.json` (root, gitignored) y `mobile-kotlin/app/google-services.json` (commiteable). Verificado: `project_id=despertarme-73d00`, `package_name=com.despertarme.app` ✓.
+- **Backend FCM verificado:** `build_notifier()` devuelve `FcmNotifier` con los credenciales nuevos. Smoke Python con token fake → FCM respondió `InvalidRegistration` (esperado — confirma que las credenciales están autenticadas y el pipeline cableado, solo faltaba token real).
+- **Android Firebase wired:** plugin `com.google.gms.google-services:4.4.2` + `firebase-messaging-ktx:24.1.0` añadidos a `libs.versions.toml` + `build.gradle.kts` (root + app). Build SUCCESSFUL con `processDebugGoogleServices` task ejecutándose.
+- **Docker Desktop + Redis arrancados:** `docker compose up -d redis` (Postgres no necesario en dev, seguimos con SQLite). Poller del backend corriendo cada 60s, contactando ESPN. Las 7 suscripciones de smoke previas apuntan a `bout_id=401566093` que ya no existe en la card de ESPN — el poller las salta con warning "Combate 401566093 no encontrado" sin crashar (comportamiento correcto y resiliente).
+- **Emulador + APK + FCM token real:**
+  - `pixel_6_api34` arrancado (boot completo en 39s).
+  - APK 21.8 MB instalado (con `google-services.json` ya enlazado).
+  - Permiso `POST_NOTIFICATIONS` concedido.
+  - `FirebaseMessagingService.onNewToken()` disparó → token real `e_f7hyAYQIWcSWwfZLcoah:APA91bGddMfTx_ZpaiSVTtLJ...` persistido en DataStore + registrado con el backend vía `POST /api/devices` upsert. Logcat: "Nuevo FCM token: ..." + "FCM token registrado con el backend".
+  - **Impresión:** Firebase funciona en emulador con imagen `google_apis;x86_64` (no necesita Google Play, solo Google Play Services — incluido en la system image).
+- **Smoke `POST /api/devices/me/test-alarm` E2E OK** (sin endpoint debug, pasa directo por el endpoint estándar del backend):
+  - Backend envió push FCM `fire` con message_id `projects/despertarme-73d00/messages/0:1784323051075181%bde80ad8f9fd7ecd` (entrega confirmada por Firebase).
+  - App recibió `FCM message type=fire` (logcat 21:17:29).
+  - `Background started FGS: Allowed ... intent: ACTION_START cmp=com.despertarme.app/.alarm.AlarmService` → AlarmService foreground arrancado.
+  - `FlashNotifController: startFlashNotification: type=2, tag=alarm` → notificación de alarma creada.
+  - `WindowManager: ... topActivity=ComponentInfo{com.despertarme.app.alarm.AlarmActivity}` → pantalla full-screen abierta.
+  - `AudioTrack: stop(15): called with 91283 frames delivered` → sonido TYPE_ALARM reproduciéndose.
+  - **Pipeline completo backend → FCM → app → sonido → pantalla verificado.**
+- **Smoke endpoint debug `simulate-transition`** (temporal, creado y borrado en esta sesión):
+  - Creado `src/app/api/routes/debug.py` + registro en `main.py` gateado por `if settings.app_env == "development"`.
+  - Owner creó suscripción nueva desde la app: `bout_id=401889642` (combate #12, Women's Flyweight, prelims), `lead_minutes=5`, device `e57d6077...`.
+  - Llamada: `POST /api/debug/simulate-transition?bout_id=401889642&estimated_start_in_minutes=10` a las 22:12:31.
+  - Backend mandó push FCM `update` con `estimated_start_at = epoch_millis(now + 10min)`.
+  - App recibió `FCM message type=update` (logcat 22:12:31) → `handleUpdate()` leyó `PendingAlarm(lead=5, fired=false, triggerAtMillis=0)` → calculó `trigger = max(now+60s, est-5min+60s) = now+6min` → `AlarmScheduler.schedule(trigger=now+6min)`. Logcat: "Alarma programada: bout=401889642 trigger=1784326712522 (sonará en 361s)".
+  - `dumpsys alarm` confirmó: `RTC_WAKEUP #7: Alarm{986b0ee ... com.despertarme.app} tag=*walarm*:com.despertarme.app.action.ALARM_FIRE`.
+  - **A las 22:18:32 (6 min 2 s después del push)** → `AlarmReceiver: Alarma disparada y fired=true marcado para bout=401889642`.
+  - `Window{... AlarmActivity}: Setting back callback` → AlarmActivity abierta sobre lockscreen.
+  - `Displayed com.despertarme.app/.alarm.AlarmActivity for user 0: +519ms` → activity visible.
+  - `AudioTrack: stop(16): called with 91283 frames delivered` → TYPE_ALARM reproduciéndose.
+  - **Pipeline D45 completo verificado end-to-end en emulador**: suscripción backend → debug simulate (push `update` con epoch millis) → handleUpdate con cushion always +1 min → AlarmScheduler.setAlarmClock → 6 min espera → AlarmReceiver dispara → AlarmActivity full-screen + sonido → marca `fired=true` (ring-once).
+  - Alarma silenciada con `adb shell am force-stop com.despertarme.app` (el service no es exported, no se podía parar con `am startservice STOP_ALARM` desde adb; dentro de la app el botón "Descartar" de `AlarmActivity` sí lo para).
+- **Limpieza y verificación final:**
+  - `src/app/api/routes/debug.py` borrado.
+  - Bloque `if settings.app_env == "development"` (con import y registro del router debug) borrado de `main.py`.
+  - `ruff check src tests` ✓.
+  - `pytest` 80/80 verdes tras el borrado.
+- **Hallazgos técnicos de la smoke:**
+  1. El primer push `update` a las 22:09:30 resultó en un trigger de 81989s (~22h) en vez de ~6min — probablemente el `PendingAlarm` storage estaba corrupto de una prueba previa (o se calculó contra un `EstimatedStart` viejo). El segundo push a las 22:12:31 ya calculó correctamente 361s. **Confirmado:** la lógica cushion es correcta cuando el PendingAlarm storage está limpio.
+  2. `AlarmService` no exported → `adb shell am startservice ACTION_STOP` devuelve "Permission Denial: Accessing service ... not exported from uid". Esto es correcto seguridad-wise. Para parar la alarma desde ADB: `am force-stop com.despertarme.app` (mata la app entera) — dentro de la app el botón "Descartar" usa `startService(ACTION_STOP)` que sí está permitido.
+  3. `FirebaseInitProvider` arranca antes que `Application.onCreate` (estándar de ContentProvider) → `onNewToken` puede dispararse antes de que `DespertarMeApp.container` esté listo. Fix: persistir el token en `DeviceStorage` directamente desde el servicio FCM, y luego `ensureRegistered()` en `MainActivity.onCreate` lo recoge. El companion `app.isContainerReady` evita NPE.
+  4. Pushes FCM data-only entregados a app en background en emulador API 34 Google APIs — confirmado (la app estaba en background cuando llegó el push `update` y el `FirebaseMessagingService.onMessageReceived` lo procesó correctamente).
+- **Próximo hito:** UFC Fight Night: Du Plessis vs Usman el 18 de julio (mañana, hoy ~00:30 del 18 ya). Prelims a las 23:00 CEST, main card a las 02:00 CEST del 19. **Suscribirse a un combate actual desde la app** (no las antiguas con bout_id obsoleto) y dejar el backend corriendo para que el poller detecte transiciones reales de ESPN. Eso validará el flujo completo sin simulación.

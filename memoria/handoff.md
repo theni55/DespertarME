@@ -6,7 +6,7 @@
 
 ## Última sesión
 
-**Fecha:** 2026-07-17 · **Sesión 18 — Fase G: modelo de alarma revisado D45. Alarma local reprogramada en tiempo real vía FCM, cushion siempre +1 min, ring-once con flag `fired`. Backend modificado para suprimir pushes `update` cuando el combate previo está en `pre` y para wired `BUFFER_INTERCOMBATE_SECONDS` (ahora 600s) al EstimatorEngine. `estimated_start_at` ahora viaja como epoch millis en el payload FCM.**
+**Fecha:** 2026-07-17/18 · **Sesión 18 — Fase G: modelo de alarma revisado D45. Pipeline FCM end-to-end verificado: backend → push FCM → app → alarma suena + AlarmActivity. Cushion siempre +1 min, ring-once con flag `fired`. Smoke E2E en emulador OK (alarma sonó a los 6 min de recibir push `update` simulado).**
 
 **Contexto:** el owner pidió revisar el modelo de alarma de la Sesión 17. Tras grilling iterativo (plan mode) se llegó al modelo D45: la alarma local NO se programa al suscribirse; el backend solo manda push `update` cuando el combate previo transiciona `pre→in` o `in→post` (no en `pre`). La app programa la alarma al recibir el push, con cushion siempre +1 min y ring-once (flag `fired=true`). Lead=30 suena al recibir primer push (pre→in) + cushion; lead=10/15 suenan juntos al acabar el previo (~9 min aviso); lead=5 suena ~4 min antes. Sin fallback a fecha oficial de ESPN (decisión del owner). Opción 60 min eliminada del selector.
 
@@ -23,13 +23,25 @@
 9. **Android `DespertarMeFirebaseService.cancelAlarmAndNotify()`** — ahora marca `fired=true` antes de cancelar.
 10. **Android `AlarmReceiver.kt`** — simplificado: sin verify-then-ring (ya no necesario, las alarmas solo se programan con estimación real del backend). Marca `fired=true` al disparar.
 11. **`memoria/decisiones.md`** — registrada D45 con el modelo completo.
-12. **Verificación:** ruff ✅ · pytest 80/80 ✅ · `gradlew assembleDebug` BUILD SUCCESSFUL ✅.
+12. **Firebase setup completado por el owner:** `console.firebase.google.com` → proyecto `despertarme-73d00` → service account JSON + `google-services.json`. Ficheros colocados en `.firebase-service-account.json` (root, gitignored) y `mobile-kotlin/app/google-services.json` (commiteable).
+13. **Backend FCM verificado:** `build_notifier()` devuelve `FcmNotifier` (no Dummy). Smoke con token fake recibió `InvalidRegistration` (esperado) → credenciales válidas, falta token real.
+14. **Android Firebase wired:** plugin `com.google.gms.google-services` + `firebase-messaging-ktx:24.1.0` añadidos a `build.gradle.kts` y `libs.versions.toml`. Build verde con `google-services.json` procesado.
+15. **Docker Desktop + Redis arrancados:** `docker compose up -d redis`. Poller consultando ESPN cada 60s (verificado en `uvicorn.err`: "Job PollerScheduler._poll_job executed successfully"). Las 7 suscripciones de sesiones previas apuntan a bout_id que ya no existe en ESPN → el poller las salta (warning "Combate 401566093 no encontrado en la card") sin crashar.
+16. **Emulador + APK + FCM token real:** `pixel_6_api34` arrancado, APK instalado, permisos `POST_NOTIFICATIONS` concedidos. La app obtiene token real `e_f7hyAY...` vía `FirebaseMessagingService.onNewToken()` y lo registra con el backend (`POST /api/devices` upsert). Logcat: "Nuevo FCM token: ..." + "FCM token registrado con el backend".
+17. **Smoke `POST /api/devices/me/test-alarm` E2E OK:** backend envió push `fire` con message_id `projects/despertarme-73d00/messages/0:1784323051075181%...`. App recibió `FCM message type=fire` → AlarmService foreground → AlarmActivity abierta → `AudioTrack frames delivered` (sonando). Pipeline completo backend-FCM-app-sonido-pantalla verificado.
+18. **Smoke endpoint debug `/api/debug/simulate-transition`** (temporal, borrado tras el test): simuló push `update` con `estimated_start_at = now + 10 min` para una suscripción real (lead=5) creada desde la app.
+    - A las 22:12:31 el backend mandó push al token real del emulador.
+    - App recibió → `handleUpdate()` calculó `trigger = max(now+1min, (now+10min) - 5min + 1min) = now+6min` → `AlarmScheduler.schedule(trigger=now+6min)` → `setAlarmClock` registrado en `dumpsys alarm` (RTC_WAKEUP #7 com.despertarme.app, tag=*walarm*:com.despertarme.app.action.ALARM_FIRE).
+    - A las 22:18:32 (6 min 2 s después) → `AlarmReceiver: Alarma disparada y fired=true marcado para bout=401889642` → `AlarmActivity` abierta sobre lockscreen → `AlarmService` arrancado (TYPE_ALARM sonando, `AudioTrack frames delivered`).
+    - Verificación `dumpsys alarm`: entrada histórica `+76ms running, 1 wakeups` (alarma disparada).
+    - Pipeline D45 completo **VERIFICADO END-TO-END en emulador**.
+19. **Limpieza:** `src/app/api/routes/debug.py` y bloque `if app_env=="development"` en `main.py` borrados tras confirmar el test. `pytest` 80/80 verdes tras el borrado.
 
 **Pendiente de la próxima sesión:**
-1. **Redis + Docker Desktop** — arrancar `docker compose up -d` para desbloquear el poller del backend y poder enviar pushes `update` reales.
-2. **Smoke end-to-end con evento real** — con Docker operativo: suscribirse a un combate, esperar a que el poller detecte transiciones, verificar que la alarma se programa/reprograma vía FCM, validar ring-once y Doze.
-3. **Validación en hardware físico del owner** — bypass DnD real + OEM quirks.
-4. **Fase 7c (deploy Railway)** — pendiente cuando el owner tenga cuenta.
+1. **Validación con evento real de UFC** — el UFC Fight Night: Du Plessis vs Usman es el 18 de julio (prelims a las 23:00 CEST, main card a las 02:00 CEST del 19). El poller ya está cableado y correrá. Suscribirse a un combate desde la app y esperar a las transiciones reales de ESPN para validar el flujo completo (no simulado). **Limitación**: las suscripciones de smoke previas apuntan a un `bout_id` que ya no existe en ESPN — hay que crear suscripciones nuevas a los bout_ids actuales (401872218, 401874062, etc.).
+2. **Validación en hardware físico del owner** — bypass DnD real + OEM quirks (algunos OEMs chinos matan FCM en background).
+3. **Fase 7c (deploy Railway)** — pendiente cuando el owner tenga cuenta. `railway.json` ya existe desde Sesión 5. Solo falta setear `FCM_CREDENTIALS_JSON`, `DATABASE_URL`, `REDIS_URL` + cambiar `baseUrl` de la APK a la URL pública de Railway.
+4. **Validación Doze** — `adb shell dumpsys deviceidle force-idle` + verify `setAlarmClock` dispara puntualmente (Doze exento por diseño Android). Aún pendiente.
 
 ---
 
@@ -280,7 +292,7 @@ Sin FCM, las dos últimas (reprogramar en tiempo real y verify-then-ring con tim
 | Fase 4 — Boxeo/Tenis reales | Pendiente (fuera del MVP) |
 | Fase 5 — VoiceNotifier real (Twilio) | ❄️ **Obsoleta** — sustituida por FCM (D37/D40) |
 | Fase 6 — Rediseño visual + landing dinámica | ❄️ **Congelada** — rama `web` |
-| Fase 7 — App móvil | 🔶 **En curso** — Spike ✅, Fase 7a (backend Device/FCM) ✅, scaffold Kotlin (D43) ✅. **Sesión 18: Fase G completada — modelo de alarma revisado D45 (FCM + ring-once + cushion siempre +1 min). Firebase configurado y operativo. Backend modificado (guard prev==pre, epoch millis en payload, buffer wired 600s). Android: AlarmScheduler/AlarmReceiver/AlarmActivity/BootReceiver/FCM service implementados con lógica D45. Próximo: Docker Desktop para Redis + smoke E2E con evento real.** |
+| Fase 7 — App móvil | 🔶 **En curso** — Spike ✅, Fase 7a (backend Device/FCM) ✅, scaffold Kotlin (D43) ✅. **Sesión 18: Fase G completada y E2E verificada en emulador — modelo D45 (cushion +1 min siempre, ring-once, sin pre-programación al suscribir). Firebase operativo (token real en emulador). Docker + Redis corriendo. Push `update` simulado → app programa alarma → 6 min después suena + AlarmActivity full-screen. Pipeline completo backend-FCM-app-sonido-pantalla verificado. Próximo: validación con evento UFC real del 18 jul (prelims 23:00 CEST) + hardware físico del owner + deploy Railway.** |
 
 Detalle de checkboxes en `fases.md`.
 

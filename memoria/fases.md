@@ -318,7 +318,10 @@ Sin Android Studio aún → el continuador instala Android Studio + emulador API
 - [x] **`AlarmReceiver`** (BroadcastReceiver): al disparar la alarma → arranca `AlarmService` + abre `AlarmActivity` (full-screen intent). Marca `fired=true` para ring-once D45. Sin verify-then-ring (ya no necesario: la alarma solo se programa con estimación real del backend, no con fecha oficial de ESPN).
 - [x] **`AlarmActivity`** (full-screen): "X vs Y — UFC {event} empieza en ~N min" + botón "Descartar" (stop service). `setShowWhenLocked` + `setTurnScreenOn`. Compose.
 - [x] **BootReceiver** (`RECEIVE_BOOT_COMPLETED`): re-programa alarmas tras reinicio del dispositivo.
-- [ ] **Doze validation**: `adb shell dumpsys deviceidle force-idle` → verify `setAlarmClock` despierta puntualmente. (Pendiente — necesita emulador con Docker operativo para smoke completo).
+- [ ] **Doze validation**: `adb shell dumpsys deviceidle force-idle` → verify `setAlarmClock` despierta puntualmente. (Pendiente — el smoke E2E con evento real del 18 jul validará este punto también).
+- [x] **Cushion +1 min siempre** (D45): aplicado en `handleUpdate()` sobre `est-lead+60s` con floor `now+60s`. Verificado en smoke del 17/18 jul: push con `est=now+10min` + lead=5 → trigger=now+6min → alarma sonó a los 6:02 min exactos.
+- [x] **Ring-once flag** (D45): `PendingAlarm.fired` marcado por `AlarmReceiver` al disparar; pushes `update` posteriores se ignoran. Verificado en smoke: logcat "Alarma disparada y fired=true marcado para bout=401889642".
+- [x] **Smoke E2E en emulador** (17/18 jul 2026): endpoint debug temporal `POST /api/debug/simulate-transition` simuló transición ESPN con `estimated_start_in_minutes=10`. Pipeline completo verificado: backend → push `update` (epoch millis) → handleUpdate (cushion) → AlarmScheduler → setAlarmClock → 6 min tick → AlarmReceiver → AlarmService (sonido TYPE_ALARM) + AlarmActivity (full-screen sobre lockscreen). Tras el test, endpoint debug y su gate en `main.py` borrados. `pytest` 80/80 verdes tras borrado.
 
 **Paso 3 — Pantallas restantes ✅ COMPLETADO (Sesión 17, 2026-07-17 — Fases B/C/D del plan `plan-mvp-android-fable5.md`)**
 

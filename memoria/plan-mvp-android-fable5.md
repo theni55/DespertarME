@@ -90,9 +90,23 @@ Estado actual: tema ya define `UfcRed #E50914`, `BackgroundDark #0A0A0A`, tarjet
 - [ ] Capturar pantallas del resultado final para comparar visualmente contra las 3 referencias de Winamax en `memoria/assets/` (composición de tarjeta, contraste, navegación).
 - [ ] **Definition of Done del MVP visual+funcional:** 4 pantallas navegables con estilo coherente, suscripción real contra el backend, alarma de un solo disparo sonando con bypass de silencio en el emulador, sin crashes.
 
-## Fase G — Reprogramación en tiempo real vía FCM ✅ COMPLETADA (Sesión 18, D45)
+## Fase G — Reprogramación en tiempo real vía FCM ✅ COMPLETADA + E2E VERIFICADA EN EMULADOR (Sesión 18, D45)
 
 **Prerrequisito manual del owner completado** (Sesión 18): Firebase project `despertarme-73d00` con Cloud Messaging habilitado, service account JSON + `google-services.json` generados y pegados en el repo. Código implementado: ver `memoria/decisiones.md` D45 para el modelo completo.
+
+**Smoke E2E en emulador verificado (17-18 jul 2026):**
+- Firebase token real obtenido por la app en emulador `pixel_6_api34` (Google APIs system image) — confirmado que FCM funciona sin Google Play, solo con Play Services.
+- `POST /api/devices/me/test-alarm` → push `fire` → AlarmService arranca + AlarmActivity aparece + TYPE_ALARM suena. Pipeline básico OK.
+- Endpoint debug temporal `POST /api/debug/simulate-transition?bout_id=401889642&estimated_start_in_minutes=10` (borrado tras el test) → backend mandó push `update` real con epoch millis.
+- App recibió → `handleUpdate()` calculó cushion correctly → `AlarmScheduler.schedule(trigger=now+6min)` → `setAlarmClock` en `dumpsys alarm`.
+- A los 6:02 min exactos: `AlarmReceiver` disparó → `fired=true` marcado → `AlarmActivity` opened on lockscreen + `AlarmService` (TYPE_ALARM sonando) + `AudioTrack frames delivered`.
+- Alarma silenciada con `adb shell am force-stop` (botón "Descartar" de AlarmActivity también lo detiene).
+- Endpoint debug + su gate `if app_env=="development"` en `main.py` borrados tras el test. `pytest` 80/80 ✅.
+
+**Pendiente de validación con evento real:**
+- UFC Fight Night: Du Plessis vs Usman el 18 de julio. Prelims a las 23:00 CEST (21:00 UTC), main card a las 02:00 CEST del 19 (00:00 UTC).
+- Suscribirse desde la app a un combate actual (no los bout_id obsoletos de pruebas previas — ESPN los reasigna).
+- Dejar el backend corriendo con Redis (Docker Desktop) y esperar a que el poller detecte `pre→in` o `in→post` reales de ESPN → push FCM `update` automático → alarma programa → suena a la hora calculada.
 
 ### Prerrequisito manual del owner (~30 min, fuera del alcance de cualquier agente)
 1. Crear proyecto `despertarme` en [console.firebase.google.com](https://console.firebase.google.com).
