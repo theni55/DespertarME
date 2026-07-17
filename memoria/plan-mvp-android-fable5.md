@@ -19,24 +19,25 @@
 
 **Objetivo:** poder compilar y ejecutar `mobile-kotlin/` en un emulador desde esta máquina Windows (`javier.romero`), que hoy no tiene nada instalado.
 
-- [ ] Verificar virtualización real antes de instalar nada: `systeminfo` mostró un hipervisor ya presente pero `Win32_Processor.VirtualizationFirmwareEnabled = False` (inconsistente). Comprobar en la BIOS/UEFI que **VT-x/AMD-V** esté activado; si Windows tiene Hyper-V o WSL2 activo, el emulador Android usará **WHPX** en vez de HAXM (HAXM es incompatible con Hyper-V activo — no intentar instalarlo si Hyper-V está on).
-- [ ] Instalar **Android Studio** completo (última versión estable, ej. vía `winget install Google.AndroidStudio` o descarga manual) — decisión del owner: quiere el IDE completo, no solo CLI.
-- [ ] Durante el setup wizard de Android Studio: instalar **SDK Platform 34**, **Build-Tools 34/35**, **Platform-Tools**, **Emulator**, **cmdline-tools (latest)**.
-- [ ] Crear un **AVD** (ej. Pixel 6, API 34, Google APIs x86_64) con aceleración por hardware (WHPX/Hyper-V).
-- [ ] Configurar JDK: el proyecto requiere **JDK 17** (`compileOptions`/`kotlinOptions` en `app/build.gradle.kts` fijan `JavaVersion.VERSION_17`). Esta máquina ya tiene un JDK 21 de Microsoft instalado (`C:\Program Files\Microsoft\jdk-21.0.11.10-hotspot`) pero **no está en `JAVA_HOME`/`PATH`** (el `java` del PATH actual resuelve a un JRE 8 antiguo). Usar el JDK embebido de Android Studio (`Android Studio\jbr`, normalmente JDK 17/21) como `JAVA_HOME` del proyecto, o fijar el JDK 21 de Microsoft — cualquiera de los dos sirve mientras sea ≥17.
-- [ ] Establecer variables de entorno de usuario: `ANDROID_HOME` (SDK), `JAVA_HOME`, y añadir `platform-tools` + `emulator` al `PATH`.
-- [ ] Abrir `mobile-kotlin/` como proyecto existente en Android Studio (**File → Open**, no "New Project" — el scaffold ya existe a mano, no usar wizard que sobrescriba). Dejar que Gradle sync descargue dependencias.
-- [ ] **Criterio de aceptación:** `./gradlew assembleDebug` compila `BUILD SUCCESSFUL` desde Android Studio o terminal, y el AVD arranca sin errores de aceleración de hardware.
+- [x] Verificar virtualización real antes de instalar nada: hipervisor activo confirmado (`hvservice` + `vmcompute` corriendo, WSL2 con Ubuntu). El `VirtualizationFirmwareEnabled=False` era el falso negativo clásico con Hyper-V on. `emulator -accel-check` → "WHPX(10.0.26100) is installed and usable". No se instaló HAXM (correcto).
+- [x] Instalar **Android Studio** completo — `winget install Google.AndroidStudio` → versión 2026.1.2.10 en `C:\Program Files\Android\Android Studio` (jbr = OpenJDK 21.0.10).
+- [x] SDK instalado vía **cmdline-tools + sdkmanager** (sin wizard GUI, automatizable): `platform-tools 37.0.0`, `platforms;android-34`, `build-tools;34.0.0`, `emulator 36.6.11`, `system-images;android-34;google_apis;x86_64`, `cmdline-tools (latest)`. Licencias aceptadas. SDK en `%LOCALAPPDATA%\Android\Sdk`.
+- [x] Crear un **AVD**: `pixel_6_api34` (Pixel 6, API 34, Google APIs x86_64) creado con `avdmanager`.
+- [x] Configurar JDK: `JAVA_HOME` (Machine) ya apuntaba al **JDK 21 de Microsoft** (`C:\Program Files\Microsoft\jdk-21.0.11.10-hotspot`) — ≥17, válido para el proyecto; `gradlew.bat` lo usa. (El handoff previo decía que no estaba en `JAVA_HOME` — ya no es el caso.)
+- [x] Variables de entorno de usuario: `ANDROID_HOME` fijada + `platform-tools`, `emulator` y `cmdline-tools\latest\bin` añadidos al `PATH` de usuario.
+- [x] Proyecto compilando desde terminal con `gradlew` (Android Studio queda instalado para cuando el owner quiera el IDE; File → Open sigue pendiente de primer uso GUI). `local.properties` creado con `sdk.dir` (gitignored) y `app/debug.keystore` regenerado con `keytool` (gitignored — cada máquina genera el suyo).
+- [x] **Criterio de aceptación:** `gradlew assembleDebug` → **BUILD SUCCESSFUL** (1m 10s) y AVD arrancado con "Windows Hypervisor Platform accelerator is operational", `sys.boot_completed=1`, Android 14. ✅ (2026-07-17)
 
 ## Fase B — Backend local operativo
 
 **Objetivo:** tener la API FastAPI corriendo en local con datos reales de ESPN, accesible desde el emulador.
 
-- [ ] Seguir el setup de `AGENTS.md` (raíz del repo, no `mobile-kotlin/`): `python -m venv .venv`, `pip install -e .[dev]`, copiar `.env.example` → `.env` con `DATABASE_URL=sqlite+aiosqlite:///./avisador.db`.
-- [ ] ⚠️ Ejecutar `alembic upgrade head` y `uvicorn app.main:app --reload --host 0.0.0.0` con **cwd en la raíz del repo**, no en `src/` (pydantic-settings no encuentra `.env` si no — cae a defaults Postgres y falla).
-- [ ] Smoke test: `GET http://localhost:8000/health` → `{"status":"ok"}`; `GET /docs` muestra los 9 endpoints.
-- [ ] Desde el emulador: `adb reverse tcp:8000 tcp:8000` (puente adicional; `10.0.2.2:8000` ya funciona nativo en AVD estándar — el `baseUrl` en `AppContainer.kt` ya apunta ahí).
-- [ ] **Criterio de aceptación:** `POST /api/devices` desde curl/Postman devuelve 201; `GET /api/events/{id}` con un evento UFC real devuelve combates con nombres.
+- [x] Setup ya existía en esta máquina (venv Python 3.12.10 + `.env` con `DATABASE_URL=sqlite+aiosqlite:///./avisador.db` + paquete `avisador==0.1.0` instalado). Verificado, no rehecho.
+- [x] `alembic upgrade head` aplicado (head `f7a0001_devices`) y `uvicorn app.main:app --host 0.0.0.0` con cwd en la raíz del repo.
+- [x] Smoke test: `GET /health` → `{"status":"ok"}`.
+- [x] ⚠️ **Quirk máquina corporativa (2026-07-17):** el proxy TLS de Inditex (CA self-signed en la cadena) rompía las llamadas a ESPN con `CERTIFICATE_VERIFY_FAILED`. Fix local sin tocar código del repo: `pip install truststore` + `sitecustomize.py` en `.venv/Lib/site-packages/` con `truststore.inject_into_ssl()` (usa el almacén de certificados de Windows). El venv es gitignored — si se recrea, hay que repetirlo.
+- [x] `adb reverse tcp:8000 tcp:8000` aplicado en el smoke del emulador.
+- [x] **Criterio de aceptación:** `POST /api/devices` → 201; `GET /api/events/600059599` → 12 combates con nombres reales (Anna Melisano vs Dione Barbosa, etc.). ✅ (2026-07-17)
 
 ## Fase C — Sistema visual (aplicar la referencia de estilo)
 
@@ -44,38 +45,32 @@
 
 Estado actual: tema ya define `UfcRed #E50914`, `BackgroundDark #0A0A0A`, tarjetas con `SurfaceDark`, columnas rojo/azul con avatar circular + iniciales de fallback. Esto es un buen punto de partida — **no reescribir desde cero**, evolucionar:
 
-- [ ] **Bottom navigation bar** (patrón Winamax: Home / Buscar / Video / Notas / Trofeo): adaptar a **Home / Eventos / Mis Alertas / Ajustes**, con `NavigationBar` de Material3, iconos Material Icons Extended (ya en las deps). Integrar en `MainActivity.kt` (`AppGraph`) envolviendo el `NavHost` actual.
-- [ ] **HomeScreen**: revisar si el hero a pantalla completa puede ganar más peso visual tipo tarjeta Winamax (imagen del evento + overlay degradado + nombre corto del evento + hora superpuesta), manteniendo el botón "Avísame" como CTA principal. No tocar la decisión ya cerrada del owner en Sesión 15 ("se quedará así la imagen, no es tan relevante en esta fase") sin confirmar con él primero.
-- [ ] **BoutCard (EventDetailScreen)**: ya tiene la estructura correcta (foto+nombre por esquina, chips de metadata, selector de minutos). Mejoras de pulido visual:
-  - Aumentar contraste/tamaño de foto de peleador (referencia: hero grande, no solo avatar 80dp) si el owner quiere más impacto tipo "cara del jugador ocupa media tarjeta" como en Winamax.
-  - Badge de "cardSegment" (main/prelims) con color distintivo en vez de gris plano.
-  - Considerar borde/gradiente sutil en la tarjeta del **próximo combate a suceder** (equivalente al borde verde/naranja de Winamax en el partido destacado) para diferenciarlo del resto de la lista.
-- [ ] **Pantalla "Eventos"** (nueva, Fase D): usar tarjeta-lista similar a la 2ª captura (imagen de fondo + nombre competición + fecha), una tarjeta por evento próximo.
-- [ ] Tipografía: evaluar si Inter (ya usada en la web congelada, rama `web`) se embebe como fuente en `res/font/` para reforzar la identidad visual con pesos bold marcados, en vez de la sans-serif del sistema.
-- [ ] **Criterio de aceptación:** smoke visual manual en emulador — Home, lista de Eventos, EventDetail y Mis Alertas comparten look & feel coherente (fondo oscuro, tarjetas con foto, tipografía bold, acento rojo), navegables desde la barra inferior.
+- [x] **Bottom navigation bar** (Home / Eventos / Mis Alertas / Ajustes) con `NavigationBar` Material3 + iconos Material Icons Extended, integrada en `MainActivity.kt` (`AppGraph`) envolviendo el `NavHost` con `Scaffold`. Seleccionado en rojo `UfcRed`, indicador con alpha.
+- [x] **HomeScreen**: sin cambios de hero (decisión cerrada del owner Sesión 15: "se quedará así la imagen"). Botón "Probar sonido" convertido en toggle "Probar/Parar sonido" (ver nota AlarmService abajo).
+- [x] **BoutCard (EventDetailScreen)** pulido:
+  - Badge de `cardSegment` con color distintivo: `main*` en rojo `UfcRed` traslúcido, prelims en azul `BlueCorner` traslúcido (antes gris plano).
+  - Borde rojo + chip "PRÓXIMO" en la tarjeta del primer combate de la lista (el próximo en suceder — el backend lista en orden cronológico), equivalente al borde destacado de Winamax.
+  - (Foto grande "media tarjeta" tipo Winamax: no aplicado — requiere confirmación del owner, los headshots de ESPN son cuadrados pequeños y escalar avatar 80dp ya cubre el MVP.)
+- [x] **Pantalla "Eventos"**: tarjeta-lista con franja degradada roja + icono guante (sustituto de la imagen: ESPN aún no sirve `image_url`, D42) + nombre bold + fecha con punto rojo.
+- [x] Tipografía: **evaluada y diferida** — embeber Inter en `res/font/` requiere añadir binarios TTF al repo y el beneficio visual con los pesos bold del sistema es marginal en esta fase. Retomar si el owner quiere identidad tipográfica exacta con la web.
+- [x] **Criterio de aceptación:** smoke visual manual en emulador (2026-07-17) — Home, Eventos, EventDetail, Mis Alertas y Ajustes con look & feel coherente (fondo `#0A0A0A`, tarjetas `#1A1A1A`, bold, acento `#E50914`), navegables desde la barra inferior. Capturas verificadas durante la sesión.
 
 ## Fase D — Pantallas y navegación completas
 
 **Objetivo:** cerrar las pantallas que hoy faltan (documentadas como pendientes en `fases.md` Fase 7b Paso 3), reutilizando los endpoints backend ya existentes.
 
-- [ ] **Cliente API**: añadir a `DespertarApi.kt` los dos endpoints que faltan por invocar desde Kotlin:
-  ```kotlin
-  @DELETE("/api/subscriptions/{id}")
-  suspend fun deleteSubscription(@Path("id") id: String)
-
-  @GET("/api/alerts")
-  suspend fun listAlerts(@Query("limit") limit: Int = 50): List<AlertLogOut>
-  ```
-  (`AlertLogOut` DTO nuevo en `Models.kt`, mapear campos de `app/api/schemas.py::AlertLogOut` en el backend.)
-- [ ] **Pantalla "Eventos"** (`ui/screens/EventListScreen.kt`): `GET /api/events`, lista de tarjetas (nombre evento + fecha + imagen si disponible), tap → navega a `event/{id}` (reutiliza `EventDetailScreen` ya existente).
-- [ ] **Pantalla "Mis Alertas"** (`ui/screens/SubscriptionsScreen.kt`): `GET /api/subscriptions` (lista activas) + botón cancelar → `DELETE /api/subscriptions/{id}`; sección de historial con `GET /api/alerts`.
-- [ ] **Pantalla "Ajustes"** (`ui/screens/SettingsScreen.kt`): mostrar `device_id` (debug), timezone, botón "Probar alarma" (ya existe como acción en Home — moverlo aquí o duplicar), estado de permisos (notificaciones, alarmas exactas).
-- [ ] Actualizar `MainActivity.kt`/`AppGraph` con las 4 rutas del `NavHost` + `NavigationBar` de Fase C.
-- [ ] **Criterio de aceptación:** las 4 pantallas navegables sin crashes; suscribirse en EventDetail hace aparecer la suscripción en "Mis Alertas"; cancelar la borra; el historial de alertas se lista (vacío es aceptable si no ha sonado ninguna).
+- [x] **Cliente API**: añadidos a `DespertarApi.kt` `@DELETE("/api/subscriptions/{id}")` y `@GET("/api/alerts")` con `@Query("limit")`; DTO `AlertLogOut` en `Models.kt` mapeando `app/api/schemas.py::AlertLogOut` completo.
+- [x] **Pantalla "Eventos"** (`ui/screens/EventListScreen.kt` + `EventListViewModel`): `GET /api/events`, tarjetas con nombre + fecha, tap → `event/{id}` (reutiliza `EventDetailScreen`).
+- [x] **Pantalla "Mis Alertas"** (`ui/screens/SubscriptionsScreen.kt` + `SubscriptionsViewModel`): `GET /api/subscriptions` + cancelar (`DELETE`, con snackbar) + historial `GET /api/alerts`. Los nombres de peleadores se resuelven con un fetch por evento único (el backend solo devuelve ids en la sub); fallback "Combate #N".
+- [x] **Pantalla "Ajustes"** (`ui/screens/SettingsScreen.kt`): device_id (monospace) + timezone + toggle "Probar/Parar alarma" + estado de permisos (notificaciones vía `checkSelfPermission`, alarmas exactas vía `canScheduleExactAlarms`).
+- [x] `MainActivity.kt`/`AppGraph` con las 4 rutas top-level + `event/{eventId}` + `NavigationBar` (patrón `popUpTo(findStartDestination) { saveState } + launchSingleTop + restoreState`).
+- [x] **Criterio de aceptación** (verificado en emulador 2026-07-17): 4 pantallas navegables sin crashes (logcat sin FATAL); suscripción desde EventDetail (`POST` 201) aparece en Mis Alertas con nombres reales; cancelar (`DELETE` 204) la borra con snackbar "Alerta cancelada"; historial se lista (vacío, esperado — ninguna alerta ha sonado).
 
 ## Fase E — Alarma funcional v1 (sin FCM, un solo disparo)
 
 **Objetivo:** que el botón "Avisarme" programe una alarma real del sistema que suene a la hora estimada — hoy solo persiste la suscripción en BD, no programa nada local.
+
+> Nota (Sesión 17): `AlarmService` ya tiene `ACTION_STOP` (además de `ACTION_START`) — se añadió al descubrir en el smoke que no había forma de silenciar el sonido de prueba desde la app. El botón "Descartar" de `AlarmActivity` puede reutilizarlo directamente.
 
 - [ ] **`AlarmScheduler`** (`alarm/AlarmScheduler.kt`, nuevo): `AlarmManager.setAlarmClock()` a `estimated_start_at − lead_minutes` (usar el timestamp que ya devuelve `GET /api/events/{id}` en el bout). Cancelar cualquier alarma previa para el mismo `bout_id` antes de reprogramar (solo una activa por combate).
 - [ ] Persistir la alarma programada en DataStore (`PendingAlarm`: bout_id, event_id, trigger_at_millis) para que un `BootReceiver` pueda reprogramarla tras reinicio del dispositivo.

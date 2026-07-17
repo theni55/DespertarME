@@ -6,6 +6,66 @@
 
 ## Última sesión
 
+**Fecha:** 2026-07-17 · **Sesión 17 — Fases B+C+D del plan MVP Android completadas: backend local operativo (fix SSL corporativo), bottom nav + 4 pantallas navegables, suscribir/cancelar E2E verificado en emulador.**
+
+**Contexto:** goal de OpenCode agrupando Fases B, C y D de `memoria/plan-mvp-android-fable5.md` (decisión del owner: "agrupar b c y d").
+
+**Hecho en esta sesión:**
+
+1. **Fase B — backend local:** venv/`.env` SQLite ya existían de Sesión 16; `alembic upgrade head` (head `f7a0001_devices`) + uvicorn `--host 0.0.0.0`. **Quirk crítico de esta máquina:** el proxy TLS corporativo (CA self-signed) rompía ESPN con `CERTIFICATE_VERIFY_FAILED` → fix con `pip install truststore` + `sitecustomize.py` en `.venv/Lib/site-packages/` (`truststore.inject_into_ssl()`, usa el cert store de Windows). El venv es gitignored — **si se recrea el venv hay que repetir este fix**. Criterios verificados: `POST /api/devices` 201, `GET /api/events/600059599` con 12 combates reales.
+2. **Fase D — cliente API:** `DespertarApi.kt` + `deleteSubscription` (`@DELETE`) + `listAlerts` (`@GET` con limit) + DTO `AlertLogOut` en `Models.kt`.
+3. **Fase C — NavigationBar:** Material3 con 4 destinos (Home/Eventos/Mis Alertas/Ajustes), acento `UfcRed`, patrón `popUpTo(findStartDestination){saveState}+launchSingleTop+restoreState`. `AppGraph` reescrito con `Scaffold`.
+4. **Fase D — pantallas nuevas:** `EventListScreen`+`EventListViewModel` (tarjetas con franja degradada roja — ESPN no sirve `image_url`, D42), `SubscriptionsScreen`+`SubscriptionsViewModel` (activas con nombres de peleadores resueltos vía fetch del evento + cancelar + historial de alertas), `SettingsScreen` (device_id, timezone, permisos, toggle probar alarma).
+5. **Fase C — pulido BoutCard:** badge segmento con color (main rojo/prelims azul), chip "PRÓXIMO" + borde rojo en el primer combate (el backend lista en orden cronológico). Fix deprecación `ArrowBack` → AutoMirrored. Fuente Inter: evaluada y **diferida** (binarios TTF sin beneficio claro en esta fase).
+6. **`AlarmService.ACTION_STOP` (extra):** el smoke destapó que no había forma de silenciar el sonido de prueba desde la app (solo `ACTION_START`; el owner tuvo que pedir pararla). Añadido `ACTION_STOP` + toggle "Probar/Parar" en Home y Ajustes. Verificado: service arranca y para desde UI.
+7. **Smoke E2E en emulador** (`pixel_6_api34`): build verde sin warnings; recorrido Home → Eventos → EventDetail → suscribir (`POST` 201) → Mis Alertas muestra "Anna Melisano vs Dione Barbosa · 15 min antes" → cancelar (`DELETE` 204, snackbar) → empty state; Ajustes con permisos en verde; logcat sin FATAL en todo el recorrido. Capturas revisadas visualmente contra las referencias Winamax.
+
+**Pendiente de la próxima sesión** (plan `plan-mvp-android-fable5.md`):
+1. **Fase E** — alarma v1 un solo disparo: `AlarmScheduler` (`setAlarmClock`), `AlarmReceiver` + verify-then-ring básico, `AlarmActivity` full-screen (puede reutilizar `ACTION_STOP`), `BootReceiver`, validación Doze.
+2. Fase F — validación end-to-end del MVP completo.
+3. Fase G sigue bloqueada por setup Firebase manual del owner (~30 min).
+
+---
+
+## Sesión 16 (anterior)
+
+**Fecha:** 2026-07-17 · **Sesión 16 — Fase A del plan MVP Android completada en la máquina `javier.romero`: entorno Android operativo (Android Studio + SDK + AVD + build verde).**
+
+**Contexto:** primera sesión en la máquina nueva (`javier.romero`, Windows — la anterior era `pacor`). Se ejecutó como goal de OpenCode (`/goal` plugin) la Fase A de `memoria/plan-mvp-android-fable5.md`.
+
+**Hecho en esta sesión:**
+
+1. **Virtualización verificada:** hipervisor activo (`hvservice` + `vmcompute` corriendo, WSL2 Ubuntu). El `VirtualizationFirmwareEnabled=False` de `Win32_Processor` era el falso negativo esperable con Hyper-V on. `emulator -accel-check` → **"WHPX(10.0.26100) is installed and usable"**. No se instaló HAXM.
+2. **Android Studio 2026.1.2.10** instalado vía `winget install Google.AndroidStudio` (con UAC manual del owner).
+3. **SDK bootstrapeado por CLI** (sin wizard GUI): cmdline-tools descargadas a `%LOCALAPPDATA%\Android\Sdk\cmdline-tools\latest`, licencias aceptadas, `sdkmanager` instaló `platform-tools 37.0.0` + `platforms;android-34` + `build-tools;34.0.0` + `emulator 36.6.11` + `system-images;android-34;google_apis;x86_64`. (Quirk: la descarga del zip con `Invoke-WebRequest` se truncó a 79 MB; `curl.exe -C -` la completó a 136 MB.)
+4. **Variables de entorno:** `ANDROID_HOME` (User) + `platform-tools`/`emulator`/`cmdline-tools\latest\bin` en PATH User. `JAVA_HOME` (Machine) ya apuntaba al JDK 21 de Microsoft — válido (≥17), sin cambios.
+5. **AVD `pixel_6_api34`** creado con `avdmanager` (Pixel 6, API 34, Google APIs x86_64) — mismo nombre que en la máquina anterior, comandos del handoff reutilizables.
+6. **`local.properties`** creado con `sdk.dir` (gitignored) y **`app/debug.keystore` regenerado** con `keytool` (gitignored — el del otro PC no se versiona; params estándar `androiddebugkey`/`android`).
+7. **Build:** `gradlew assembleDebug` → **BUILD SUCCESSFUL** (primera pasada falló solo por el keystore ausente; tras regenerarlo, verde en 1m 10s).
+8. **Emulador:** AVD arrancado, "Windows Hypervisor Platform accelerator is operational", `adb devices` → `emulator-5554 device`, `sys.boot_completed=1`, Android 14. Warnings benignos (opengl32sw fallback, snapshot inexistente en primer boot).
+9. `.gitignore` raíz: añadido `.opencode/goals/` (estado local del plugin `/goal` de OpenCode).
+
+**Rutas de esta máquina (difieren del handoff anterior):**
+
+```powershell
+# JAVA_HOME (Machine, ya fijado): C:\Program Files\Microsoft\jdk-21.0.11.10-hotspot
+# ANDROID_HOME (User, ya fijado): C:\Users\javier.romero\AppData\Local\Android\Sdk
+# Repo: C:\Users\javier.romero\Personal\DespertarME
+
+& "C:\Users\javier.romero\Personal\DespertarME\mobile-kotlin\gradlew.bat" -p "C:\Users\javier.romero\Personal\DespertarME\mobile-kotlin" assembleDebug --no-daemon --console=plain
+emulator -avd pixel_6_api34 -no-snapshot-save -no-boot-anim
+```
+
+**Pendiente de la próxima sesión** (plan `plan-mvp-android-fable5.md`):
+1. **Fase B** — backend local operativo (venv + `.env` SQLite + alembic + uvicorn + `adb reverse`).
+2. Fase C/D — sistema visual + pantallas restantes.
+3. Fase E — alarma v1 un solo disparo.
+4. Fase G sigue bloqueada por setup Firebase manual del owner.
+
+---
+
+## Sesión 15 (anterior)
+
 **Fecha:** 2026-07-16 · **Sesión 15 — Scaffold Kotlin Compose (`mobile-kotlin/`) + Home/EventDetail navegables + smoke emulador OK. D43 + D44 registradas.**
 
 **Contexto:** el owner confirmó en Sesión 14 el pivot a Kotlin nativo puro (sin Expo/RN) y pidió que esta sesión entregara visualmente lo que la web mostraba: Home con "Avísame" → pantalla de combates con nombres, fotos y datos de la API, y selector de minutos de aviso. El handoff Sesión 14 decía que este PC no tenía Android Studio, pero la verificación real reveló que **sí hay SDK Android portable + JDK 17 + AVD `pixel_6_api34`** (instalados en Sesiones 10-11) — solo falta el IDE Android Studio, que no es necesario para compilar con `gradlew`. D44 registrada para aclararlo a futuros continuadores.
@@ -73,7 +133,7 @@ adb shell am start -n com.despertarme.app/.MainActivity
 
 ---
 
-## Última sesión (cont.)
+## Sesión 15 (cont.)
 
 **Fecha:** 2026-07-16 · **Sesión 15 (cont.) — Fixes visuales commiteados. Alarma bloqueada: requiere setup Firebase (manual owner, ~30 min).**
 
@@ -191,7 +251,7 @@ Sin FCM, las dos últimas (reprogramar en tiempo real y verify-then-ring con tim
 | Fase 4 — Boxeo/Tenis reales | Pendiente (fuera del MVP) |
 | Fase 5 — VoiceNotifier real (Twilio) | ❄️ **Obsoleta** — sustituida por FCM (D37/D40) |
 | Fase 6 — Rediseño visual + landing dinámica | ❄️ **Congelada** — rama `web` |
-| Fase 7 — App móvil | 🔶 **En curso** — Spike ✅, Fase 7a (backend Device/FCM) ✅ + review con 4 fixes ✅. **Sesión 15: pivot a Kotlin nativo puro (D43) ejecutado. Scaffold `mobile-kotlin/` Compose + Home/EventDetail navegables + smoke emulador OK. Próximo: `AlarmScheduler` D40 + pantallas restantes.** |
+| Fase 7 — App móvil | 🔶 **En curso** — Spike ✅, Fase 7a (backend Device/FCM) ✅, scaffold Kotlin (D43) ✅. **Sesión 17: Fases B/C/D del plan MVP completadas — bottom nav + 4 pantallas (Home/Eventos/Mis Alertas/Ajustes) + suscribir/cancelar E2E en emulador. Próximo: Fase E (alarma un solo disparo, `AlarmScheduler` D40).** |
 
 Detalle de checkboxes en `fases.md`.
 
@@ -222,15 +282,15 @@ uvicorn app.main:app --reload         # usar --host 0.0.0.0 para emulador
 
 ---
 
-## Cómo compilar y arrancar la app Android (en este PC)
+## Cómo compilar y arrancar la app Android (máquina `javier.romero`, desde Sesión 16)
 
 ```powershell
-# Env vars (ya en perfil User — explícito para SESIONES posteriores o si reinicia):
-$env:JAVA_HOME = "C:\Users\pacor\AppData\Local\jdk-17\jdk-17.0.19+10"
-$env:Path = "$env:JAVA_HOME\bin;$env:LOCALAPPDATA\Android\Sdk\platform-tools;$env:LOCALAPPDATA\Android\Sdk\emulator;$env:Path"
+# Env vars ya persistidas: JAVA_HOME (Machine) = C:\Program Files\Microsoft\jdk-21.0.11.10-hotspot
+#                          ANDROID_HOME (User) = C:\Users\javier.romero\AppData\Local\Android\Sdk
+#                          PATH User incluye platform-tools + emulator + cmdline-tools\latest\bin
 
 # Compilar
-& "X:\Project IA\DespertarME\mobile-kotlin\gradlew.bat" -p "X:\Project IA\DespertarME\mobile-kotlin" assembleDebug --no-daemon --console=plain
+& "C:\Users\javier.romero\Personal\DespertarME\mobile-kotlin\gradlew.bat" -p "C:\Users\javier.romero\Personal\DespertarME\mobile-kotlin" assembleDebug --no-daemon --console=plain
 
 # Emulador + puente + instalar + arrancar
 emulator -avd pixel_6_api34 -no-snapshot-save -no-boot-anim
@@ -245,6 +305,8 @@ adb shell am start -n com.despertarme.app/.MainActivity
 adb logcat -d *:E | findstr /C:"FATAL" /C:"AndroidRuntime"
 adb logcat -d | findstr /C:"DespertarMe"
 ```
+
+> Rutas de la máquina anterior (`pacor`, Sesiones 10-15): JDK 17 portable en `C:\Users\pacor\AppData\Local\jdk-17\...` y repo en `X:\Project IA\DespertarME` — ya no aplican en esta máquina.
 
 ---
 

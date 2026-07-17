@@ -320,13 +320,19 @@ Sin Android Studio aún → el continuador instala Android Studio + emulador API
 - [ ] **BootReceiver** (`RECEIVE_BOOT_COMPLETED`): re-programa alarmas tras reinicio del dispositivo.
 - [ ] **Doze validation**: `adb shell dumpsys deviceidle force-idle` → verify `setAlarmClock` despierta puntualmente.
 
-**Paso 3 — Pantallas restantes (~1-2 sesiones)**
+**Paso 3 — Pantallas restantes ✅ COMPLETADO (Sesión 17, 2026-07-17 — Fases B/C/D del plan `plan-mvp-android-fable5.md`)**
 
-- [ ] **Eventos** (lista `GET /api/events`) por separado de Home — actualmente Home salta directo al próximo evento.
-- [ ] **Mis Alertas**: `GET /api/subscriptions` + `DELETE /api/subscriptions/{id}` + `GET /api/alerts` historial.
-- [ ] **Ajustes**: timezone, estado permisos, "Probar alarma" → `POST /api/devices/me/test-alarm` (esto requiere FCM, por ahora está el botón "Probar sonido" en Home que arranca `AlarmService` directamente).
-- [ ] **AlarmScreen** (modal full-screen) — descrito arriba en AlarmActivity.
+- [x] **Eventos** (`EventListScreen` + `EventListViewModel`): lista `GET /api/events`, tarjeta con franja degradada roja + nombre bold + fecha, tap → `event/{id}`.
+- [x] **Mis Alertas** (`SubscriptionsScreen` + `SubscriptionsViewModel`): `GET /api/subscriptions` con nombres de peleadores resueltos vía fetch del evento + `DELETE /api/subscriptions/{id}` (verificado 204 + snackbar) + historial `GET /api/alerts`.
+- [x] **Ajustes** (`SettingsScreen`): device_id + timezone + estado permisos (notificaciones, alarmas exactas) + toggle "Probar/Parar alarma" que arranca/para `AlarmService` local directamente (el `POST /api/devices/me/test-alarm` del backend requiere FCM — pendiente del tramo FCM).
+- [x] **Bottom `NavigationBar`** Material3 con 4 destinos (Home/Eventos/Mis Alertas/Ajustes), acento `UfcRed`, integrada en `AppGraph` con `Scaffold`.
+- [x] **Cliente API completado**: `@DELETE /api/subscriptions/{id}` + `@GET /api/alerts` + DTO `AlertLogOut`.
+- [x] **Pulido visual Fase C**: badge `cardSegment` con color (main rojo / prelims azul), chip "PRÓXIMO" + borde rojo en el primer combate, `ArrowBack` AutoMirrored (fix deprecación).
+- [x] **`AlarmService.ACTION_STOP`** añadido (gap descubierto en smoke: no había forma de silenciar el sonido de prueba desde la app). Botones de test ahora son toggle Probar/Parar en Home y Ajustes.
+- [ ] **AlarmScreen** (modal full-screen) — entra con AlarmActivity en el Paso 2 / Fase E del plan.
 - [ ] Sonido custom embebido `res/raw/alarm.ogg` (~200-500KB) en lugar de `RingtoneManager.TYPE_ALARM` del spike.
+
+**Smoke Sesión 17 (emulador `pixel_6_api34`, máquina `javier.romero`):** build verde sin warnings; 4 pestañas + detalle navegables sin FATAL; suscripción E2E desde la app (`POST /api/subscriptions` 201 → visible en Mis Alertas con "Anna Melisano vs Dione Barbosa" → `DELETE` 204 → empty state). Fix SSL corporativo del backend (truststore en venv, ver plan Fase B).
 
 **Paso 4 — Tramo FCM (deps externas, D40)**
 

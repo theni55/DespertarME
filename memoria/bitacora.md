@@ -700,3 +700,58 @@ plataforma (Vercel/CF Pages descartados: serverless no soporta el scheduler
 - **Pendiente para próxima sesión**: (1) owner crea proyecto Firebase + service account key Python + `google-services.json` Android; (2) backend FCM ya funcionará una vez set `FCM_CREDENTIALS_JSON` en `.env` (código en `notifiers/fcm.py` desde Sesión 12 + fix Critical Sesión 13, solo falta la credencial); (3) cliente Android FCM `FirebaseMessagingService` que parsea `update|started|cancelled` y reprograma `AlarmScheduler`; (4) `AlarmScheduler` + `AlarmReceiver` + verify-then-ring + `AlarmActivity` full-screen + `BootReceiver`; (5) Redis `docker compose up -d` para desbloquear el poller.
 
 - **Sin commits de código Kotlin en esta sesión-cierre**. Solo se va a commitear la actualización de memorias.
+
+
+## Sesión 16 — Fase A plan MVP Android: entorno operativo en máquina javier.romero (2026-07-17)
+
+- Primera sesión en la máquina nueva (`javier.romero`, Windows). Ejecutada como goal de OpenCode (plugin `/goal`, opencode-goal-plugin) con la Fase A de `memoria/plan-mvp-android-fable5.md` como objetivo. De paso se detectó que `/goal status` sin goal activo enruta el texto al modelo en vez de renderizar la salida canónica (limitación documentada del plugin: `command.execute.before` no intercepta del todo; las mutaciones de estado sí funcionan y las tools quedan read-only en ese turno).
+
+- **Virtualización**: hipervisor activo (`hvservice` + `vmcompute` corriendo, WSL2 Ubuntu). El `VirtualizationFirmwareEnabled=False` de `Win32_Processor` era el falso negativo clásico con Hyper-V on (Windows corre virtualizado y no reporta el firmware). `emulator -accel-check` → "WHPX(10.0.26100) is installed and usable". HAXM no instalado (incompatible con Hyper-V, per plan).
+
+- **Android Studio 2026.1.2.10** vía winget (UAC manual del owner). jbr embebido = OpenJDK 21.0.10.
+
+- **SDK bootstrapeado 100% por CLI** (sin first-run wizard): cmdline-tools zip → `%LOCALAPPDATA%\Android\Sdk\cmdline-tools\latest`, `sdkmanager --licenses` aceptadas, instalados platform-tools 37.0.0 + platforms;android-34 + build-tools;34.0.0 + emulator 36.6.11 + system-images;android-34;google_apis;x86_64. Quirk: `Invoke-WebRequest` truncó el zip a 79 MB (fallo silencioso, "end of central directory" al extraer); `curl.exe -L -C -` lo completó a 136 MB. Preferir `curl.exe` para descargas grandes en esta máquina.
+
+- **Env vars**: `ANDROID_HOME` (User) + platform-tools/emulator/cmdline-tools en PATH User. `JAVA_HOME` (Machine) ya apuntaba al JDK 21 de Microsoft (`C:\Program Files\Microsoft\jdk-21.0.11.10-hotspot`) — válido ≥17, sin cambios. (El `java` del PATH sigue siendo un JRE 8 viejo pero gradlew usa `JAVA_HOME`.)
+
+- **AVD `pixel_6_api34`** creado con avdmanager (Pixel 6, API 34, Google APIs x86_64) — mismo nombre que en la máquina pacor para reutilizar los comandos del handoff.
+
+- **Build**: primera pasada falló solo en `:app:validateSigningDebug` (`app/debug.keystore` no versionado — se generó en el otro PC). Regenerado con keytool (androiddebugkey/android, RSA 2048). Segunda pasada: BUILD SUCCESSFUL en 1m 10s. `local.properties` creado con `sdk.dir` (gitignored).
+
+- **Emulador**: AVD arrancado, "Windows Hypervisor Platform accelerator is operational", `adb devices` → `emulator-5554 device`, `sys.boot_completed=1`, Android 14. Warnings benignos: opengl32sw fallback a OpenGL del sistema, snapshot `default_boot` inexistente en primer boot.
+
+- **Criterio de aceptación Fase A cumplido**: `gradlew assembleDebug` BUILD SUCCESSFUL + AVD sin errores de aceleración.
+
+- `.gitignore` raíz: añadido `.opencode/goals/` (estado local del plugin `/goal`).
+
+- **Pendiente**: Fase B (backend local: venv + `.env` SQLite + alembic + uvicorn + `adb reverse`) → Fases C/D (visual + pantallas) → Fase E (alarma v1). Fase G sigue bloqueada por Firebase manual del owner.
+
+## Sesión 17 — Fases B+C+D plan MVP Android: backend local + bottom nav + 4 pantallas + E2E (2026-07-17)
+
+- Goal de OpenCode agrupando Fases B, C y D de `plan-mvp-android-fable5.md` (decisión del owner: "agrupar b c y d").
+
+- **Fase B — backend local operativo:**
+  - venv (Python 3.12.10) + `.env` SQLite + paquete `avisador==0.1.0` ya existían de la Sesión 16 — verificado, no rehecho.
+  - `alembic upgrade head` → head `f7a0001_devices`. uvicorn `--host 0.0.0.0` lanzado en background (`Start-Process` + `uvicorn.pid`).
+  - **Quirk SSL corporativo (nuevo en esta máquina):** `GET /api/events` devolvía 503 con `CERTIFICATE_VERIFY_FAILED: self-signed certificate in certificate chain` — el proxy TLS de Inditex intercepta la conexión a ESPN y httpx/certifi no conocen la CA corporativa. **Fix sin tocar código del repo:** `pip install truststore` + `sitecustomize.py` en `.venv/Lib/site-packages/` con `truststore.inject_into_ssl()` (valida contra el almacén de certificados de Windows). ⚠️ El venv es gitignored: si se recrea, repetir el fix.
+  - Criterios de aceptación: `POST /api/devices` → 201; `GET /api/events` → UFC Fight Night: Du Plessis vs. Usman; `GET /api/events/600059599` → 12 combates con nombres reales.
+
+- **Fase D — cliente API completado:** `deleteSubscription` (`@DELETE /api/subscriptions/{id}`) + `listAlerts` (`@GET /api/alerts?limit=`) en `DespertarApi.kt`; DTO `AlertLogOut` en `Models.kt` (mapea `schemas.py::AlertLogOut` completo, incl. `fired_at_epoch_hour`, `notifier_response`, `payload`).
+
+- **Fase C — NavigationBar Material3:** 4 destinos (Home/Eventos/Mis Alertas/Ajustes) con Material Icons Extended, seleccionado en `UfcRed` con indicador alpha 0.12, `containerColor = SurfaceDark`. `AppGraph` reescrito con `Scaffold(bottomBar=...)` + patrón estándar `popUpTo(findStartDestination){saveState=true} + launchSingleTop + restoreState`. La barra persiste también en EventDetail.
+
+- **Fase D — 3 pantallas nuevas + 2 ViewModels:**
+  - `EventListScreen` + `EventListViewModel`: `GET /api/events`, tarjeta con franja degradada roja + icono guante (sustituto de imagen — ESPN no sirve `image_url`, D42), nombre bold 17sp, fecha con punto rojo, chevron.
+  - `SubscriptionsScreen` + `SubscriptionsViewModel`: activas (`GET /api/subscriptions`) con **nombres de peleadores resueltos** vía fetch del evento por `event_id` único (el backend solo devuelve ids; fallback "Combate #N"), punto verde de estado, papelera → `DELETE` + snackbar; historial (`GET /api/alerts`) con empty state.
+  - `SettingsScreen`: cards Dispositivo (device_id monospace + timezone), Permisos (notificaciones vía `checkSelfPermission`, alarmas exactas vía `canScheduleExactAlarms`, iconos verde/rojo), Diagnóstico (toggle probar alarma).
+
+- **Fase C — pulido BoutCard:** badge `cardSegment` con color (`main*` → rojo traslúcido, prelims → azul traslúcido; antes gris plano); chip "PRÓXIMO" blanco-sobre-rojo + `BorderStroke` rojo en el primer combate de la lista (el backend lista en orden cronológico — es el próximo en suceder). Fix warning `ArrowBack` → `Icons.AutoMirrored`. **Fuente Inter: evaluada y diferida** (binarios TTF en el repo sin beneficio claro en esta fase; retomar si el owner quiere identidad exacta con la web).
+
+- **`AlarmService.ACTION_STOP` (hallazgo del smoke):** el service solo tenía `ACTION_START` — al probar la alarma desde Ajustes **no había forma de silenciarla desde la app** (el owner tuvo que pedir pararla; se paró con `adb shell am force-stop`). Añadido `ACTION_STOP` (`stopForeground(STOP_FOREGROUND_REMOVE)` + `stopSelf()`) + `stopTestAlarm()` en MainActivity + toggle "Probar/Parar sonido|alarma" en Home y Ajustes. Verificado: `dumpsys activity services` muestra el service arrancando y destruyéndose desde UI. La `AlarmActivity` de Fase E podrá reutilizar `ACTION_STOP` para el botón "Descartar".
+
+- **Smoke E2E en emulador `pixel_6_api34`** (capturas revisadas en sesión):
+  - Build `assembleDebug` SUCCESSFUL sin warnings.
+  - Recorrido completo sin FATAL en logcat: Home (hero + bottom nav) → Eventos (tarjeta del evento) → EventDetail (PRÓXIMO + badges + selector) → "Avisarme" → `POST /api/subscriptions` 201 → Mis Alertas muestra "Anna Melisano vs Dione Barbosa · UFC Fight Night... · 15 min antes" → papelera → `DELETE` 204 + snackbar "Alerta cancelada" → empty state → Ajustes (permisos en verde, Device ID visible) → probar/parar alarma OK.
+  - Quirk PowerShell documentado de paso: `adb exec-out screencap -p > file.png` corrompe el PNG (PS 5.1 convierte binario a texto) — usar `adb shell screencap /sdcard/x.png` + `adb pull`.
+
+- **Pendiente próxima sesión:** Fase E (alarma v1 un solo disparo: `AlarmScheduler` + `AlarmReceiver` + verify-then-ring básico + `AlarmActivity` + `BootReceiver` + Doze) → Fase F (validación MVP) → Fase G bloqueada por Firebase manual del owner.

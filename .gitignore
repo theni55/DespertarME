@@ -79,3 +79,10 @@ Thumbs.db
 
 # Temporales de instaladores (p.ej. Android Studio deja inst_user_settings.tmp)
 *.tmp
+# Estado local del plugin /goal de OpenCode (workflow checkpoint, no sincronizar)
+.opencode/goals/
+# Runtime del uvicorn lanzado en background durante smokes locales
+uvicorn.out
+uvicorn.err
+uvicorn.pid
+
