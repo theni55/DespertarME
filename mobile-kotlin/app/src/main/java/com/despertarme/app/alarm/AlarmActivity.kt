@@ -26,9 +26,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.despertarme.app.ui.theme.UfcRed
-import kotlin.time.Duration.Companion.minutes
-import kotlin.time.DurationUnit
-import kotlinx.coroutines.runBlocking
 
 class AlarmActivity : ComponentActivity() {
 

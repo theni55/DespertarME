@@ -39,11 +39,6 @@ class DespertarMeApp : Application() {
             enableVibration(false)
             setSound(null, null)
         }
-        // AudioAttributes usage alarm for the channel (pre-26 ignored, safe).
-        @Suppress("unused")
-        val attrs = AudioAttributes.Builder()
-            .setUsage(AudioAttributes.USAGE_ALARM)
-            .build()
         nm.createNotificationChannel(channel)
     }
 

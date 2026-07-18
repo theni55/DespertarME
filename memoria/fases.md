@@ -332,17 +332,17 @@ Sin Android Studio aún → el continuador instala Android Studio + emulador API
 - [x] **Cliente API completado**: `@DELETE /api/subscriptions/{id}` + `@GET /api/alerts` + DTO `AlertLogOut`.
 - [x] **Pulido visual Fase C**: badge `cardSegment` con color (main rojo / prelims azul), chip "PRÓXIMO" + borde rojo en el primer combate, `ArrowBack` AutoMirrored (fix deprecación).
 - [x] **`AlarmService.ACTION_STOP`** añadido (gap descubierto en smoke: no había forma de silenciar el sonido de prueba desde la app). Botones de test ahora son toggle Probar/Parar en Home y Ajustes.
-- [ ] **AlarmScreen** (modal full-screen) — entra con AlarmActivity en el Paso 2 / Fase E del plan.
+- [x] **AlarmScreen** (modal full-screen) — `AlarmActivity.kt` implementado en el Paso 2 (Sesión 18, modelo D45).
 - [ ] Sonido custom embebido `res/raw/alarm.ogg` (~200-500KB) en lugar de `RingtoneManager.TYPE_ALARM` del spike.
 
 **Smoke Sesión 17 (emulador `pixel_6_api34`, máquina `javier.romero`):** build verde sin warnings; 4 pestañas + detalle navegables sin FATAL; suscripción E2E desde la app (`POST /api/subscriptions` 201 → visible en Mis Alertas con "Anna Melisano vs Dione Barbosa" → `DELETE` 204 → empty state). Fix SSL corporativo del backend (truststore en venv, ver plan Fase B).
 
 **Paso 4 — Tramo FCM (deps externas, D40)**
 
-- [ ] Firebase project (manual owner): service account JSON → `FCM_CREDENTIALS_JSON` backend + `google-services.json` en `mobile-kotlin/app/`.
-- [ ] Plugin `com.google.gms.google-services` + dep `com.google.firebase:firebase-messaging` (en `build.gradle.kts` y `libs.versions.toml`).
-- [ ] Cliente FCM: `FirebaseMessagingService` handler. Background: `update` → reprogramar `AlarmScheduler`; `started`/`cancelled` → notificación informativa. Foreground: `update` → actualizar UI.
-- [ ] Redis: `docker compose up -d` para desbloquear poller (idempotencia D16).
+- [x] Firebase project (manual owner): service account JSON → `FCM_CREDENTIALS_JSON` backend + `google-services.json` en `mobile-kotlin/app/`. *(Sesión 18: Firebase project `despertarme-73d00` creado, credenciales colocadas.)*
+- [x] Plugin `com.google.gms.google-services` + dep `com.google.firebase:firebase-messaging` (en `build.gradle.kts` y `libs.versions.toml`). *(Sesión 18: plugin + `firebase-messaging-ktx` 24.1.0 añadidos.)*
+- [x] Cliente FCM: `FirebaseMessagingService` handler. Background: `update` → reprogramar `AlarmScheduler`; `started`/`cancelled` → notificación informativa. Foreground: `update` → actualizar UI. *(Sesión 18: `DespertarMeFirebaseService.kt` con `handleUpdate`/`handleStarted`/`handleCancelled`/`handleFire`.)*
+- [x] Redis: `docker compose up -d` para desbloquear poller (idempotencia D16). *(Sesión 18: Docker Desktop + Redis corriendo, poller activo.)*
 
 **Paso 5 — Validación final + deploy (Fase 7c)**
 

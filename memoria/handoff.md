@@ -6,6 +6,32 @@
 
 ## Última sesión
 
+**Fecha:** 2026-07-18 · **Sesión 19 — Polishing pre-Play Store: icono launcher custom + limpieza de código + memorias actualizadas.**
+
+**Contexto:** el owner preguntó cuánto quedaba para terminar la app. Tras revisión completa del código de `mobile-kotlin/` (27 ficheros Kotlin + manifest + resources) se confirmó que **el código de features está terminado** desde Sesión 18 (Fase G completada con pipeline FCM end-to-end verificado en emulador). Esta sesión fue de pulido pre-Play-Store, no de features.
+
+**Hecho en esta sesión:**
+
+1. **Icono de launcher propio** — adaptive icon vectorial (sin PNGs por densidad, `minSdk=26` lo permite): `res/drawable/ic_launcher_background.xml` (fondo rojo `#E50914`) + `res/drawable/ic_launcher_foreground.xml` (Material `ic_alarm` blanco escalado a safe zone de 108dp) + `res/mipmap-anydpi-v26/ic_launcher.xml` + `ic_launcher_round.xml`. `AndroidManifest.xml` actualizado: `@android:drawable/sym_def_app_icon` sustituido por `@mipmap/ic_launcher` + `@mipmap/ic_launcher_round`.
+2. **PNG 512×512 para Play Console** — `scripts/gen_playstore_icon.ps1` commiteable (PowerShell + `System.Drawing`) genera `mobile-kotlin/app/src/main/playstore-icon.png` con fondo rojo + reloj de alarma blanco. Placeholder mejorable con logo real del owner.
+3. **Limpieza de código en `AlarmActivity.kt`** — borradas 3 líneas de imports sin usar: `kotlin.time.Duration.Companion.minutes`, `kotlin.time.DurationUnit`, `kotlinx.coroutines.runBlocking`.
+4. **Limpieza de dead code en `DespertarMeApp.kt`** — borrado bloque `val attrs` con `@Suppress("unused")` (4 líneas de `AudioAttributes` que nunca se asignaban al channel).
+5. **Comentario stale actualizado en `AppContainer.kt`** — "FCM placeholder until the FCM tramo arrives" sustituido por texto que refleja que FCM está wired desde Sesión 18 y el placeholder sigue siendo válido para el caso pre-`onNewToken`.
+6. **Deuda documental cerrada en `memoria/fases.md`** — Paso 4 (Tramo FCM) y AlarmScreen marcados `[x]` con notas "(Sesión 18: ...)".
+
+**Pendiente de la próxima sesión:**
+1. **Validación con evento real de UFC** — el UFC Fight Night: Du Plessis vs Usman es el 18 de julio (prelims a las 23:00 CEST). El poller ya está cableado con Redis. Suscribirse desde la app a un combate con `bout_id` actual y esperar transiciones reales de ESPN.
+2. **Validación en hardware físico del owner** — bypass DnD real + OEM quirks (algunos OEMs chinos matan FCM en background).
+3. **Validación Doze** — `adb shell dumpsys deviceidle force-idle` + verificar `setAlarmClock` despierta puntualmente.
+4. **Fase 7c (deploy Railway)** — pendiente cuando el owner tenga cuenta. `railway.json` ya existe. Solo falta setear env-vars y cambiar `baseUrl` en la APK.
+5. **Release keystore + `baseUrl` per buildType + ProGuard** — pospuesto a esta sesión (no bloquea test local en emulador).
+6. **Play Store** — cuenta Google Play ($25) + listing (icono PNG 512 ya generado, screenshots + descripción + política de privacidad pendientes) + subir AAB.
+7. **Mejoras post-MVP pospuestas**: sonido custom `alarm.ogg`, Home póster dinámico del próximo evento (D42), admin web de devices, calibrado buffer inter-combates.
+
+---
+
+## Sesión 18 (anterior)
+
 **Fecha:** 2026-07-17/18 · **Sesión 18 — Fase G: modelo de alarma revisado D45. Pipeline FCM end-to-end verificado: backend → push FCM → app → alarma suena + AlarmActivity. Cushion siempre +1 min, ring-once con flag `fired`. Smoke E2E en emulador OK (alarma sonó a los 6 min de recibir push `update` simulado).**
 
 **Contexto:** el owner pidió revisar el modelo de alarma de la Sesión 17. Tras grilling iterativo (plan mode) se llegó al modelo D45: la alarma local NO se programa al suscribirse; el backend solo manda push `update` cuando el combate previo transiciona `pre→in` o `in→post` (no en `pre`). La app programa la alarma al recibir el push, con cushion siempre +1 min y ring-once (flag `fired=true`). Lead=30 suena al recibir primer push (pre→in) + cushion; lead=10/15 suenan juntos al acabar el previo (~9 min aviso); lead=5 suena ~4 min antes. Sin fallback a fecha oficial de ESPN (decisión del owner). Opción 60 min eliminada del selector.

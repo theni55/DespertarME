@@ -18,9 +18,10 @@ class AppContainer(context: Context) {
 
     private val storage = DeviceStorage(context)
 
-    // FCM placeholder until the FCM tramo arrives — backend accepts any string
-    // >=10 chars and the poller simply won't push without a real token. Meanwhile
-    // the device can still register and create subscriptions.
+    // FCM is wired end-to-end since Sesión 18, but the token may not be available
+    // yet (e.g. before FirebaseInitProvider fires onNewToken). The placeholder
+    // "no-fcm-yet-{id}" keeps registration non-blocking; the real token replaces
+    // it when registerFcmToken() is called from the FCM service.
     private val deviceIdFlow = MutableStateFlow<String?>(null)
     val deviceId: StateFlow<String?> get() = deviceIdFlow
 

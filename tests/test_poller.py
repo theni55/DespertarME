@@ -72,9 +72,7 @@ async def _seed_device_and_sub(
 
 
 @freeze_time("2026-07-11T20:00:00+00:00")
-async def test_poller_no_push_when_prev_pre(
-    db_session, fake_provider, fake_redis
-) -> None:
+async def test_poller_no_push_when_prev_pre(db_session, fake_provider, fake_redis) -> None:
     """D45 — cuando el combate previo sigue en `pre`, no se dispara ningún push
     porque no hay información real de inicio (el backend espera a que el prev
     transicione a `in` o `post`)."""
