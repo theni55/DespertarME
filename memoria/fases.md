@@ -346,11 +346,11 @@ Sin Android Studio aún → el continuador instala Android Studio + emulador API
 
 **Paso 5 — Validación final + deploy (Fase 7c)**
 
-- [ ] Backend en Railway (D33): env-vars `FCM_CREDENTIALS_JSON` + `APP_ENV=production` + `JWT_SECRET` + PG + Redis add-ons. *(Pendiente: cuenta Railway del owner. Decisión Sesión 19: Opción C — test en móvil físico vía URL pública de Railway, sustituyendo `10.0.2.2` que solo funciona en emulador.)*
-- [ ] **Cambiar `baseUrl` en `AppContainer.kt`** de `http://10.0.2.2:8000/` a la URL HTTPS pública de Railway (1 línea).
+- [x] Backend en Railway (D33): `https://despertarme-production.up.railway.app`. `FCM_CREDENTIALS_JSON` + `APP_ENV=production` + PG + Redis add-ons configurados. *(Sesión 20: deploy operativo tras 3 fixes de migración + railway.json.)*
+- [x] **Cambiar `baseUrl` en `AppContainer.kt`** de `http://10.0.2.2:8000/` a `https://despertarme-production.up.railway.app/`. *(Sesión 20: 1 línea cambiada, APK debug BUILD SUCCESSFUL 23.1 MB.)*
 - [ ] Móvil físico Android 14 (bypass DnD real + OEM quirks del owner).
-- [ ] `./gradlew assembleDebug` recompilar APK tras el cambio de `baseUrl`.
-- [ ] Smoke end-to-end: crear alerta → alarma local suena a la hora estimada en hardware físico con DnD/silencio.
+- [x] `./gradlew assembleDebug` recompilar APK tras el cambio de `baseUrl`. *(Hecho en Sesión 20. Release APK pospuesta al tramo Play Store.)*
+- [ ] Smoke end-to-end: crear alerta → alarma local suena a la hora estimada en hardware físico con DnD/silencio. *(Pendiente: evento UFC real de hoy noche + validación Doze.)*
 
 ### Fase 7c — Deploy + smoke real (Sesión 14 plan, reescrito con stack Kotlin; planificado Sesión 19 vía Opción C: Railway URL)
 

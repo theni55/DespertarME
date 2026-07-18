@@ -38,7 +38,7 @@ class AppContainer(context: Context) {
 
         val contentType = "application/json".toMediaType()
         api = Retrofit.Builder()
-            .baseUrl("http://10.0.2.2:8000/")
+            .baseUrl("https://despertarme-production.up.railway.app/")
             .client(http)
             .addConverterFactory(json.asConverterFactory(contentType))
             .build()

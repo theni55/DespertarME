@@ -862,3 +862,17 @@ plataforma (Vercel/CF Pages descartados: serverless no soporta el scheduler
 - **Pendiente:** validación con evento UFC real (hoy 18 jul), hardware físico del owner, Doze, Railway, release build config + Play Store listing.
 
 **Decisión post-sesión (2026-07-18):** el owner decidió que el test en móvil físico se hará vía Railway (Opción C), no con `adb reverse` + `10.0.2.2` del emulador. Esto implica: (1) crear cuenta Railway + deploy, (2) cambiar `baseUrl` en `AppContainer.kt` de `http://10.0.2.2:8000/` a la URL HTTPS de Railway, (3) recompilar APK debug, (4) instalar en móvil vía `adb`. Railway se convierte en el prerrequisito bloqueante para el test en hardware físico. El cambio de `baseUrl` (~1 línea) y la recompilación se ejecutan apenas el owner dé la URL. Sin Railway, el móvil físico no puede contactar al backend porque `10.0.2.2` solo resuelve en emulador AOSP.
+
+## Sesión 20 — Railway deploy operativo. baseUrl cambiado a URL pública. APK lista para test en hardware físico (2026-07-18)
+
+- **Backend desplegado en Railway:** `https://despertarme-production.up.railway.app`. `/health` 200 (`{"status":"ok","env":"production"}`), `/api/events` devuelve datos reales de ESPN (UFC Fight Night Du Plessis vs Usman, 12 combates con headshots), `/api/events/600059599` con `previous_bout_id` derivado server-side (E4 verificado: bout #11 → previous=401889642). Configurado `FCM_CREDENTIALS_JSON` + `SCHEDULER_ENABLED=true` → poller 24/7 corriendo en Railway.
+- **3 fixes aplicados a la migración `f7a0001_devices`** (fallaba en Railway PG virgen sin log output, OOM probable en free tier):
+  - (a) Añadido `if_exists=True` a los 5 `op.drop_table()` (no-idempotente → idempotente). En PG virgen son no-ops. 
+  - (b) Eliminado bloque `sa.Enum(name="user_role").drop()` (innecesario en PG virgen; `subscription_status` y `alert_status` se reciclan en el nuevo schema).
+  - Commits `f32d502` + `50aa62f`.
+- **Fix de `railway.json`:** (a) `healthcheckTimeout` de 120 → 300s (Railway free tier lento). (b) `startCommand` eliminado (Railway no soporta shell builtins como `set`, `exec`; usa CMD del Dockerfile). (c) `--log-level debug` añadido al CMD del Dockerfile para diagnóstico. Commit `6164820`.
+- **`.dockerignore` creado** (62 líneas): excluye `.venv/`, `mobile-kotlin/`, `mobile-expo/`, secrets, logs, caches. Commit `9a7b911`.
+- **Root cause del primer healthcheck failure:** la variable `DATABASE_URL` en Railway tenía un espacio al final (SQLAlchemy rechaza URLs con whitespace). Tras corregir, deploy pasó a "Running".
+- **`baseUrl` en APK:** `AppContainer.kt:40` cambiado de `http://10.0.2.2:8000/` a `https://despertarme-production.up.railway.app/`. APK debug recompilada (BUILD SUCCESSFUL, 23.1 MB).
+- **Nota:** el Railway deploy tomó varios intentos (3 errores distintos: ENUM-drop bug en migración, OOM del container por drops  en `if_exists`, espacio en DATABASE_URL). La combinación de estos 3 fixes + el `.dockerignore` resuelven todos los casos (deploy fresco, PG nueva o existente).
+- **Pendiente próxima sesión:** validación con evento UFC real (hoy, prelims 23:00 CEST, main card 02:00 CEST), hardware físico del owner, Doze, release keystore + Play Store listing.

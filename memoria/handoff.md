@@ -6,6 +6,31 @@
 
 ## Última sesión
 
+**Fecha:** 2026-07-18 · **Sesión 20 — Backend en Railway operativo. baseUrl cambiado a URL pública. APK lista para test en hardware físico.**
+
+**Contexto:** tras varios despliegues fallidos en Railway por bugs en la migración `f7a0001_devices` (ENUMs dropeados y reutilizados en PG virgen, `op.drop_table()` sin `if_exists`), se aplicaron 3 fixes incrementales hasta que el deploy pasó. El backend responde en `https://despertarme-production.up.railway.app` con `/health` 200, `/api/events` con datos reales de UFC Fight Night Du Plessis vs Usman (12 combates, headshots, previous_bout_id server-side). Se cambió `baseUrl` en la app Android de `http://10.0.2.2:8000/` a la URL pública de Railway. APK debug recompilada (23.1 MB). FCM_CREDENTIALS_JSON configurado y SCHEDULER_ENABLED=true para que el poller corra 24/7 en Railway.
+
+**Hecho en esta sesión:**
+
+1. **Fix de migración `f7a0001_devices`** — (a) añadido `if_exists=True` a los 5 `op.drop_table()` (la migración era no-idempotente y fallaba en PG virgen sin log output — OOM probable en free tier). (b) Eliminado bloque `sa.Enum(name="user_role").drop()` entero (innecesario en PG virgen; `subscription_status`/`alert_status` se reciclan en el nuevo schema). (c) Ruff + black aplicados a todos los ficheros de `alembic/`. 2 commits (`f32d502`, `50aa62f`).
+2. **Fix de `railway.json`** — (a) `healthcheckTimeout` subido de 120 a 300s. (b) `startCommand` eliminado (Railway no soporta shell builtins como `set`, `exec`; usa CMD del Dockerfile). (c) `--log-level debug` añadido al CMD del Dockerfile. Commit `6164820`.
+3. **`.dockerignore`** creado (62 líneas): excluye `.venv/`, `mobile-kotlin/`, `mobile-expo/`, secrets, logs, caches. Commit `9a7b911`.
+4. **Root cause del primer healthcheck failure** — `DATABASE_URL` en Railway tenía un espacio al final (SQLAlchemy rechaza URLs con whitespace). Tras corregir, deploy pasó a "Running".
+5. **Verificación del backend** — `/health` 200, `/api/events` devuelve UFC Fight Night con datos ESPN reales, `/api/events/600059599` con 12 combates + headshots + `previous_bout_id` calculado server-side. Configurado `SCHEDULER_ENABLED=true` + `FCM_CREDENTIALS_JSON`.
+6. **`baseUrl` en APK** — `AppContainer.kt:40` cambiado de `http://10.0.2.2:8000/` a `https://despertarme-production.up.railway.app/`. APK debug recompilada (BUILD SUCCESSFUL, 23.1 MB).
+7. **`fcm-one-line.txt`** generado con JSON de Firebase comprimido a una línea (2345 chars), usado para pegar en Railway.
+
+**Pendiente de la próxima sesión:**
+1. **Validación con evento real de UFC (hoy noche)** — Prelims 23:00 CEST (21:00 UTC), main card 02:00 CEST (00:00 UTC). Instalar APK en emulador o móvil físico → suscribirse a un combate → esperar push FCM real del poller en Railway → alarma suena con DnD.
+2. **Validación Doze** — `adb shell dumpsys deviceidle force-idle` + verificar `setAlarmClock` despierta.
+3. **Validación en hardware físico** — bypass OEM quirks. APK debug por `adb install`.
+4. **Release keystore + baseUrl per buildType + ProGuard** — pospuesto. El test con evento real usa APK debug.
+5. **Play Store** — cuenta Google Play ($25) + listing + AAB firmado.
+
+---
+
+## Sesión 19 (anterior)
+
 **Fecha:** 2026-07-18 · **Sesión 19 — Polishing pre-Play Store: icono launcher custom + limpieza de código + memorias actualizadas.**
 
 **Contexto:** el owner preguntó cuánto quedaba para terminar la app. Tras revisión completa del código de `mobile-kotlin/` (27 ficheros Kotlin + manifest + resources) se confirmó que **el código de features está terminado** desde Sesión 18 (Fase G completada con pipeline FCM end-to-end verificado en emulador). Esta sesión fue de pulido pre-Play-Store, no de features.
