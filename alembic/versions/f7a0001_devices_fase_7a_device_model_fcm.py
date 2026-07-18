@@ -28,16 +28,16 @@ válido para ambos. Para PG, `sa.Enum(...).drop()` borra el ENUM huérfano
 
 from __future__ import annotations
 
-from typing import Sequence, Union
+from collections.abc import Sequence
 
 import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "f7a0001_devices"
-down_revision: Union[str, None] = "a3657c6166f0"
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | None = "a3657c6166f0"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
@@ -48,14 +48,15 @@ def upgrade() -> None:
     op.drop_table("bout_subscriptions")
     op.drop_table("users")
 
-    # 2. En Postgres, dropear los ENUMs huérfanos. En SQLite, los "enum" son
-    #    CHECK inline y se borran con la tabla → noop. Sa.Enum.drop es seguro
-    #    en ambos (se transforma en noop en SQLite via alembic).
+    # 2. En Postgres, dropear solo user_role (realmente obsoleto — las tablas
+    #    nuevas ya no lo usan). subscription_status y alert_status se RECICLAN
+    #    con mismos nombres y valores en el nuevo schema (bout_subscriptions +
+    #    alert_log) → NO dropearlos o el CREATE TABLE de abajo falla con
+    #    "type subscription_status does not exist" (bug PG-only, en SQLite los
+    #    ENUM son CHECK inline y la migración pasaba sin detectarlo).
     bind = op.get_bind()
     if bind.dialect.name == "postgresql":
         sa.Enum(name="user_role").drop(bind, checkfirst=True)
-        sa.Enum(name="subscription_status").drop(bind, checkfirst=True)
-        sa.Enum(name="alert_status").drop(bind, checkfirst=True)
 
     # 3. Crear tabla `devices`.
     op.create_table(
@@ -115,15 +116,26 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.ForeignKeyConstraint(
-            ["device_id"], ["devices.id"], ondelete="CASCADE", name=op.f("fk_bout_subscriptions_device_id_devices")
+            ["device_id"],
+            ["devices.id"],
+            ondelete="CASCADE",
+            name=op.f("fk_bout_subscriptions_device_id_devices"),
         ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_bout_subscriptions")),
         sa.UniqueConstraint("device_id", "bout_id", name="uq_bout_subscriptions_device_bout"),
     )
-    op.create_index(op.f("ix_bout_subscriptions_device_id"), "bout_subscriptions", ["device_id"], unique=False)
-    op.create_index(op.f("ix_bout_subscriptions_event_id"), "bout_subscriptions", ["event_id"], unique=False)
-    op.create_index(op.f("ix_bout_subscriptions_bout_id"), "bout_subscriptions", ["bout_id"], unique=False)
-    op.create_index(op.f("ix_bout_subscriptions_status"), "bout_subscriptions", ["status"], unique=False)
+    op.create_index(
+        op.f("ix_bout_subscriptions_device_id"), "bout_subscriptions", ["device_id"], unique=False
+    )
+    op.create_index(
+        op.f("ix_bout_subscriptions_event_id"), "bout_subscriptions", ["event_id"], unique=False
+    )
+    op.create_index(
+        op.f("ix_bout_subscriptions_bout_id"), "bout_subscriptions", ["bout_id"], unique=False
+    )
+    op.create_index(
+        op.f("ix_bout_subscriptions_status"), "bout_subscriptions", ["status"], unique=False
+    )
 
     # 5. Crear `alert_log` (nueva forma: device_id + fired_at_epoch_hour).
     op.create_table(
@@ -161,14 +173,19 @@ def upgrade() -> None:
             name=op.f("fk_alert_log_subscription_id_bout_subscriptions"),
         ),
         sa.ForeignKeyConstraint(
-            ["device_id"], ["devices.id"], ondelete="CASCADE", name=op.f("fk_alert_log_device_id_devices")
+            ["device_id"],
+            ["devices.id"],
+            ondelete="CASCADE",
+            name=op.f("fk_alert_log_device_id_devices"),
         ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_alert_log")),
         sa.UniqueConstraint(
             "subscription_id", "bout_id", "fired_at_epoch_hour", name="uq_alert_idempotency"
         ),
     )
-    op.create_index(op.f("ix_alert_log_subscription_id"), "alert_log", ["subscription_id"], unique=False)
+    op.create_index(
+        op.f("ix_alert_log_subscription_id"), "alert_log", ["subscription_id"], unique=False
+    )
     op.create_index(op.f("ix_alert_log_device_id"), "alert_log", ["device_id"], unique=False)
     op.create_index(op.f("ix_alert_log_bout_id"), "alert_log", ["bout_id"], unique=False)
     op.create_index(op.f("ix_alert_log_fired_at"), "alert_log", ["fired_at"], unique=False)
@@ -222,10 +239,18 @@ def downgrade() -> None:
         sa.ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index(op.f("ix_bout_subscriptions_user_id"), "bout_subscriptions", ["user_id"], unique=False)
-    op.create_index(op.f("ix_bout_subscriptions_event_id"), "bout_subscriptions", ["event_id"], unique=False)
-    op.create_index(op.f("ix_bout_subscriptions_bout_id"), "bout_subscriptions", ["bout_id"], unique=False)
-    op.create_index(op.f("ix_bout_subscriptions_status"), "bout_subscriptions", ["status"], unique=False)
+    op.create_index(
+        op.f("ix_bout_subscriptions_user_id"), "bout_subscriptions", ["user_id"], unique=False
+    )
+    op.create_index(
+        op.f("ix_bout_subscriptions_event_id"), "bout_subscriptions", ["event_id"], unique=False
+    )
+    op.create_index(
+        op.f("ix_bout_subscriptions_bout_id"), "bout_subscriptions", ["bout_id"], unique=False
+    )
+    op.create_index(
+        op.f("ix_bout_subscriptions_status"), "bout_subscriptions", ["status"], unique=False
+    )
     op.create_table(
         "event_subscriptions",
         sa.Column("id", sa.String(length=36), nullable=False),
@@ -237,8 +262,12 @@ def downgrade() -> None:
         sa.ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index(op.f("ix_event_subscriptions_event_id"), "event_subscriptions", ["event_id"], unique=False)
-    op.create_index(op.f("ix_event_subscriptions_user_id"), "event_subscriptions", ["user_id"], unique=False)
+    op.create_index(
+        op.f("ix_event_subscriptions_event_id"), "event_subscriptions", ["event_id"], unique=False
+    )
+    op.create_index(
+        op.f("ix_event_subscriptions_user_id"), "event_subscriptions", ["user_id"], unique=False
+    )
     op.create_table(
         "sport_subscriptions",
         sa.Column("id", sa.String(length=36), nullable=False),
@@ -249,8 +278,12 @@ def downgrade() -> None:
         sa.ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index(op.f("ix_sport_subscriptions_sport"), "sport_subscriptions", ["sport"], unique=False)
-    op.create_index(op.f("ix_sport_subscriptions_user_id"), "sport_subscriptions", ["user_id"], unique=False)
+    op.create_index(
+        op.f("ix_sport_subscriptions_sport"), "sport_subscriptions", ["sport"], unique=False
+    )
+    op.create_index(
+        op.f("ix_sport_subscriptions_user_id"), "sport_subscriptions", ["user_id"], unique=False
+    )
     op.create_table(
         "alert_log",
         sa.Column("id", sa.String(length=36), nullable=False),
@@ -272,9 +305,13 @@ def downgrade() -> None:
         sa.ForeignKeyConstraint(["subscription_id"], ["bout_subscriptions.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("subscription_id", "bout_id", "fired_at_hour", name="uq_alert_idempotency"),
+        sa.UniqueConstraint(
+            "subscription_id", "bout_id", "fired_at_hour", name="uq_alert_idempotency"
+        ),
     )
-    op.create_index(op.f("ix_alert_log_subscription_id"), "alert_log", ["subscription_id"], unique=False)
+    op.create_index(
+        op.f("ix_alert_log_subscription_id"), "alert_log", ["subscription_id"], unique=False
+    )
     op.create_index(op.f("ix_alert_log_user_id"), "alert_log", ["user_id"], unique=False)
     op.create_index(op.f("ix_alert_log_bout_id"), "alert_log", ["bout_id"], unique=False)
     op.create_index(op.f("ix_alert_log_fired_at"), "alert_log", ["fired_at"], unique=False)

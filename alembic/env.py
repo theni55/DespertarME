@@ -3,6 +3,7 @@
 Carga settings desde `app.config` para que `DATABASE_URL` y `REDid_url`
 sean consistentes con el runtime de FastAPI.
 """
+
 from __future__ import annotations
 
 import asyncio
