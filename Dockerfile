@@ -21,4 +21,4 @@ EXPOSE 8000
 
 # --workers 1 es requisito: el scheduler del Poller corre in-process (D31).
 # Shell form para expandir $PORT (Railway lo inyecta; local usa 8000).
-CMD alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1
+CMD alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1 --log-level debug
