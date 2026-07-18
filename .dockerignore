@@ -1,0 +1,62 @@
+# Virtual envs — deps se instalan dentro del container
+.venv/
+venv/
+env/
+ENV/
+
+# Android projects — no necesarios en imagen backend
+mobile-kotlin/
+mobile-expo/
+
+# Cachés Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# BD de desarrollo local
+*.db
+*.sqlite
+*.sqlite3
+avisador.db
+
+# Logs
+*.log
+uvicorn.err
+uvicorn.log
+uvicorn.out
+uvicorn.pid
+backend.log
+
+# Secrets
+.env
+.env.*
+.firebase-service-account.json
+*.firebase-adminsdk-*.json
+
+# Git / IDE / tooling
+.git/
+.gitattributes
+.gitignore
+.githooks/
+.opencode/
+.idea/
+.vscode/
+
+# Temporales y estado local
+*.tmp
+kit-config-patched.json
+template_prompt_inicio.md
+opencode-goals/
+
+# Documentación — no necesaria en imagen
+memoria/
+AGENTS.md
+
+# Android SDK local (gitignored, pero redundante aquí también)
+local.properties
