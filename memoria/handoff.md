@@ -20,12 +20,12 @@
 6. **Deuda documental cerrada en `memoria/fases.md`** — Paso 4 (Tramo FCM) y AlarmScreen marcados `[x]` con notas "(Sesión 18: ...)".
 
 **Pendiente de la próxima sesión:**
-1. **Validación con evento real de UFC** — el UFC Fight Night: Du Plessis vs Usman es el 18 de julio (prelims a las 23:00 CEST). El poller ya está cableado con Redis. Suscribirse desde la app a un combate con `bout_id` actual y esperar transiciones reales de ESPN.
-2. **Validación en hardware físico del owner** — bypass DnD real + OEM quirks (algunos OEMs chinos matan FCM en background).
-3. **Validación Doze** — `adb shell dumpsys deviceidle force-idle` + verificar `setAlarmClock` despierta puntualmente.
-4. **Fase 7c (deploy Railway)** — pendiente cuando el owner tenga cuenta. `railway.json` ya existe. Solo falta setear env-vars y cambiar `baseUrl` en la APK.
-5. **Release keystore + `baseUrl` per buildType + ProGuard** — pospuesto a esta sesión (no bloquea test local en emulador).
-6. **Play Store** — cuenta Google Play ($25) + listing (icono PNG 512 ya generado, screenshots + descripción + política de privacidad pendientes) + subir AAB.
+1. ⭐ **Deploy Railway (prerrequisito para todo lo demás)** — el owner crea cuenta Railway → despliega `theni55/DespertarME` (rama `dev`) → añade add-ons Postgres + Redis → configura env-vars (`FCM_CREDENTIALS_JSON` desde `.firebase-service-account.json`, `APP_ENV=production`, `JWT_SECRET`) → obtiene URL pública tipo `https://despertarme-production.up.railway.app/`. `railway.json` ya existe. El proyecto usa Dockerfile de producción con `alembic upgrade head` en start command. **Bloquea los items 2 y 3.**
+2. **Cambiar `baseUrl` en `AppContainer.kt`** — reemplazar `http://10.0.2.2:8000/` por la URL HTTPS de Railway (~1 línea). Recompilar APK debug → instalar en móvil físico del owner vía `adb install`. Sin este cambio, el móvil físico no puede contactar al backend (10.0.2.2 solo funciona en emulador).
+3. **Validación en hardware físico + evento real de UFC** — el UFC Fight Night: Du Plessis vs Usman (prelims 23:00 CEST, main card 02:00 CEST 19 jul). Suscribirse a un combate con `bout_id` actual desde la app en el móvil físico → esperar push FCM real del poller corriendo en Railway → alarma suena con DnD activado + Doze validado en hardware OEM real.
+4. **Validación Doze emulador** — `adb shell dumpsys deviceidle force-idle` (opcional, ya se validará en hardware físico en el item 3).
+5. **Release keystore + `baseUrl` per buildType + ProGuard** — pospuesto (no bloquea test en móvil físico con APK debug). Entra en el tramo final pre-Play-Store.
+6. **Play Store** — cuenta Google Play ($25) + listing (icono PNG 512 ya generado, screenshots + descripción + política de privacidad pendientes) + subir AAB firmado.
 7. **Mejoras post-MVP pospuestas**: sonido custom `alarm.ogg`, Home póster dinámico del próximo evento (D42), admin web de devices, calibrado buffer inter-combates.
 
 ---
@@ -318,7 +318,7 @@ Sin FCM, las dos últimas (reprogramar en tiempo real y verify-then-ring con tim
 | Fase 4 — Boxeo/Tenis reales | Pendiente (fuera del MVP) |
 | Fase 5 — VoiceNotifier real (Twilio) | ❄️ **Obsoleta** — sustituida por FCM (D37/D40) |
 | Fase 6 — Rediseño visual + landing dinámica | ❄️ **Congelada** — rama `web` |
-| Fase 7 — App móvil | 🔶 **En curso** — Spike ✅, Fase 7a (backend Device/FCM) ✅, scaffold Kotlin (D43) ✅. **Sesión 18: Fase G completada y E2E verificada en emulador — modelo D45 (cushion +1 min siempre, ring-once, sin pre-programación al suscribir). Firebase operativo (token real en emulador). Docker + Redis corriendo. Push `update` simulado → app programa alarma → 6 min después suena + AlarmActivity full-screen. Pipeline completo backend-FCM-app-sonido-pantalla verificado. Próximo: validación con evento UFC real del 18 jul (prelims 23:00 CEST) + hardware físico del owner + deploy Railway.** |
+| Fase 7 — App móvil | 🔶 **En curso** — Spike ✅, Fase 7a (backend Device/FCM) ✅, scaffold Kotlin (D43) ✅. **Sesión 19: polishing pre-Play-Store (icono launcher + limpieza código + memorias). Sesión 18: Fase G completada y E2E verificada en emulador.** Próximo: deploy Railway (cuenta owner) → cambiar baseUrl → test en hardware físico con evento UFC real del 18 jul + Doze → Play Store listing. |
 
 Detalle de checkboxes en `fases.md`.
 

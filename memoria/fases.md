@@ -346,17 +346,18 @@ Sin Android Studio aún → el continuador instala Android Studio + emulador API
 
 **Paso 5 — Validación final + deploy (Fase 7c)**
 
+- [ ] Backend en Railway (D33): env-vars `FCM_CREDENTIALS_JSON` + `APP_ENV=production` + `JWT_SECRET` + PG + Redis add-ons. *(Pendiente: cuenta Railway del owner. Decisión Sesión 19: Opción C — test en móvil físico vía URL pública de Railway, sustituyendo `10.0.2.2` que solo funciona en emulador.)*
+- [ ] **Cambiar `baseUrl` en `AppContainer.kt`** de `http://10.0.2.2:8000/` a la URL HTTPS pública de Railway (1 línea).
 - [ ] Móvil físico Android 14 (bypass DnD real + OEM quirks del owner).
-- [ ] Backend en Railway (D33): env-vars `FCM_CREDENTIALS_JSON` + `FCM_PROJECT_ID` + PG + Redis add-ons.
-- [ ] `./gradlew assembleRelease` local → APK release.
+- [ ] `./gradlew assembleDebug` recompilar APK tras el cambio de `baseUrl`.
 - [ ] Smoke end-to-end: crear alerta → alarma local suena a la hora estimada en hardware físico con DnD/silencio.
 
-### Fase 7c — Deploy + smoke real (Sesión 14 plan, reescrito con stack Kotlin)
+### Fase 7c — Deploy + smoke real (Sesión 14 plan, reescrito con stack Kotlin; planificado Sesión 19 vía Opción C: Railway URL)
 
-- [ ] Backend en Railway (D33) con env-vars: `FCM_CREDENTIALS_JSON` o `FCM_CREDENTIALS_PATH` + `FCM_PROJECT_ID`.
-- [ ] Firebase project + `google-services.json` en `mobile-kotlin/app/`.
-- [ ] `./gradlew assembleRelease` local → APK interno para el owner (sin EAS cloud).
-- [ ] Smoke: crear alerta, verificar que la alarma local suena en hardware Android físico con DnD/silencio.
+- [ ] Backend en Railway (D33) con env-vars: `FCM_CREDENTIALS_JSON` + `APP_ENV=production` + `JWT_SECRET`. PG + Redis add-ons se añaden por dashboard.
+- [ ] Cambiar `baseUrl` en `AppContainer.kt` de `http://10.0.2.2:8000/` a la URL pública de Railway (~1 línea). Recompilar APK debug.
+- [ ] Firefox project + `google-services.json` en `mobile-kotlin/app/` (ya hecho desde Sesión 18).
+- [ ] Smoke: crear alerta, verificar que la alarma local suena en hardware Android físico con DnD/silencio. *(Usa APK debug, no hace falta `assembleRelease` hasta el tramo Play Store.)*
 
 ### Fase 7d — iOS (post-MVP, D40 vía AlarmKit — rewrite SwiftUI, no reutiliza TS de D37)
 
