@@ -41,22 +41,25 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    # 1. Drop tablas existentes en orden inverso a dependencias.
-    op.drop_table("alert_log")
-    op.drop_table("sport_subscriptions")
-    op.drop_table("event_subscriptions")
-    op.drop_table("bout_subscriptions")
-    op.drop_table("users")
+    # 1. Drop tablas existentes en orden inverso a dependencias. `if_exists`
+    #    hace la migración idempotente: no-op en PG virgen (deploy fresco),
+    #    drop real en PG con schema viejo (a3657c6166f0 ya aplicado). En SQLite
+    #    dev se dropean si existen (las dos migraciones previas corrieron).
+    op.drop_table("alert_log", if_exists=True)
+    op.drop_table("sport_subscriptions", if_exists=True)
+    op.drop_table("event_subscriptions", if_exists=True)
+    op.drop_table("bout_subscriptions", if_exists=True)
+    op.drop_table("users", if_exists=True)
 
-    # 2. En Postgres, dropear solo user_role (realmente obsoleto — las tablas
-    #    nuevas ya no lo usan). subscription_status y alert_status se RECICLAN
-    #    con mismos nombres y valores en el nuevo schema (bout_subscriptions +
-    #    alert_log) → NO dropearlos o el CREATE TABLE de abajo falla con
-    #    "type subscription_status does not exist" (bug PG-only, en SQLite los
-    #    ENUM son CHECK inline y la migración pasaba sin detectarlo).
-    bind = op.get_bind()
-    if bind.dialect.name == "postgresql":
-        sa.Enum(name="user_role").drop(bind, checkfirst=True)
+    # 2. Sin drop de ENUMs user_role/subscription_status/alert_status:
+    #    - subscription_status y alert_status se RECICLAN (mismos nombres +
+    #      valores) en el nuevo schema → NO dropearlos o CREATE TABLE falla
+    #      con "type does not exist" (bug PG-only, invisible en SQLite dev).
+    #    - user_role solo lo usaba la tabla users (dropeada arriba). En PG
+    #      virgen no existe → no hace falta drop. En PG con a3657c6166f0
+    #      aplicado, DROP TABLE users no borra el ENUM type (PG no lo hace
+    #      en cascada), pero como ningún CREATE de abajo lo referencia, lo
+    #      dejamos como debt técnica (no afecta al deploy).
 
     # 3. Crear tabla `devices`.
     op.create_table(
