@@ -19,6 +19,7 @@
 5. **Verificación del backend** — `/health` 200, `/api/events` devuelve UFC Fight Night con datos ESPN reales, `/api/events/600059599` con 12 combates + headshots + `previous_bout_id` calculado server-side. Configurado `SCHEDULER_ENABLED=true` + `FCM_CREDENTIALS_JSON`.
 6. **`baseUrl` en APK** — `AppContainer.kt:40` cambiado de `http://10.0.2.2:8000/` a `https://despertarme-production.up.railway.app/`. APK debug recompilada (BUILD SUCCESSFUL, 23.1 MB).
 7. **`fcm-one-line.txt`** generado con JSON de Firebase comprimido a una línea (2345 chars), usado para pegar en Railway.
+8. **Smoke emulador con APK Railway** — APK debug instalada en `pixel_6_api34` vía `adb install`. App arrancó sin FATAL: FirebaseApp inicializado OK, MainActivity displayed. `logcat` limpio sin `AndroidRuntime`. La app contacta con Railway directamente (`https://despertarme-production.up.railway.app`) sin `adb reverse` — no necesita puente al PC. El backend respondió desde el emulador vía curl (verificación externa del endpoint `/api/devices`). Sin embargo, los logs de la app (`Log.i("DespertarMe", ...)`) no se capturaron en logcat — probablemente el buffer del emulador los perdió. La app se ve funcional en pantalla.
 
 **Pendiente de la próxima sesión:**
 1. **Validación con evento real de UFC (hoy noche)** — Prelims 23:00 CEST (21:00 UTC), main card 02:00 CEST (00:00 UTC). Instalar APK en emulador o móvil físico → suscribirse a un combate → esperar push FCM real del poller en Railway → alarma suena con DnD.
