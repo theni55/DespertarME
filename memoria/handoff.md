@@ -6,6 +6,42 @@
 
 ## Última sesión
 
+**Fecha:** 2026-07-21 · **Sesión 21 — Diagnóstico FCM en hardware físico: pipeline verificado end-to-end. No hubo error; las suscripciones del 18-jul estaban en el emulador, no en el móvil.**
+
+**Contexto:** el owner reportó que la app no recibió pushes FCM en el móvil físico durante el evento UFC del 18-jul. Sin acceso adb/logcat en el dispositivo, se diagnosticó remotamente desde la API de Railway + logs del backend. El análisis confirmó que el backend funcionó correctamente todo el tiempo y que FCM entrega al hardware físico sin problemas.
+
+**Evidencia recopilada (trazable vía Railway logs y API):**
+
+| Fuente | Dato | Conclusión |
+|--------|------|------------|
+| `GET /health` → 200, `GET /api/events` con datos ESPN | Backend Railway operativo | Poller corriendo cada 60s |
+| Logs Railway 18-jul `grep "Push"` | 13 pushes enviados ese día: 2 suscripciones (`f538c874`, `b28e2de9`), device `3d9ef804` | **Pushes sí se enviaron**, cero errores FCM |
+| `GET /api/subscriptions` con `X-Device-Id: 5c20fa0b` | `[]` (sin suscripciones activas para el móvil) | El móvil nunca fue destinatario |
+| `POST /api/devices/me/test-alarm` con `5c20fa0b` → `message_id` real | **Alarma sonó en el móvil** | Pipeline FCM backend→Firebase→móvil→alarma 100% operativo |
+| Nueva suscripción `455062f2` creada desde la app (bout 401898030, lead 5) | Poller envió `update` a las 14:16:08 UTC mismo día | Push `update` entregado a `5c20fa0b` (message_id real en `alert_log`) |
+| `GET /api/alerts` para `5c20fa0b` | 1 alerta registrada: `message_type=update`, `estimate_start=2026-07-25T13:00+00:00`, `reason="no hay combate previo; fecha programada"` | El poller procesa suscripciones del móvil en tiempo real |
+
+**Conclusión del diagnóstico: no hubo ningún error.** Las suscripciones y pushes del 18-jul estaban asociadas al device `3d9ef804` (el emulador `pixel_6_api34` usado en la Sesión 18 para el smoke E2E, cuyo UUID era distinto al del móvil físico). El móvil físico (`5c20fa0b`) no tenía suscripciones activas ese día, por lo que el poller nunca le envió pushes — comportamiento esperado y correcto.
+
+**Hallazgo técnico sobre `prev=None`:** el combate suscrito (match 13 del evento 600059667) es el primero de la tarjeta, sin combate previo que rastrear. En este caso, el `EstimatorEngine` cae a la fecha oficial de ESPN como estimación. Es el **único caso** donde se usa la hora programada (decisión del owner). Para todos los demás combates, la estimación se recalcula con el estado en vivo del combate previo (D18/D45).
+
+**Hecho en esta sesión (diagnóstico, sin cambios de código):**
+1. Verificación de salud del backend Railway (`/health`, ESPN reachable).
+2. Revisión de logs del 18-jul: confirmados 13 pushes FCM reales a device `3d9ef804`, cero errores.
+3. `POST /api/devices/me/test-alarm` a device `5c20fa0b` → alarma sonó en el móvil.
+4. Verificación del estado de suscripciones del móvil (vacío al inicio, creada una nueva durante la sesión).
+5. Confirmación de que el poller procesó la nueva suscripción y envió push `update` en el mismo ciclo (14:16:08 UTC, message_id real en `alert_log`).
+
+**Pendiente de la próxima sesión:**
+1. **Validación completa con evento real** — UFC Fight Night: Ankalaev vs Guskov, 25 julio 2026, 13:00 UTC. El poller monitorizará las transiciones ESPN del combate previo (match 14) → push `update` a `5c20fa0b` → `setAlarmClock` → alarma suena ~4 min antes del combate objetivo.
+2. **Validación Doze** — `adb shell dumpsys deviceidle force-idle` + verificar `setAlarmClock` despierta puntualmente.
+3. **Release keystore + baseUrl per buildType + ProGuard** — pospuesto.
+4. **Play Store** — cuenta Google Play ($25) + listing + AAB firmado.
+
+---
+
+## Sesión 20 (anterior)
+
 **Fecha:** 2026-07-18 · **Sesión 20 — Backend en Railway operativo. baseUrl cambiado a URL pública. APK lista para test en hardware físico.**
 
 **Contexto:** tras varios despliegues fallidos en Railway por bugs en la migración `f7a0001_devices` (ENUMs dropeados y reutilizados en PG virgen, `op.drop_table()` sin `if_exists`), se aplicaron 3 fixes incrementales hasta que el deploy pasó. El backend responde en `https://despertarme-production.up.railway.app` con `/health` 200, `/api/events` con datos reales de UFC Fight Night Du Plessis vs Usman (12 combates, headshots, previous_bout_id server-side). Se cambió `baseUrl` en la app Android de `http://10.0.2.2:8000/` a la URL pública de Railway. APK debug recompilada (23.1 MB). FCM_CREDENTIALS_JSON configurado y SCHEDULER_ENABLED=true para que el poller corra 24/7 en Railway.
@@ -340,11 +376,11 @@ Sin FCM, las dos últimas (reprogramar en tiempo real y verify-then-ring con tim
 | Fase 2a — EstimatorEngine puro | **Completada** ✅ |
 | Fase 2b — Poller + idempotencia | **Completada** ✅ |
 | Fase 3 — Multiusuario + admin web | **Completada** ✅ |
-| Fase MVP-launch — fotos + Twilio + scheduler + Railway | **Código listo** ✅ (deploy pendiente) |
+| Fase MVP-launch — fotos + Twilio + scheduler + Railway | **Completada** ✅ (Railway deploy ejecutado Sesión 20) |
 | Fase 4 — Boxeo/Tenis reales | Pendiente (fuera del MVP) |
 | Fase 5 — VoiceNotifier real (Twilio) | ❄️ **Obsoleta** — sustituida por FCM (D37/D40) |
 | Fase 6 — Rediseño visual + landing dinámica | ❄️ **Congelada** — rama `web` |
-| Fase 7 — App móvil | 🔶 **En curso** — Spike ✅, Fase 7a (backend Device/FCM) ✅, scaffold Kotlin (D43) ✅. **Sesión 19: polishing pre-Play-Store (icono launcher + limpieza código + memorias). Sesión 18: Fase G completada y E2E verificada en emulador.** Próximo: deploy Railway (cuenta owner) → cambiar baseUrl → test en hardware físico con evento UFC real del 18 jul + Doze → Play Store listing. |
+| Fase 7 — App móvil | 🔶 **En curso** — Spike ✅, Fase 7a (backend Device/FCM) ✅, scaffold Kotlin (D43) ✅, Fase G (alarma D45) ✅, Railway deploy ✅. **Sesión 21: pipeline FCM verificado end-to-end en hardware físico (test-alarm sonó + push update del poller entregado).** Próximo: validación con evento real UFC 25 jul + Doze + Play Store. |
 
 Detalle de checkboxes en `fases.md`.
 

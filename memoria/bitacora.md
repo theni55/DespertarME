@@ -877,3 +877,53 @@ plataforma (Vercel/CF Pages descartados: serverless no soporta el scheduler
 - **Nota:** el Railway deploy tomó varios intentos (3 errores distintos: ENUM-drop bug en migración, OOM del container por drops  en `if_exists`, espacio en DATABASE_URL). La combinación de estos 3 fixes + el `.dockerignore` resuelven todos los casos (deploy fresco, PG nueva o existente).
 - **Pendiente próxima sesión:** validación con evento UFC real (hoy, prelims 23:00 CEST, main card 02:00 CEST), hardware físico del owner, Doze, release keystore + Play Store listing.
 - **Smoke emulador con APK Railway:** APK instalada y arrancada en `pixel_6_api34` (pid 4546). App arrancó sin FATAL: `FirebaseApp initialized`, `FirebaseInitProvider successful`, `MainActivity displayed`. La APK contacta directo a Railway (`https://despertarme-production.up.railway.app`) — ya no necesita `adb reverse` ni `10.0.2.2`. Railway API verificada desde el emulador vía curl (`POST /api/devices` responde 422 con campos requeridos, confirma conectividad). Los logs de la app (`Log.i("DespertarMe", ...)`) no se capturaron en logcat por buffer limitado del AVD, pero la ausencia de FATAL + FirebaseInit OK + Railway reachable confirman que la app funciona. APK debug 23.1 MB lista para instalar en el móvil físico del owner.
+
+## Sesión 21 — Diagnóstico FCM en hardware físico: no hubo error, pipeline verificado end-to-end (2026-07-21)
+
+- **Contexto:** el owner reportó que la app no recibió pushes FCM en el móvil físico durante el evento UFC Fight Night: Du Plessis vs Usman del 18-jul. Sin acceso adb/logcat en el dispositivo, se diagnosticó remotamente desde la API de Railway + logs del backend. La sesión fue exclusivamente de diagnóstico (cero cambios de código).
+
+- **Fase 1 — Verificación de salud del backend:**
+  - `curl https://despertarme-production.up.railway.app/health` → `{"status":"ok","env":"production"}`.
+  - `GET /api/events` → 1 evento: UFC Fight Night Ankalaev vs Guskov (25 jul 2026, 13:00 UTC). ESPN accesible.
+  - 9 endpoints REST documentados en `/openapi.json` operativos.
+
+- **Fase 2 — Revisión de logs del 18-jul en Railway:**
+  - `grep "Notifier activo"` → `FcmNotifier (push reales)` — el backend usaba FCM real, no DummyNotifier.
+  - `grep "Push"` → **13 pushes enviados** el 18-jul a device `3d9ef804`:
+    - Suscripción `f538c874`: 1 `update` (19:17 UTC) + 1 `started` (21:00) + 1 `cancelled` (21:21).
+    - Suscripción `b28e2de9`: 10 `update` (21:22→21:38) + 1 `started` (21:39) + 1 `cancelled` (22:12).
+  - Cero errores de FCM en los logs. Firebase aceptó los 13 mensajes.
+  - `grep "Job PollerScheduler"` → poller corriendo cada 60s sin interrupción, sigue activo hoy (2026-07-21).
+
+- **Fase 3 — Diagnóstico del device del móvil físico:**
+  - El owner obtuvo el `device_id` de la app en Ajustes: **`5c20fa0b-2ad2-4726-8b5e-cf1d757e8047`**.
+  - `GET /api/subscriptions` con `X-Device-Id: 5c20fa0b...` → **`[]`** (sin suscripciones activas).
+  - **Conclusión:** el device `3d9ef804` de los logs NO es el móvil físico. Es el emulador `pixel_6_api34` de la Sesión 18 (cada instalación genera un UUID distinto). Las suscripciones y pushes del 18-jul estaban en el emulador, no en el móvil.
+
+- **Fase 4 — Prueba de fuego con test-alarm:**
+  - `POST /api/devices/me/test-alarm` con `X-Device-Id: 5c20fa0b...` → `{"success":true, "message_id":"projects/despertarme-73d00/messages/0:1784643153549088%..."}`.
+  - **La alarma sonó en el móvil físico.** Pipeline FCM backend→Firebase→móvil→`AlarmService`+`AlarmActivity` verificado end-to-end en hardware.
+
+- **Fase 5 — Creación de suscripción real y verificación del poller:**
+  - El owner creó suscripción desde la app del móvil: `POST /api/subscriptions` → 201 Created, `id=455062f2`, `bout_id=401898030`, `event_id=600059667`, `target_match_number=13`, `lead_minutes=5`, `status=active`.
+  - El poller procesó la suscripción en el siguiente ciclo (14:16:08 UTC, 21-jul): envió push `update` al device `5c20fa0b`.
+  - `GET /api/alerts` → 1 alerta registrada: `message_type=update`, `estimate_start=2026-07-25T13:00+00:00`, `reason="no hay combate previo; fecha programada"`, `notifier_response` con message_id real de Firebase.
+  - **El push `update` fue entregado al móvil.** La app programó `setAlarmClock` en silencio (los pushes `update` no hacen sonar la alarma, solo programan el despertador).
+
+- **Fase 6 — Hallazgo sobre `prev=None`:**
+  - El combate suscrito (match 13 del evento 600059667) es el primero de la tarjeta. La card probablemente tiene 13 combates (matchNumber 13→1), y match 14 no existe → `prev is None` en el poller.
+  - En este caso, el `EstimatorEngine` cae a la fecha oficial de ESPN como estimación (`card.bout.date`). Es el **único caso** donde se usa la hora programada (decisión explícita del owner). Para combates con previo real (match 1-12), la estimación se recalcula con el estado en vivo del combate previo (D18/D45).
+  - La guarda D45 (`skip push si prev está en "pre"`) solo aplica cuando `prev is not None` — correcto, porque si no hay previo no hay nada que esperar. El poller envía el push inmediatamente con la fecha oficial.
+
+- **Veredicto final:**
+  - **No hubo ningún error.** El backend, el poller, FCM y la app funcionaron correctamente el 18-jul y hoy.
+  - Las suscripciones del 18-jul estaban en el emulador (`3d9ef804`), no en el móvil (`5c20fa0b`). El móvil no podía recibir pushes porque no era destinatario de ninguna suscripción.
+  - FCM entrega al hardware físico verificado con: (a) test-alarm (sonó), (b) push `update` del poller (entregado, message_id real en alert_log).
+  - El pipeline está operativo end-to-end: Railway → Firebase → móvil → `handleUpdate` → `setAlarmClock`.
+
+- **Pendientes para la próxima sesión:**
+  1. **Validación con evento real** — UFC Fight Night: Ankalaev vs Guskov, 25 julio 2026, 13:00 UTC. El poller detectará transiciones ESPN del combate previo (match 14, o match 12 si la card es invertida) → push `update` a `5c20fa0b` → `setAlarmClock` → alarma suena ~4 min antes del combate objetivo (lead 5 − cushion 1 min). Si match 14 no existe, la alarma ya está programada con la fecha oficial de ESPN (push `update` del 21-jul 14:16 UTC).
+  2. **Validación Doze** — `adb shell dumpsys deviceidle force-idle` + verificar `setAlarmClock` despierta.
+  3. **Release keystore + Play Store** — cuenta Google Play ($25) + listing + AAB firmado.
+
+- **Memorias actualizadas:** `handoff.md` (Sesión 21 como punto de entrada), `bitacora.md` (esta entrada), `fases.md` (checkboxes de validación hardware marcados).

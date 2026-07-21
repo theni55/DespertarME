@@ -348,16 +348,16 @@ Sin Android Studio aún → el continuador instala Android Studio + emulador API
 
 - [x] Backend en Railway (D33): `https://despertarme-production.up.railway.app`. `FCM_CREDENTIALS_JSON` + `APP_ENV=production` + PG + Redis add-ons configurados. *(Sesión 20: deploy operativo tras 3 fixes de migración + railway.json.)*
 - [x] **Cambiar `baseUrl` en `AppContainer.kt`** de `http://10.0.2.2:8000/` a `https://despertarme-production.up.railway.app/`. *(Sesión 20: 1 línea cambiada, APK debug BUILD SUCCESSFUL 23.1 MB.)*
-- [ ] Móvil físico Android 14 (bypass DnD real + OEM quirks del owner).
+- [x] Móvil físico Android 14 (bypass DnD real + OEM quirks del owner). *(Sesión 21: test-alarm sonó en hardware físico. FCM entrega pushes reales al móvil — pipeline verificado end-to-end.)*
 - [x] `./gradlew assembleDebug` recompilar APK tras el cambio de `baseUrl`. *(Hecho en Sesión 20. Release APK pospuesta al tramo Play Store.)*
-- [ ] Smoke end-to-end: crear alerta → alarma local suena a la hora estimada en hardware físico con DnD/silencio. *(Pendiente: evento UFC real de hoy noche + validación Doze.)*
+- [ ] Smoke end-to-end: crear alerta → alarma local suena a la hora estimada en hardware físico con DnD/silencio. *(Sesión 21: test-alarm y push `update` del poller entregados al móvil. Falta validación con evento real → 25 julio 2026, UFC Fight Night Ankalaev vs Guskov.)*
 
 ### Fase 7c — Deploy + smoke real (Sesión 14 plan, reescrito con stack Kotlin; planificado Sesión 19 vía Opción C: Railway URL)
 
-- [ ] Backend en Railway (D33) con env-vars: `FCM_CREDENTIALS_JSON` + `APP_ENV=production` + `JWT_SECRET`. PG + Redis add-ons se añaden por dashboard.
-- [ ] Cambiar `baseUrl` en `AppContainer.kt` de `http://10.0.2.2:8000/` a la URL pública de Railway (~1 línea). Recompilar APK debug.
-- [ ] Firefox project + `google-services.json` en `mobile-kotlin/app/` (ya hecho desde Sesión 18).
-- [ ] Smoke: crear alerta, verificar que la alarma local suena en hardware Android físico con DnD/silencio. *(Usa APK debug, no hace falta `assembleRelease` hasta el tramo Play Store.)*
+- [x] Backend en Railway (D33) con env-vars: `FCM_CREDENTIALS_JSON` + `APP_ENV=production`. PG + Redis add-ons operativos. *(Sesión 20: deploy exitoso en Railway. `JWT_SECRET` ya no aplica tras pivot Device sin auth JWT D37.)*
+- [x] Cambiar `baseUrl` en `AppContainer.kt` de `http://10.0.2.2:8000/` a la URL pública de Railway. *(Sesión 20: 1 línea cambiada, APK debug compilada.)*
+- [x] Firebase project + `google-services.json` en `mobile-kotlin/app/`. *(Hecho desde Sesión 18.)*
+- [x] Smoke parcial: test-alarm verificado en hardware físico (Sesión 21: alarma sonó). Push `update` del poller entregado al móvil (Sesión 21: message_id real en alert_log). *(Falta smoke completo con evento real → 25 julio 2026.)*
 
 ### Fase 7d — iOS (post-MVP, D40 vía AlarmKit — rewrite SwiftUI, no reutiliza TS de D37)
 
