@@ -26,6 +26,7 @@ Este archivo (`AGENTS.md`) es la chuleta ejecutable: comandos, prerequisitos, re
 | [Bitácora de sesiones](memoria/bitacora.md) | Registro cronológico de cada sesión de trabajo: qué se hizo y qué quedó pendiente. |
 | [Plan MVP visual + funcional — App Android (para Fable 5)](memoria/plan-mvp-android-fable5.md) | Plan por fases con checkboxes para completar un MVP visual y funcional de la app Android (Kotlin/Compose) en `mobile-kotlin/`, pensado para cargarlo en Fable 5 vía `/goal`. |
 | [Plan MVP iOS + cierre Android — dogfooding personal](memoria/plan-mvp-ios.md) | Plan para estabilizar el MVP Android en el dispositivo del compañero y arrancar el MVP iOS (owner), antes de plantear publicación. Complementa `plan-mvp-android-fable5.md` (ese cubre solo Android). |
+| [Plan: rediseño UI Android inspirado en Winamax](memoria/plan-ui-redesign-winamax.md) | Plan de trabajo para rediseñar la UI de `mobile-kotlin/` (Home, EventDetail, bottom nav) tomando como referencia visual la app Winamax. Fase de documentación — sin cambios de código todavía. |
 <!-- MEMORIA-INDEX:END -->
 
 ## Prerequisitos
