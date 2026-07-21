@@ -25,6 +25,7 @@ Este archivo (`AGENTS.md`) es la chuleta ejecutable: comandos, prerequisitos, re
 | [Convenciones del proyecto](memoria/convenciones.md) | Reglas de código, commits, testing y estilo que todo continuador debe respetar. |
 | [Bitácora de sesiones](memoria/bitacora.md) | Registro cronológico de cada sesión de trabajo: qué se hizo y qué quedó pendiente. |
 | [Plan MVP visual + funcional — App Android (para Fable 5)](memoria/plan-mvp-android-fable5.md) | Plan por fases con checkboxes para completar un MVP visual y funcional de la app Android (Kotlin/Compose) en `mobile-kotlin/`, pensado para cargarlo en Fable 5 vía `/goal`. |
+| [Plan MVP iOS + cierre Android — dogfooding personal](memoria/plan-mvp-ios.md) | Plan para estabilizar el MVP Android en el dispositivo del compañero y arrancar el MVP iOS (owner), antes de plantear publicación. Complementa `plan-mvp-android-fable5.md` (ese cubre solo Android). |
 <!-- MEMORIA-INDEX:END -->
 
 ## Prerequisitos

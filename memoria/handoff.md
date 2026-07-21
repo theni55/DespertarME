@@ -6,6 +6,26 @@
 
 ## Última sesión
 
+**Fecha:** 2026-07-21 · **Sesión 22 — Plan de dogfooding personal (Android compañero + iOS owner) documentado en `memoria/plan-mvp-ios.md`. Sin cambios de código.**
+
+**Contexto:** el owner quiere seguir probando la app entre él y su compañero (Android) y él mismo en iOS antes de plantear publicación. Se hizo un repaso de la deuda técnica pendiente (fases.md, decisiones.md, plan-mvp-android-fable5.md) para separar lo bloqueante de dogfooding de lo que solo aplica a publicación.
+
+**Hecho en esta sesión:**
+1. **Sync de repo**: el `dev` local estaba en Sesión 17 (`d9d9105`); `origin/dev` tenía la historia reescrita hasta Sesión 21 (`18095f3`, incluye Sesiones 18-21: Fase G/D45 FCM end-to-end, deploy Railway, diagnóstico hardware físico). `git reset --hard origin/dev` tras confirmar que el contenido de los commits locales existía igual (mismos mensajes, distinto SHA) en el remoto.
+2. **Análisis de estado**: confirmado que el MVP es funcionalmente completo salvo la validación con evento real (25-jul) y Doze. Se repasó la deuda técnica conocida (UNIQUE de `alert_log` sin `message_type`, UUID v4 sin validar en `DeviceCreate`, sin auth real en `X-Device-Id`, sin fallback si se pierde un push FCM).
+3. **Hallazgo nuevo (no documentado antes)**: `src/app/notifiers/fcm.py::FcmNotifier.send()` construye el mensaje con `AndroidConfig` pero **sin `ApnsConfig`** — un push data-only a un token iOS probablemente no despertará la app en background sin `content-available`+`apns-priority: 5`. Bloqueante para cualquier prueba real en iOS, ver plan.
+4. **Investigación de membership Apple Developer**: confirmado en `developer.apple.com/support/compare-memberships` que la cuenta gratuita ("Personal Team") permite testing on-device pero con perfiles que caducan a los 7 días, sin ad-hoc distribution ni TestFlight (exclusivos de pago), y con "Advanced app capabilities and services" solo en la columna de pago — riesgo real para AlarmKit/Push.
+5. **Plan documentado en `memoria/plan-mvp-ios.md`**: dos pistas (cierre de Android para el compañero + bootstrap de iOS), con una Fase 0 de spike de riesgo (GitHub Actions `macos-14` para compilar + AltStore/AltServer en este PC Windows para firmar/instalar sin Mac físico) antes de construir el MVP iOS completo, condicionando la decisión de pagar el Programa Apple Developer al resultado del spike.
+
+**Pendiente de la próxima sesión** (ver `memoria/plan-mvp-ios.md` para el detalle completo):
+1. Fix de backend: añadir `ApnsConfig` a `FcmNotifier.send()` (con test de regresión).
+2. Fase 0 — spike iOS: proyecto Xcode mínimo + workflow GitHub Actions `macos-14` + AltServer en este PC + prueba aislada de AlarmKit y Push Notifications con Apple ID gratuita.
+3. En paralelo (Android): validación con evento real 25-jul, Doze validation, sideload en el móvil del compañero.
+
+---
+
+## Sesión 21 (anterior)
+
 **Fecha:** 2026-07-21 · **Sesión 21 — Diagnóstico FCM en hardware físico: pipeline verificado end-to-end. No hubo error; las suscripciones del 18-jul estaban en el emulador, no en el móvil.**
 
 **Contexto:** el owner reportó que la app no recibió pushes FCM en el móvil físico durante el evento UFC del 18-jul. Sin acceso adb/logcat en el dispositivo, se diagnosticó remotamente desde la API de Railway + logs del backend. El análisis confirmó que el backend funcionó correctamente todo el tiempo y que FCM entrega al hardware físico sin problemas.
@@ -380,7 +400,7 @@ Sin FCM, las dos últimas (reprogramar en tiempo real y verify-then-ring con tim
 | Fase 4 — Boxeo/Tenis reales | Pendiente (fuera del MVP) |
 | Fase 5 — VoiceNotifier real (Twilio) | ❄️ **Obsoleta** — sustituida por FCM (D37/D40) |
 | Fase 6 — Rediseño visual + landing dinámica | ❄️ **Congelada** — rama `web` |
-| Fase 7 — App móvil | 🔶 **En curso** — Spike ✅, Fase 7a (backend Device/FCM) ✅, scaffold Kotlin (D43) ✅, Fase G (alarma D45) ✅, Railway deploy ✅. **Sesión 21: pipeline FCM verificado end-to-end en hardware físico (test-alarm sonó + push update del poller entregado).** Próximo: validación con evento real UFC 25 jul + Doze + Play Store. |
+| Fase 7 — App móvil | 🔶 **En curso** — Spike ✅, Fase 7a (backend Device/FCM) ✅, scaffold Kotlin (D43) ✅, Fase G (alarma D45) ✅, Railway deploy ✅. **Sesión 21: pipeline FCM verificado end-to-end en hardware físico (test-alarm sonó + push update del poller entregado).** **Sesión 22: plan de dogfooding Android+iOS documentado en `plan-mvp-ios.md`** (spike de riesgo iOS pendiente + fix `ApnsConfig` en backend). Publicación (Play Store/App Store) diferida explícitamente. |
 
 Detalle de checkboxes en `fases.md`.
 

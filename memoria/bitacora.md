@@ -927,3 +927,29 @@ plataforma (Vercel/CF Pages descartados: serverless no soporta el scheduler
   3. **Release keystore + Play Store** — cuenta Google Play ($25) + listing + AAB firmado.
 
 - **Memorias actualizadas:** `handoff.md` (Sesión 21 como punto de entrada), `bitacora.md` (esta entrada), `fases.md` (checkboxes de validación hardware marcados).
+
+---
+
+## Sesión 22 — Sync de repo + plan de dogfooding Android+iOS (solo memorias, cero código) (2026-07-21)
+
+- **Contexto:** el owner pidió traer todos los cambios del repo y ponerse al día. El `dev` local estaba parado en Sesión 17 (`d9d9105`) mientras `origin/dev` había avanzado con historia reescrita hasta Sesión 21 (`18095f3`). Tras confirmar que el contenido de los commits locales existía igual (mismos mensajes, distinto SHA) en el remoto, se hizo `git reset --hard origin/dev`.
+
+- **Análisis del estado del MVP:** el owner preguntó si, fuera de la validación pendiente, el MVP es funcional, y qué haría falta afianzar antes de empezar iOS. Se repasó `fases.md`, `decisiones.md` y `plan-mvp-android-fable5.md` para separar deuda técnica bloqueante de la que solo aplica a publicación (Play Store/App Store, diferida explícitamente por el owner en esta sesión: "por ahora queremos seguir probando la aplicación bien nosotros y tener MVPs estables en nuestros dispositivos... antes de empezar a publicar").
+
+- **Hallazgo nuevo (no documentado en sesiones anteriores):** revisando `src/app/notifiers/fcm.py::FcmNotifier.send()` se confirmó que el mensaje FCM se construye con `android=AndroidConfig(priority="high")` pero **sin `ApnsConfig`**. Un push data-only a un token iOS necesita explícitamente `apns-priority: 5` + `content-available: 1` para despertar la app en background — sin este fix, los pushes `update`/`started`/`cancelled` probablemente no llegarían de forma fiable a un cliente iOS. Bloqueante para cualquier prueba real en iOS, no descubierto hasta ahora porque nunca se había planificado el cliente iOS en detalle.
+
+- **Investigación de membership Apple Developer** (`webfetch` a `developer.apple.com/support/compare-memberships`, verificado 2026-07-21): la cuenta gratuita ("Personal Team") permite testing on-device pero:
+  - Certificados/perfiles de aprovisionamiento **caducan a los 7 días**.
+  - **Sin ad-hoc distribution** ni **TestFlight** (ambos exclusivos del Programa de pago, $99/año).
+  - "Advanced app capabilities and services" aparece solo en la columna de pago — riesgo real de que AlarmKit/Push Notifications avanzados lo requieran.
+
+- **Restricción de entorno del owner:** solo tiene acceso a un Mac en la nube (proveedor sin decidir), no un Mac físico — esto descarta el flujo estándar de Xcode (emparejar el iPhone por USB a la máquina donde corre Xcode). Se propuso una combinación viable sin Mac físico: **GitHub Actions (`macos-14` runner)** para compilar (headless, sin necesitar login de Apple ID) + **AltStore/AltServer** (AltServer soporta host Windows) para firmar/instalar/refrescar el `.ipa` en el iPhone del owner desde este mismo PC, sin pasar nunca por una sesión interactiva de Xcode.
+
+- **Plan documentado en `memoria/plan-mvp-ios.md`** (nuevo fichero, añadido al índice de `AGENTS.md` vía `scripts/gen_memoria_index.py`):
+  1. Pista Android (compañero): validación con evento real 25-jul + Doze + sideload del APK + prueba multi-dispositivo.
+  2. Fix de backend: `ApnsConfig` en `FcmNotifier.send()`.
+  3. Fase 0 — spike de riesgo iOS: proyecto Xcode mínimo + CI GitHub Actions + AltServer, probando aisladamente AlarmKit y Push Notifications con Apple ID gratuita antes de comprometerse a construir las 5 pantallas completas. Condiciona la decisión de pagar el Programa Apple Developer al resultado del spike.
+  4. Fase 2 (condicionada): MVP iOS completo (rewrite SwiftUI, D43) replicando el alcance de Android.
+  5. Explícitamente fuera de alcance: Play Store/App Store, hardening de seguridad de `X-Device-Id`, fix del UNIQUE de `alert_log`, validación estricta de UUID en `DeviceCreate`.
+
+- **Memorias actualizadas:** `handoff.md` (Sesión 22 como punto de entrada), `bitacora.md` (esta entrada), `AGENTS.md` (índice regenerado), `memoria/plan-mvp-ios.md` (nuevo).
