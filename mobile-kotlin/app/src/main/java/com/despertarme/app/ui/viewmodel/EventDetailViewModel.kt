@@ -7,7 +7,6 @@ import com.despertarme.app.DespertarMeApp
 import com.despertarme.app.alarm.PendingAlarm
 import com.despertarme.app.alarm.PendingAlarmStorage
 import com.despertarme.app.data.AppContainer
-import com.despertarme.app.data.remote.EventSummaryOut
 import com.despertarme.app.ui.screens.EventDetailState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -117,14 +116,6 @@ class EventDetailViewModel(
             }
         }
     }
-}
-
-class EventListLoader(
-    private val container: AppContainer,
-) {
-    suspend fun nextEvent(): EventSummaryOut? = runCatching {
-        container.api.listEvents().firstOrNull()
-    }.getOrNull()
 }
 
 class EventDetailViewModelFactory(

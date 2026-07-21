@@ -71,8 +71,10 @@ fun EventListScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 item {
+                    // D46: destino "Buscar" en la nav — Home ya muestra los
+                    // destacados, aquí vive el listado completo.
                     Text(
-                        text = "PRÓXIMOS EVENTOS",
+                        text = "TODOS LOS EVENTOS",
                         color = Color.White,
                         fontSize = 20.sp,
                         fontWeight = FontWeight.Black,

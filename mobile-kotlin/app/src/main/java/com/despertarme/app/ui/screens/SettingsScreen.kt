@@ -21,11 +21,13 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -51,6 +53,7 @@ fun SettingsScreen(
     deviceId: String?,
     onTestAlarm: () -> Unit,
     onStopAlarm: () -> Unit,
+    onBack: () -> Unit,
 ) {
     val context = LocalContext.current
     var testPlaying by remember { mutableStateOf(false) }
@@ -62,13 +65,23 @@ fun SettingsScreen(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text(
-            text = "AJUSTES",
-            color = Color.White,
-            fontSize = 20.sp,
-            fontWeight = FontWeight.Black,
-            letterSpacing = 1.sp,
-        )
+        // D46: Ajustes ya no está en la bottom nav — header con volver.
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Volver",
+                    tint = Color.White,
+                )
+            }
+            Text(
+                text = "AJUSTES",
+                color = Color.White,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Black,
+                letterSpacing = 1.sp,
+            )
+        }
         SettingsCard(title = "Dispositivo") {
             LabelValue(label = "Device ID", value = deviceId ?: "sin registrar")
             Spacer(modifier = Modifier.height(8.dp))

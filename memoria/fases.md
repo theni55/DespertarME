@@ -366,5 +366,20 @@ Sin Android Studio aún → el continuador instala Android Studio + emulador API
 - [ ] Requisito mínimo iOS 26 (adopción mayoritaria esperada para cuando se ejecute esta fase). Sin fallback a Critical Alert — el entitlement es discrecional de Apple y lento.
 - [ ] Mismo contrato API + Retrofit-equivalente en Swift (async/await + URLSession), mismo `device_id` UUID v4ersistente en Keychain.
 
+### Rediseño UI estilo Winamax (piloto Home — Sesión 23, D46/D47)
+
+**Alcance del piloto**: solo `HomeScreen` + cambios de navegación dependientes (validación en `validacion-sesion-fable5-home-winamax.md`).
+
+- [x] **Tokens de diseño** extraídos de las capturas Winamax (`memoria/assets/`) → documentados en `memoria/ui-design-tokens.md` + aplicados en `ui/theme/Color.kt` (`UfcRedDeep`, `PosterSurface`, `AccentGreen`).
+- [x] **Home = lista de cards de eventos reales** (`HomeViewModel`, top 4 de `GET /api/events`, carga en dos fases): strip UFC degradado + área de póster + nombre + main event + CTA "Avísame" por card → `event/{id}`. Botón global `onNextEvent` y hero estático eliminados (D46, supersede Sesión 15).
+- [x] **Póster por card sin asset** (D47): backdrop dibujado en Compose (glows rojo/azul del octágono) + headshots reales del main event vía `GET /api/events/{id}` (fallback: avatares de iniciales). `hero.webp` borrado del APK.
+- [x] **"Probar/Parar sonido" fuera de Home** (permanece solo en Ajustes).
+- [x] **Bottom nav 3 destinos** (Buscar/Home/Alertas) con fondo negro estilo Winamax; "Buscar" = `EventListScreen` reposicionado (título "TODOS LOS EVENTOS", sin fusión profunda — default #12 de la validación, pendiente confirmar con owner).
+- [x] **Ajustes fuera de la nav**: icono ⚙️ en header de "Mis alertas" → ruta `settings` con flecha de volver.
+- [x] **Criterio de aceptación (smoke visual en emulador, 2026-07-22)**: Home muestra card con datos reales (UFC Fight Night Ankalaev vs Guskov, 13 combates, headshots reales, "SÁB 25 JUL · 13:00"), CTA navega a EventDetail correcto, nav 3 destinos funcional, ⚙️ → Ajustes OK, logcat sin FATAL. Backend Railway en vivo.
+- [ ] Replicar el estilo en `EventDetailScreen`/`BoutCard` (sesión posterior, si el piloto valida).
+- [ ] Fusión visual profunda Buscar/EventList (fuera del piloto; decisión #12 tomada por default — confirmar con el owner).
+
+
 
 

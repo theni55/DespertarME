@@ -8,10 +8,9 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -24,9 +23,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -38,21 +34,21 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.despertarme.app.alarm.AlarmService
 import com.despertarme.app.data.AppContainer
-import com.despertarme.app.data.remote.EventSummaryOut
 import com.despertarme.app.ui.screens.EventDetailScreen
 import com.despertarme.app.ui.screens.EventListScreen
 import com.despertarme.app.ui.screens.HomeScreen
 import com.despertarme.app.ui.screens.SettingsScreen
 import com.despertarme.app.ui.screens.SubscriptionsScreen
+import com.despertarme.app.ui.theme.BackgroundDark
 import com.despertarme.app.ui.theme.DespertarTheme
-import com.despertarme.app.ui.theme.SurfaceDark
 import com.despertarme.app.ui.theme.TextSecondary
 import com.despertarme.app.ui.theme.UfcRed
 import com.despertarme.app.ui.viewmodel.EventDetailViewModel
 import com.despertarme.app.ui.viewmodel.EventDetailViewModelFactory
-import com.despertarme.app.ui.viewmodel.EventListLoader
 import com.despertarme.app.ui.viewmodel.EventListViewModel
 import com.despertarme.app.ui.viewmodel.EventListViewModelFactory
+import com.despertarme.app.ui.viewmodel.HomeViewModel
+import com.despertarme.app.ui.viewmodel.HomeViewModelFactory
 import com.despertarme.app.ui.viewmodel.SubscriptionsViewModel
 import com.despertarme.app.ui.viewmodel.SubscriptionsViewModelFactory
 import kotlinx.coroutines.Dispatchers
@@ -104,11 +100,12 @@ private data class TopLevelDestination(
     val icon: ImageVector,
 )
 
+// D46: nav reducida a 3 destinos (Buscar/Home/Alertas). Ajustes sale de la nav
+// y se alcanza vía icono ⚙️ en el header de "Mis alertas".
 private val TOP_LEVEL_DESTINATIONS = listOf(
+    TopLevelDestination("events", "Buscar", Icons.Filled.Search),
     TopLevelDestination("home", "Home", Icons.Filled.Home),
-    TopLevelDestination("events", "Eventos", Icons.Filled.CalendarMonth),
-    TopLevelDestination("subscriptions", "Mis Alertas", Icons.Filled.Notifications),
-    TopLevelDestination("settings", "Ajustes", Icons.Filled.Settings),
+    TopLevelDestination("subscriptions", "Alertas", Icons.Filled.Notifications),
 )
 
 @Composable
@@ -121,24 +118,14 @@ private fun AppGraph(
     val detailVm: EventDetailViewModel = viewModel(factory = EventDetailViewModelFactory(container))
     val eventsVm: EventListViewModel = viewModel(factory = EventListViewModelFactory(container))
     val subsVm: SubscriptionsViewModel = viewModel(factory = SubscriptionsViewModelFactory(container))
-
-    // Resolve the next event ahead of time so Home's "Avísame" can navigate
-    // straight into EventDetail without blocking the UI.
-    var nextEvent by remember { mutableStateOf<EventSummaryOut?>(null) }
-    var resolvingNext by remember { mutableStateOf(true) }
-    LaunchedEffect(Unit) {
-        withContext(Dispatchers.IO) {
-            nextEvent = EventListLoader(container).nextEvent()
-            resolvingNext = false
-        }
-    }
+    val homeVm: HomeViewModel = viewModel(factory = HomeViewModelFactory(container))
 
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
 
     Scaffold(
         bottomBar = {
-            NavigationBar(containerColor = SurfaceDark) {
+            NavigationBar(containerColor = BackgroundDark) {
                 TOP_LEVEL_DESTINATIONS.forEach { destination ->
                     NavigationBarItem(
                         selected = currentRoute == destination.route,
@@ -163,17 +150,15 @@ private fun AppGraph(
             modifier = Modifier.padding(padding),
         ) {
             composable("home") {
+                val state by homeVm.state.collectAsState()
+                LaunchedEffect(Unit) { homeVm.load() }
                 HomeScreen(
-                    isLoading = resolvingNext && nextEvent == null,
-                    onNextEvent = {
-                        val event = nextEvent
-                        if (event != null) {
-                            detailVm.clearSnack()
-                            navController.navigate("event/${event.id}")
-                        }
+                    state = state,
+                    onEventClick = { eventId ->
+                        detailVm.clearSnack()
+                        navController.navigate("event/$eventId")
                     },
-                    onTestAlarm = onTestAlarm,
-                    onStopAlarm = onStopAlarm,
+                    onRetry = { homeVm.load(force = true) },
                 )
             }
             composable("events") {
@@ -196,6 +181,7 @@ private fun AppGraph(
                     snackbarMessage = snack,
                     onDismissSnack = { subsVm.clearSnack() },
                     onCancel = { subId -> subsVm.cancel(subId) },
+                    onOpenSettings = { navController.navigate("settings") },
                 )
             }
             composable("settings") {
@@ -204,6 +190,7 @@ private fun AppGraph(
                     deviceId = deviceId,
                     onTestAlarm = onTestAlarm,
                     onStopAlarm = onStopAlarm,
+                    onBack = { navController.popBackStack() },
                 )
             }
             composable("event/{eventId}") { entry ->
