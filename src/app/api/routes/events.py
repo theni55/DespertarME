@@ -211,13 +211,19 @@ async def get_event_detail(
 
     previous_map = _previous_bout_id_map(event.bouts, sport)
 
-    athlete_ids = [
-        c.athlete.athlete_id
-        for b in event.bouts
-        for c in (b.red_corner, b.blue_corner)
-        if c and c.athlete and c.athlete.athlete_id
-    ]
-    resolved = await resolver.resolve_many(athlete_ids)
+    # D49: tenis tiene nombres inline en competitor.name — no hace falta
+    # resolver atletas via el endpoint /athletes/{id} (costoso: 126 llamadas
+    # para 63 partidos, ~16s). Para MMA seguimos usando AthleteResolver.
+    if sport != "tennis":
+        athlete_ids = [
+            c.athlete.athlete_id
+            for b in event.bouts
+            for c in (b.red_corner, b.blue_corner)
+            if c and c.athlete and c.athlete.athlete_id
+        ]
+        resolved = await resolver.resolve_many(athlete_ids)
+    else:
+        resolved = {}
 
     def _to_athlete_out(corner: ProviderCompetitor | None) -> BoutAthleteOut | None:
         if corner is None or corner.athlete is None:
