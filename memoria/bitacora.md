@@ -1036,3 +1036,23 @@ plataforma (Vercel/CF Pages descartados: serverless no soporta el scheduler
 - **Decisiones registradas**: D46 (Home lista de cards, nav 3 destinos, supersede Sesión 15) y D47 (headshots reales en vez de póster genérico, desviación del paso 4 de la validación).
 - **Quirk de sesión**: un `Get-Content -Raw` + `Set-Content -Encoding UTF8` en PowerShell corrompió las tildes de `HomeScreen.kt` (mojibake CP-1252→UTF-8); reparado con `[System.IO.File]::ReadAllText/WriteAllText` + roundtrip de encoding. Confirma la regla global de no usar cmdlets de PowerShell para ficheros UTF-8.
 - **Pendiente**: replicar estilo en EventDetail/BoutCard (sesión posterior si el piloto valida); confirmar con el owner la decisión #12 (fusión Buscar/EventList); NO mergear a main sin confirmación.
+
+---
+
+## Sesión 24 — Fase 8f Android tenis completada (2026-07-24)
+
+- **Merge dev → feature/tenis**: 4 conflictos en memorias resueltos. D numbers tenis renumerados a D51-D55.
+- **Fase 8f** (~325 lineas en 11 ficheros Kotlin):
+  - Capa datos: sport/league en API + tennis fields en DTOs
+  - CompetitionsScreen + VM nuevos (secciones ATP/WTA)
+  - EventListScreen → sport cards (MMA, Tenis)
+  - MainActivity: ruta `events/{sport}`, sport/league en EventDetailVM
+  - HomeViewModel: fetch paralelo 3 fuentes, merge por fecha
+  - HomeScreen: labels dinamicos, onEventClick con sport/league
+  - EventDetailScreen: BoutCard condicional (court badge, sets vs rounds)
+  - SubscriptionsScreen: badge deporte
+- **Fix backend**: `espn_tennis.py` cutoff 14 dias para torneos en curso (E2)
+- **Fix Android**: keys compuestas en LazyColumn (E1)
+- **Errores**: E1 (key collision), E2 (tenis cutoff), E3 (baseUrl Railway sin tenis)
+- **Pendiente**: cuestionario diseño visual para proxima sesion, headshots ausentes, restaurar baseUrl Railway
+- **Memorias actualizadas**: handoff.md, bitacora.md (esta entrada), fases.md (Fase 8f checkboxes), AGENTS.md (indice)

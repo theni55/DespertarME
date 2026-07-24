@@ -6,27 +6,40 @@
 
 ## Última sesión
 
-**Fecha:** 2026-07-24 · **Sesión 23 (cont.) — Backend tenis completo. Pipeline verificado en vivo con partido ATP real. Rama `feature/tenis`.**
+**Fecha:** 2026-07-24 · **Sesión 24 — Fase 8f Android tenis completada. App multi-sport funcional (MMA + Tenis ATP/WTA). Rama `feature/tenis`.**
 
-**Contexto:** el backend multi-sport está funcional y verificado end-to-end con un partido ATP real (Generali Open, Bublik vs Etcheverry): el poller detectó la transición `post` del partido previo (Hanfmann vs Halys) → calculó `estimated_start = 14:39` → envió push `update`. El partido empezó a las 14:41. Falta la app Android (cambios del compañero pendientes de subir).
+**Contexto:** mergeado `dev` → `feature/tenis` (trayendo rediseño Winamax D46/D47). Implementado soporte tenis en la app Android: navegación jerárquica Buscar → Deportes → Competiciones → EventDetail, renderizado condicional MMA vs Tenis en BoutCard, Home con fetch multi-sport paralelo, badges de deporte en suscripciones.
 
 **Hecho en esta sesión:**
-1. **T1-T5 completados** (ver fases.md): provider, dominio generalizado, DB, API multi-sport (`?sport=tennis&league=atp|wta`), poller/scheduler multi-sport.
-2. **Fix de timeout en API**: saltar `AthleteResolver` para tenis (nombres inline D54) — las peticiones pasan de ~20s a ~5s.
-3. **Fix de `_log_alert`**: capturar valores primitivos en vez de pasar ORM (bug MissingGreenlet en `started`).
-4. **FakeRedis en dev**: `scheduler.py` usa `fakeredis.FakeRedis` cuando `APP_ENV=development` (Redis Windows 3.x es incompatible con redis-py moderno).
-5. **Verificación en vivo (ATP Generali Open)**:
-   - Suscripción: Bublik vs Etcheverry (178887), Center Court, `sport=tennis`
-   - Previo (Hanfmann vs Halys, 178886): `in` → `post` detectado a las 14:32
-   - `update` push enviado: `estimated_start = 14:39 CEST`, `confidence=high`, acierto (empezó 14:41)
-   - `started` push pendiente de verificar tras fix de sesión SQLAlchemy
+1. **Merge dev → feature/tenis**: resueltos 4 conflictos en memorias. D numbers tenis renumerados D51-D55 (D46-D47 ya estaban asignados a Winamax en dev).
+2. **Fase 8f Android** (~325 lineas en 11 ficheros):
+   - `Models.kt` + `DespertarApi.kt`: campos tenis en DTOs, `@Query("sport")` + `@Query("league")`
+   - `CompetitionsScreen.kt` + `CompetitionsViewModel.kt` (nuevos): pantalla de competiciones con secciones ATP/WTA separadas
+   - `EventListScreen.kt`: ahora muestra 2 cards de deporte (MMA, Tenis) — navegacion jerarquica
+   - `MainActivity.kt`: ruta `events/{sport}`, sport/league propagado a EventDetail via `EventDetailViewModel.currentSport`
+   - `HomeViewModel.kt`: fetch paralelo de 3 fuentes (mma, atp, wta), merge por fecha, top 4. Para tenis el "main event" se elige por proximidad de fecha (sin matchNumber)
+   - `HomeScreen.kt`: labels dinamicos (UFC/ATP/WTA), "Main event" → "Proximo" para tenis, `onEventClick` con sport+league
+   - `EventDetailScreen.kt`: `BoutCard` condicional — tenis → court badge (verde), roundDescription, "N sets"; MMA sin cambios
+   - `SubscriptionsScreen.kt` + `SubscriptionsViewModel.kt`: badge "MMA"/"Tenis", labels "Combate"/"Partido" segun sport
+3. **Fix backend: torneos tenis no aparecian** (`espn_tennis.py:197-205`): el filtro `ev_dt >= cutoff` descartaba torneos en curso cuyo start date ya paso (tenis dura 1-2 semanas). Anadido `cutoff = min(cutoff, now - 14 days)`.
+4. **Fix Android: crash por keys duplicadas en LazyColumn**: al mezclar ATP + WTA en misma lista, `it.event.id` podia colisionar. Keys compuestas: `"atp-${id}"`, `"wta-${id}"`, `"${sport}-${league}-${id}"`.
 
-**Commits en `feature/tenis`:** `4a1302d`, `ca99026`, `38dd439`, + 1 pendiente (fix `_log_alert` + fakeredis + memorias).
+**Errores encontrados y solucionados:**
+- **E1 — LazyColumn key collision**: `Key "600059667" was already used` al mezclar ATP + WTA en CompetitionsScreen y HomeScreen. Fix: keys compuestas con prefijo de deporte/liga.
+- **E2 — Torneos tenis no listados**: `GET /api/events?sport=tennis&league=atp` devolvia `[]` porque Generali Open (start date 18-jul) era filtrado por `ev_dt >= now`. Fix: cutoff minimo de 14 dias en `espn_tennis.py`.
+- **E3 — App apuntaba a Railway sin backend tenis**: `baseUrl` era `despertarme-production.up.railway.app` que no tiene codigo de tenis. Cambiado a `http://10.0.2.2:8000/` para desarrollo local.
 
-**Pendiente (próxima sesión):**
-1. Verificar push `started` al recrear suscripción con el fix de sesión SQLAlchemy.
-2. App Android: cuando el compañero suba sus cambios, los endpoints ya están listos (`?sport=tennis&league=atp|wta`, DTOs con `court`, `sport`, `round_description`).
-3. F1: OpenF1 requiere 9.90 EUR/mes para datos en vivo — diferido.
+**Verificacion (emulador):**
+- Build: `assembleDebug` SUCCESSFUL
+- Emulador: `pixel_6_api34` arrancado, APK instalada, sin FATAL
+- Backend local operativo con fix tenis: `GET /api/events?sport=tennis&league=atp` → Generali Open + Millennium Estoril Open
+- Home: cards mixtas (MMA + Tenis ATP/WTA)
+- Buscar: 2 cards deporte → tap Tenis → secciones ATP/WTA con torneos → tap torneo → EventDetail con partidos por pista
+
+**Pendiente (proxima sesion):**
+1. **Cuestionario de diseno visual** — el owner quiere decidir como se ve todo en general (estilo Winamax vs ajustes propios, colores por deporte, agrupacion de partidos por pista en EventDetail, fusion Buscar/EventList). Preparar preguntas estructuradas (grilling) para la sesion.
+2. **Faces/headshots ausentes** — el owner reporta que caras que antes se veian ahora no aparecen. Posible causa: el HomeViewModel hace 3 fetches paralelos (mma+atp+wta) y el getEvent para tenis no resuelve atletas via AthleteResolver (D54: nombres inline, pero headshots requieren seguir el `$ref`). O bien la app local con baseUrl `10.0.2.2` no tiene el bypass SSL corporativo (truststore) y algunas peticiones fallan silenciosamente.
+3. **Restaurar `baseUrl` Railway** antes de merge a dev (actualmente `http://10.0.2.2:8000/`).
 
 ---
 

@@ -41,6 +41,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.despertarme.app.data.remote.AlertLogOut
+import com.despertarme.app.ui.theme.AccentGreen
 import com.despertarme.app.ui.theme.BackgroundDark
 import com.despertarme.app.ui.theme.SurfaceDark
 import com.despertarme.app.ui.theme.TextSecondary
@@ -189,12 +190,27 @@ private fun SubscriptionCard(
             )
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = ui.fightLabel,
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 15.sp,
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = ui.fightLabel,
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 15.sp,
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    val (badgeText, badgeColor) = if (ui.sport == "tennis") "Tenis" to AccentGreen else "MMA" to UfcRed
+                    Text(
+                        text = badgeText,
+                        color = badgeColor,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 0.5.sp,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(badgeColor.copy(alpha = 0.15f))
+                            .padding(horizontal = 6.dp, vertical = 2.dp),
+                    )
+                }
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = buildString {

@@ -23,7 +23,7 @@ import logging
 import re
 import time
 from collections.abc import Callable, Sequence
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 from urllib.parse import urlparse
 
@@ -195,6 +195,12 @@ class EspnTennisProvider(Provider):
         summaries = [s for s in raw_summaries if s is not None]
 
         cutoff = min_date or datetime.now(UTC)
+        # Tenis: torneos duran 1-2 semanas. Incluir torneos en curso
+        # aunque su fecha de inicio ya paso (ej. Generali Open empezo
+        # 18-jul pero hoy 24-jul sigue activo con semifinales).
+        min_cutoff = datetime.now(UTC) - timedelta(days=14)
+        if cutoff > min_cutoff:
+            cutoff = min_cutoff
         upcoming: list[EventSummary] = []
         for s in summaries:
             try:

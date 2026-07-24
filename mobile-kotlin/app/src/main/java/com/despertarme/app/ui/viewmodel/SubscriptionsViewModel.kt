@@ -17,6 +17,7 @@ data class SubscriptionUi(
     val sub: BoutSubscriptionOut,
     val fightLabel: String,
     val eventName: String?,
+    val sport: String = "mma",
 )
 
 data class SubscriptionsState(
@@ -80,19 +81,25 @@ class SubscriptionsViewModel(
 
     // El backend solo devuelve ids en la suscripcion; resolvemos nombres de
     // peleadores con una fetch por evento unico (normalmente 1) y cache local.
+    // Fase 8f: usamos el sport de la suscripcion para la llamada getEvent.
     private suspend fun resolveLabels(subs: List<BoutSubscriptionOut>): List<SubscriptionUi> {
-        val cards = subs.map { it.eventId }.distinct().associateWith { eventId ->
-            runCatching { container.api.getEvent(eventId) }.getOrNull()
+        val cards = subs.map { it.eventId to it.sport }.distinct().associateWith { (eventId, sport) ->
+            runCatching { container.api.getEvent(eventId, sport, "") }.getOrNull()
         }
         return subs.map { sub ->
-            val card = cards[sub.eventId]
+            val card = cards[sub.eventId to sub.sport]
             val bout = card?.bouts?.firstOrNull { it.id == sub.boutId }
             val label = if (bout != null) {
                 "${bout.red?.name ?: "TBD"} vs ${bout.blue?.name ?: "TBD"}"
             } else {
-                "Combate #${sub.targetMatchNumber}"
+                if (sub.sport == "tennis") "Partido #${sub.targetMatchNumber}" else "Combate #${sub.targetMatchNumber}"
             }
-            SubscriptionUi(sub = sub, fightLabel = label, eventName = card?.name)
+            SubscriptionUi(
+                sub = sub,
+                fightLabel = label,
+                eventName = card?.name,
+                sport = sub.sport,
+            )
         }
     }
 }

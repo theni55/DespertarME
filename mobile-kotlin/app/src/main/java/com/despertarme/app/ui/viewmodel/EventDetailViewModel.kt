@@ -23,6 +23,9 @@ class EventDetailViewModel(
     private val _snack = MutableStateFlow<String?>(null)
     val snackMessage: StateFlow<String?> = _snack.asStateFlow()
 
+    var currentSport: String = "mma"
+    var currentLeague: String = ""
+
     fun clearSnack() { _snack.value = null }
 
     fun load(eventId: String) {
@@ -34,7 +37,7 @@ class EventDetailViewModel(
         _state.value = EventDetailState(isLoading = true)
         viewModelScope.launch {
             try {
-                val card = container.api.getEvent(eventId)
+                val card = container.api.getEvent(eventId, currentSport, currentLeague)
                 _state.value = EventDetailState(isLoading = false, event = card)
             } catch (t: Throwable) {
                 _state.value = EventDetailState(
@@ -49,15 +52,15 @@ class EventDetailViewModel(
         _state.value = EventDetailState(isLoading = true)
         viewModelScope.launch {
             try {
-                val next = container.api.listEvents().firstOrNull()
+                val next = container.api.listEvents(currentSport, currentLeague).firstOrNull()
                 if (next == null) {
                     _state.value = EventDetailState(
                         isLoading = false,
-                        error = "No hay eventos próximos ahora mismo.",
+                        error = "No hay eventos proximos ahora mismo.",
                     )
                     return@launch
                 }
-                val card = container.api.getEvent(next.id)
+                val card = container.api.getEvent(next.id, currentSport, currentLeague)
                 _state.value = EventDetailState(isLoading = false, event = card)
             } catch (t: Throwable) {
                 _state.value = EventDetailState(
@@ -83,6 +86,7 @@ class EventDetailViewModel(
                         boutId = boutId,
                         targetMatchNumber = matchNumber,
                         leadMinutes = leadMinutes,
+                        sport = currentSport,
                     ),
                 )
                 _state.value = _state.value.copy(
@@ -90,10 +94,6 @@ class EventDetailViewModel(
                 )
                 _snack.value = "Te avisaremos $leadMinutes min antes cuando el backend detecte el inicio real"
 
-                // D45: NO programamos la alarma al suscribirse. Solo persistimos
-                // un PendingAlarm centinela con triggerAtMillis=0 y fired=false.
-                // El primer push FCM con datos del combate previo programará la
-                // alarma al momento adecuado (con cushion +1 min).
                 val card = _state.value.event ?: return@launch
                 val bout = card.bouts.firstOrNull { it.id == boutId } ?: return@launch
                 val app = DespertarMeApp.instance

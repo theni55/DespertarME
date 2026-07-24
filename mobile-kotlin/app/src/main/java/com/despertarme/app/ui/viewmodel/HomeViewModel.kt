@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.despertarme.app.data.AppContainer
 import com.despertarme.app.data.remote.BoutAthleteOut
+import com.despertarme.app.data.remote.EventCardOut
 import com.despertarme.app.data.remote.EventSummaryOut
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -13,13 +14,13 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import java.time.Instant
+import java.time.OffsetDateTime
 
-/**
- * Card de evento del Home: summary del listado + datos del main event
- * (headshots reales de ESPN) cargados en segunda fase, best-effort.
- */
 data class HomeEventUi(
     val event: EventSummaryOut,
+    val sport: String = "mma",
+    val league: String = "",
     val mainRed: BoutAthleteOut? = null,
     val mainBlue: BoutAthleteOut? = null,
     val boutCount: Int? = null,
@@ -43,28 +44,56 @@ class HomeViewModel(
         if (!force && !current.isLoading && current.error == null && current.events.isNotEmpty()) return
         _state.value = HomeState(isLoading = true)
         viewModelScope.launch {
-            val upcoming = try {
-                container.api.listEvents().take(MAX_FEATURED)
+            val allSummaries = try {
+                coroutineScope {
+                    val mmaDeferred = async {
+                        runCatching { container.api.listEvents("mma", "") }
+                            .getOrDefault(emptyList())
+                            .map { Triple(it, "mma", "") }
+                    }
+                    val atpDeferred = async {
+                        runCatching { container.api.listEvents("tennis", "atp") }
+                            .getOrDefault(emptyList())
+                            .map { Triple(it, "tennis", "atp") }
+                    }
+                    val wtaDeferred = async {
+                        runCatching { container.api.listEvents("tennis", "wta") }
+                            .getOrDefault(emptyList())
+                            .map { Triple(it, "tennis", "wta") }
+                    }
+                    (mmaDeferred.await() + atpDeferred.await() + wtaDeferred.await())
+                        .sortedBy { (event, _, _) -> parseDateEpoch(event.date) }
+                        .take(MAX_FEATURED)
+                }
             } catch (t: Throwable) {
                 _state.value = HomeState(
                     isLoading = false,
-                    error = "No se pudieron cargar los próximos eventos: ${t.message ?: "desconocido"}",
+                    error = "No se pudieron cargar los eventos: ${t.message ?: "desconocido"}",
                 )
                 return@launch
             }
-            // Fase 1: render inmediato con los summaries (sin headshots todavía).
-            _state.value = HomeState(isLoading = false, events = upcoming.map { HomeEventUi(it) })
+            _state.value = HomeState(
+                isLoading = false,
+                events = allSummaries.map { (event, sport, league) ->
+                    HomeEventUi(event, sport = sport, league = league)
+                },
+            )
 
-            // Fase 2: enriquecer cada card con el main event (matchNumber == 1)
-            // en paralelo. ESPN no sirve póster por evento (D42); los headshots
-            // del main event son la única imagen real disponible por evento (D47).
             val enriched = coroutineScope {
-                upcoming.map { summary ->
+                allSummaries.map { (summary, sport, league) ->
                     async {
-                        val card = runCatching { container.api.getEvent(summary.id) }.getOrNull()
-                        val main = card?.bouts?.firstOrNull { it.matchNumber == 1 }
+                        val card = runCatching {
+                            container.api.getEvent(summary.id, sport, league)
+                        }.getOrNull()
+                        val main = if (sport == "tennis") {
+                            mainBoutTennis(card)
+                        } else {
+                            card?.bouts?.firstOrNull { it.matchNumber == 1 }
+                        }
                         HomeEventUi(
                             event = summary,
+                            sport = sport,
+                            league = league,
                             mainRed = main?.red,
                             mainBlue = main?.blue,
                             boutCount = card?.bouts?.size,
@@ -77,8 +106,23 @@ class HomeViewModel(
     }
 
     companion object {
-        // Top N eventos destacados en Home (validación de sesión: 3-5).
         const val MAX_FEATURED = 4
+
+        private fun parseDateEpoch(iso: String): Long = runCatching {
+            OffsetDateTime.parse(iso).toEpochSecond()
+        }.getOrDefault(Long.MAX_VALUE)
+
+        private fun mainBoutTennis(card: EventCardOut?) = runCatching {
+            val bouts = card?.bouts ?: return@runCatching null
+            if (bouts.isEmpty()) return@runCatching null
+            val nowEpoch = Instant.now().epochSecond
+            bouts.minByOrNull { bout ->
+                val boutEpoch = runCatching {
+                    OffsetDateTime.parse(bout.date).toEpochSecond()
+                }.getOrDefault(Long.MAX_VALUE)
+                kotlin.math.abs(boutEpoch - nowEpoch)
+            }
+        }.getOrNull()
     }
 }
 

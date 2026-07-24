@@ -55,6 +55,7 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.despertarme.app.data.remote.BoutOut
+import com.despertarme.app.ui.theme.AccentGreen
 import com.despertarme.app.ui.theme.BlueCorner
 import com.despertarme.app.ui.theme.RedCorner
 import com.despertarme.app.ui.theme.SurfaceDark
@@ -170,25 +171,45 @@ private fun BoutCard(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                 }
-                Text(
-                    text = "#${bout.matchNumber}",
-                    color = TextSecondary,
-                    fontWeight = FontWeight.Bold,
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                if (bout.cardSegment != null) {
-                    SegmentBadge(segment = bout.cardSegment)
+                if (bout.sport == "tennis") {
+                    if (bout.court != null) {
+                        TennisCourtBadge(court = bout.court)
+                        Spacer(modifier = Modifier.width(8.dp))
+                    }
+                    if (bout.roundDescription != null) {
+                        Text(
+                            text = bout.roundDescription,
+                            color = TextSecondary,
+                            fontSize = 12.sp,
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                    }
+                    Text(
+                        text = "${bout.periods} sets",
+                        color = TextSecondary,
+                        fontSize = 12.sp,
+                    )
+                } else {
+                    Text(
+                        text = "#${bout.matchNumber}",
+                        color = TextSecondary,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    if (bout.cardSegment != null) {
+                        SegmentBadge(segment = bout.cardSegment)
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    if (bout.weightClass != null) {
+                        Text(text = bout.weightClass, color = TextSecondary, fontSize = 12.sp)
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "${bout.periods}r",
+                        color = TextSecondary,
+                        fontSize = 12.sp,
+                    )
                 }
-                Spacer(modifier = Modifier.width(8.dp))
-                if (bout.weightClass != null) {
-                    Text(text = bout.weightClass, color = TextSecondary, fontSize = 12.sp)
-                }
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "${bout.periods}r",
-                    color = TextSecondary,
-                    fontSize = 12.sp,
-                )
             }
             Spacer(modifier = Modifier.height(12.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -244,6 +265,20 @@ private fun BoutCard(
             }
         }
     }
+}
+
+@Composable
+private fun TennisCourtBadge(court: String) {
+    Text(
+        text = court.uppercase(),
+        color = AccentGreen,
+        fontSize = 11.sp,
+        fontWeight = FontWeight.SemiBold,
+        modifier = Modifier
+            .clip(RoundedCornerShape(4.dp))
+            .background(AccentGreen.copy(alpha = 0.18f))
+            .padding(horizontal = 6.dp, vertical = 2.dp),
+    )
 }
 
 @Composable

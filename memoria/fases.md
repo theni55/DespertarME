@@ -423,10 +423,12 @@ Plan detallado en `memoria/plan-tenis.md`. Decisiones D51-D54.
 - [x] **Verificación en vivo**: pipeline ATP verificado (Bublik vs Etcheverry, Generali Open)
 - [ ] `tests/test_espn_tennis.py` con fixtures grabadas
 
-### Fase 8f — App Android
+### Fase 8f — App Android ✅ (Sesión 24, rama `feature/tenis`)
 
-- [ ] `DespertarApi.kt`: `@Query("sport")` en listEvents/getEvent
-- [ ] DTOs Kotlin: `BoutSubscriptionCreate.sport`, `BoutOut.court`/`roundDescription`
-- [ ] Home: selector de deporte (tabs MMA / Tenis)
-- [ ] EventDetail tenis: agrupado por court, badge round, nombres inline
-- [ ] SubscriptionsScreen: badge de deporte
+- [x] `DespertarApi.kt`: `@Query("sport")` en listEvents/getEvent
+- [x] DTOs Kotlin: `BoutSubscriptionCreate.sport`, `BoutOut.court`/`roundDescription`
+- [x] Home: fetch multi-sport (paralelo mma+atp+wta), cards mixtas con labels dinamicos
+- [x] EventDetail tenis: court badge (AccentGreen), roundDescription, "N sets" vs "Nr"
+- [x] Buscar: navegacion jerarquica (Deportes → Competiciones → EventDetail)
+- [x] CompetitionsScreen: secciones ATP/WTA, cards torneo con fecha y liga
+- [x] SubscriptionsScreen: badge de deporte (MMA/Tenis)

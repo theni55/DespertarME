@@ -75,7 +75,7 @@ import java.util.Locale
 @Composable
 fun HomeScreen(
     state: HomeState,
-    onEventClick: (String) -> Unit,
+    onEventClick: (eventId: String, sport: String, league: String) -> Unit,
     onRetry: () -> Unit,
 ) {
     Column(
@@ -123,8 +123,10 @@ fun HomeScreen(
                             fontWeight = FontWeight.Black,
                         )
                     }
-                    items(state.events, key = { it.event.id }) { ui ->
-                        HomeEventCard(ui = ui, onClick = { onEventClick(ui.event.id) })
+                    items(state.events, key = { "${it.sport}-${it.league}-${it.event.id}" }) { ui ->
+                        HomeEventCard(ui = ui, onClick = {
+                            onEventClick(ui.event.id, ui.sport, ui.league)
+                        })
                     }
                     item { Spacer(modifier = Modifier.height(8.dp)) }
                 }
@@ -170,6 +172,21 @@ private fun HomeEventCard(
         colors = CardDefaults.cardColors(containerColor = SurfaceDark),
     ) {
         // Strip superior con la liga — patrón header de card Winamax.
+        val (brandLabel, sportLabel) = when (ui.sport) {
+            "tennis" -> when (ui.league) {
+                "atp" -> "ATP" to "Tenis"
+                "wta" -> "WTA" to "Tenis"
+                else -> "Tenis" to "Tenis"
+            }
+            else -> "UFC" to "MMA"
+        }
+        val boutCountLabel = if (ui.sport == "tennis") {
+            val n = ui.boutCount
+            if (n != null && n > 0) "partidos" else "partidos"
+        } else {
+            val n = ui.boutCount
+            if (n != null && n > 0) "combates" else "combates"
+        }
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -178,7 +195,7 @@ private fun HomeEventCard(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                text = "UFC",
+                text = brandLabel,
                 color = Color.White,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Black,
@@ -187,9 +204,9 @@ private fun HomeEventCard(
             Spacer(modifier = Modifier.width(8.dp))
             Text(
                 text = buildString {
-                    append("MMA")
+                    append(sportLabel)
                     val n = ui.boutCount
-                    if (n != null && n > 0) append(" · $n combates")
+                    if (n != null && n > 0) append(" · $n $boutCountLabel")
                 },
                 color = Color.White.copy(alpha = 0.85f),
                 fontSize = 12.sp,
@@ -281,8 +298,9 @@ private fun HomeEventCard(
             val blue = ui.mainBlue?.name
             if (red != null || blue != null) {
                 Spacer(modifier = Modifier.height(3.dp))
+                val mainLabel = if (ui.sport == "tennis") "Proximo" else "Main event"
                 Text(
-                    text = "Main event: ${red ?: "TBD"} vs ${blue ?: "TBD"}",
+                    text = "$mainLabel: ${red ?: "TBD"} vs ${blue ?: "TBD"}",
                     color = TextSecondary,
                     fontSize = 13.sp,
                 )
