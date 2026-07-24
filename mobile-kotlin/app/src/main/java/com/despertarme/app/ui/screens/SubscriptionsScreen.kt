@@ -20,6 +20,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.NotificationsNone
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -53,6 +54,7 @@ fun SubscriptionsScreen(
     snackbarMessage: String?,
     onDismissSnack: () -> Unit,
     onCancel: (String) -> Unit,
+    onOpenSettings: () -> Unit,
 ) {
     val snackbarHost = remember { SnackbarHostState() }
     LaunchedEffect(snackbarMessage) {
@@ -79,13 +81,27 @@ fun SubscriptionsScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 item {
-                    Text(
-                        text = "MIS ALERTAS",
-                        color = Color.White,
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Black,
-                        letterSpacing = 1.sp,
-                    )
+                    // D46: Ajustes sale de la bottom nav; se accede desde aquí.
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = "MIS ALERTAS",
+                            color = Color.White,
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Black,
+                            letterSpacing = 1.sp,
+                            modifier = Modifier.weight(1f),
+                        )
+                        IconButton(onClick = onOpenSettings) {
+                            Icon(
+                                imageVector = Icons.Filled.Settings,
+                                contentDescription = "Ajustes",
+                                tint = TextSecondary,
+                            )
+                        }
+                    }
                 }
                 if (state.subscriptions.isEmpty()) {
                     item { EmptyAlerts() }

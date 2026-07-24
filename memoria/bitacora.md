@@ -981,14 +981,14 @@ plataforma (Vercel/CF Pages descartados: serverless no soporta el scheduler
   7. **T7 — Tests + smoke**: `test_espn_tennis.py` con respx, tests actualizados de poller/API/events, `probe_tennis.py`, lint + typecheck.
 
 - **Decisiones registradas** en `decisiones.md`:
-  - D46: ESPN Core API como fuente de Tenis (ATP+WTA), mismo patrón que UFC.
-  - D47: Modelo multi-sport: `sport` field en `BoutSubscription` + `Card`, `previous_bout()` generalizado por pista.
-  - D48: Buffer inter-partidos tenis: 15 min (`BUFFER_INTERMATCH_TENNIS_SECONDS=900`).
-  - D49: Nombres inline de `Competitor.name` en tenis (sin `AthleteResolver`).
+  - D51: ESPN Core API como fuente de Tenis (ATP+WTA), mismo patrón que UFC.
+  - D52: Modelo multi-sport: `sport` field en `BoutSubscription` + `Card`, `previous_bout()` generalizado por pista.
+  - D53: Buffer inter-partidos tenis: 15 min (`BUFFER_INTERMATCH_TENNIS_SECONDS=900`).
+  - D54: Nombres inline de `Competitor.name` en tenis (sin `AthleteResolver`).
 
 - **Rama `feature/tenis`** creada desde `dev` (commit `18095f3`). `git diff dev --stat` → sin diferencias (punto de partida idéntico).
 
-- **Memorias actualizadas:** `plan-tenis.md` (nuevo), `decisiones.md` (D46-D49), `fuentes-datos.md` (tabla + sección tenis), `fases.md` (Fase 8 con checkboxes), `handoff.md` (Sesión 23 como punto de entrada), `bitacora.md` (esta entrada), `AGENTS.md` (índice regenerado).
+- **Memorias actualizadas:** `plan-tenis.md` (nuevo), `decisiones.md` (D51-D54), `fuentes-datos.md` (tabla + sección tenis), `fases.md` (Fase 8 con checkboxes), `handoff.md` (Sesión 23 como punto de entrada), `bitacora.md` (esta entrada), `AGENTS.md` (índice regenerado).
 
 ---
 
@@ -998,7 +998,7 @@ plataforma (Vercel/CF Pages descartados: serverless no soporta el scheduler
 
 - **Fixes aplicados durante la sesión:**
   1. **`league` parameter (ca99026)**: `?sport=tennis&league=atp|wta`. La key del provider registry pasó de `str` a `tuple(sport, league)` para cachear providers por separado. Sin este fix, los eventos WTA devolvían `bouts: []` porque el provider usaba `league=atp` (default).
-  2. **Skip AthleteResolver para tenis (38dd439)**: D49 — los nombres vienen inline en `competitor.name`, no hace falta resolver 126 atletas via `/athletes/{id}`. Las peticiones pasan de ~20s a ~5s.
+  2. **Skip AthleteResolver para tenis (38dd439)**: D54 — los nombres vienen inline en `competitor.name`, no hace falta resolver 126 atletas via `/athletes/{id}`. Las peticiones pasan de ~20s a ~5s.
   3. **FakeRedis en dev (pendiente commit)**: `scheduler.py` usa `fakeredis.FakeRedis` cuando `APP_ENV=development`. Redis Windows 3.0.504 (winget) es incompatible con redis-py moderno (no soporta comando `HELLO` de Redis 6+).
   4. **Fix `_log_alert` MissingGreenlet (pendiente commit)**: capturar `sub_id`, `device_id`, `bout_id` como primitivos en vez de pasar el ORM `BoutSubscription` a `_log_alert`. Tras un commit/rollback previo, los atributos lazy del ORM lanzaban `MissingGreenlet`.
 
@@ -1021,4 +1021,18 @@ plataforma (Vercel/CF Pages descartados: serverless no soporta el scheduler
   2. App Android: cuando el compañero suba sus cambios, endpoints listos.
   3. F1: investigación de fuentes diferida (OpenF1 9.90 EUR/mes).
 
-- **Memorias actualizadas:** `handoff.md`, `bitacora.md` (esta entrada), `decisiones.md` (D50), `fases.md` (checkboxes T1-T5), `plan-tenis.md` (nota verificación vivo), `AGENTS.md` (índice).
+- **Memorias actualizadas:** `handoff.md`, `bitacora.md` (esta entrada), `decisiones.md` (D55), `fases.md` (checkboxes T1-T5), `plan-tenis.md` (nota verificación vivo), `AGENTS.md` (índice).
+
+---
+
+## Sesión 23 — Piloto rediseño Home estilo Winamax (D46/D47) + nav 3 destinos (2026-07-22)
+
+- Sesión ejecutada según `validacion-sesion-fable5-home-winamax.md` (resultado del grilling con el owner). Alcance: solo `HomeScreen` + cambios de navegación dependientes; `EventDetailScreen`/`BoutCard` explícitamente fuera.
+- **Paso 1 — tokens de diseño**: ingeniería inversa de las 3 capturas Winamax (`memoria/assets/`) → nuevo doc `memoria/ui-design-tokens.md` (paleta observada, rasgos estructurales de la card, adaptación DespertarME sin apuestas). Tokens nuevos en `ui/theme/Color.kt`: `UfcRedDeep` (#7F050C), `PosterSurface` (#15151B), `AccentGreen` (#4ADE80).
+- **Paso 2 — imagen de card (desviación consciente, D47)**: en lugar del "póster genérico UFC como asset" previsto (habría sido el cartel de McGregor para TODOS los eventos — engañoso), el área de póster se compone con backdrop dibujado en Compose (glows radiales rojo/azul, esquinas del octágono) + **headshots reales del main event** (matchNumber == 1) por evento vía `GET /api/events/{id}` (segunda fase de carga en paralelo, best-effort con fallback a avatares de iniciales). `hero.webp` borrado del APK (recuperable en git). Amparado en el principio "MVP, no dogma" del doc de validación.
+- **Paso 3 — Home rediseñado (D46, supersede "hero se queda así" de Sesión 15)**: `HomeViewModel` nuevo (top 4 de `GET /api/events`, render en dos fases: lista al instante, headshots después). Card estilo Winamax: strip degradado UFC + "MMA · N combates", póster con fecha/hora centradas ("HOY/MAÑANA/SÁB 25 JUL · HH:mm" en zona horaria del dispositivo), nombre del evento + main event, CTA "Avísame" por card → `event/{id}`. Botón global `onNextEvent` y `EventListLoader` eliminados (dead code).
+- **Pasos 4-5 — navegación**: bottom nav de 4 → 3 destinos (Buscar/Home/Alertas, fondo negro estilo Winamax). "Buscar" = `EventListScreen` reposicionado tal cual (título "TODOS LOS EVENTOS"; default #12 de la validación — sin fusión profunda, pendiente confirmar con el owner). Ajustes fuera de la nav: icono ⚙️ en header de "Mis alertas" → ruta `settings` con flecha de volver. "Probar/Parar sonido" fuera de Home (permanece en Ajustes desde Sesión 17).
+- **Build + smoke (criterio de aceptación cumplido)**: `assembleDebug` BUILD SUCCESSFUL a la primera. Emulador `pixel_6_api34` contra backend Railway en vivo: Home muestra la card del único evento próximo en ESPN (UFC Fight Night: Ankalaev vs. Guskov, 13 combates, headshots reales de ambos, "SÁB 25 JUL · 13:00"); CTA navega a EventDetail correcto (card completa con chip PRÓXIMO); tab Buscar muestra el listado; tab Alertas muestra ⚙️ → Ajustes con back arrow y "Probar alarma"; logcat sin FATAL/AndroidRuntime en todo el recorrido. 5 capturas verificadas visualmente contra las referencias.
+- **Decisiones registradas**: D46 (Home lista de cards, nav 3 destinos, supersede Sesión 15) y D47 (headshots reales en vez de póster genérico, desviación del paso 4 de la validación).
+- **Quirk de sesión**: un `Get-Content -Raw` + `Set-Content -Encoding UTF8` en PowerShell corrompió las tildes de `HomeScreen.kt` (mojibake CP-1252→UTF-8); reparado con `[System.IO.File]::ReadAllText/WriteAllText` + roundtrip de encoding. Confirma la regla global de no usar cmdlets de PowerShell para ficheros UTF-8.
+- **Pendiente**: replicar estilo en EventDetail/BoutCard (sesión posterior si el piloto valida); confirmar con el owner la decisión #12 (fusión Buscar/EventList); NO mergear a main sin confirmación.

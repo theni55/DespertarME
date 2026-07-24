@@ -368,9 +368,25 @@ Sin Android Studio aún → el continuador instala Android Studio + emulador API
 
 ---
 
+### Rediseño UI estilo Winamax (piloto Home — Sesión 23, D46/D47)
+
+**Alcance del piloto**: solo `HomeScreen` + cambios de navegación dependientes (validación en `validacion-sesion-fable5-home-winamax.md`).
+
+- [x] **Tokens de diseño** extraídos de las capturas Winamax (`memoria/assets/`) → documentados en `memoria/ui-design-tokens.md` + aplicados en `ui/theme/Color.kt` (`UfcRedDeep`, `PosterSurface`, `AccentGreen`).
+- [x] **Home = lista de cards de eventos reales** (`HomeViewModel`, top 4 de `GET /api/events`, carga en dos fases): strip UFC degradado + área de póster + nombre + main event + CTA "Avísame" por card → `event/{id}`. Botón global `onNextEvent` y hero estático eliminados (D46, supersede Sesión 15).
+- [x] **Póster por card sin asset** (D47): backdrop dibujado en Compose (glows rojo/azul del octágono) + headshots reales del main event vía `GET /api/events/{id}` (fallback: avatares de iniciales). `hero.webp` borrado del APK.
+- [x] **"Probar/Parar sonido" fuera de Home** (permanece solo en Ajustes).
+- [x] **Bottom nav 3 destinos** (Buscar/Home/Alertas) con fondo negro estilo Winamax; "Buscar" = `EventListScreen` reposicionado (título "TODOS LOS EVENTOS", sin fusión profunda — default #12 de la validación, pendiente confirmar con owner).
+- [x] **Ajustes fuera de la nav**: icono ⚙️ en header de "Mis alertas" → ruta `settings` con flecha de volver.
+- [x] **Criterio de aceptación (smoke visual en emulador, 2026-07-22)**: Home muestra card con datos reales (UFC Fight Night Ankalaev vs Guskov, 13 combates, headshots reales, "SÁB 25 JUL · 13:00"), CTA navega a EventDetail correcto, nav 3 destinos funcional, ⚙️ → Ajustes OK, logcat sin FATAL. Backend Railway en vivo.
+- [ ] Replicar el estilo en `EventDetailScreen`/`BoutCard` (sesión posterior, si el piloto valida).
+- [ ] Fusión visual profunda Buscar/EventList (fuera del piloto; decisión #12 tomada por default — confirmar con el owner).
+
+---
+
 ## Fase 8 — Tenis (ATP/WTA) 🔶 en curso (Sesión 23, rama `feature/tenis`)
 
-Plan detallado en `memoria/plan-tenis.md`. Decisiones D46-D49.
+Plan detallado en `memoria/plan-tenis.md`. Decisiones D51-D54.
 
 ### Fase 8a — ESPN Tennis Provider ✅
 
@@ -396,7 +412,7 @@ Plan detallado en `memoria/plan-tenis.md`. Decisiones D46-D49.
 ### Fase 8d — Poller + Scheduler multi-sport ✅
 
 - [x] `engine/poller.py`: providers dict, agrupar por `(sport, event_id)`, mapeo sport-aware
-- [x] `scheduler.py`: construir dict de providers, fakeredis en dev (D50)
+- [x] `scheduler.py`: construir dict de providers, fakeredis en dev (D55)
 - [x] `main.py`: close de todos los providers
 
 ### Fase 8e — Tests + smoke 🔶

@@ -33,10 +33,10 @@ ESPN Core API tiene tenis con dos ligas (ATP, WTA) y la misma estructura que UFC
 
 | # | Decisión |
 |---|----------|
-| D46 | ESPN Core API como fuente de Tenis (ATP+WTA), mismo patrón que UFC |
-| D47 | Modelo multi-sport: `sport` field en `BoutSubscription` + `Card`, `previous_bout()` generalizado por pista cuando `court is not None` |
-| D48 | Buffer inter-partidos tenis: 15 min (`BUFFER_INTERMATCH_TENNIS_SECONDS=900`) |
-| D49 | Tenis: nombres inline del `Competitor.name` (sin `AthleteResolver`) — ESPN tennis sirve el nombre directamente |
+| D51 | ESPN Core API como fuente de Tenis (ATP+WTA), mismo patrón que UFC |
+| D52 | Modelo multi-sport: `sport` field en `BoutSubscription` + `Card`, `previous_bout()` generalizado por pista cuando `court is not None` |
+| D53 | Buffer inter-partidos tenis: 15 min (`BUFFER_INTERMATCH_TENNIS_SECONDS=900`) |
+| D54 | Tenis: nombres inline del `Competitor.name` (sin `AthleteResolver`) — ESPN tennis sirve el nombre directamente |
 
 ## Fases de implementación
 

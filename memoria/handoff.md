@@ -12,7 +12,7 @@
 
 **Hecho en esta sesión:**
 1. **T1-T5 completados** (ver fases.md): provider, dominio generalizado, DB, API multi-sport (`?sport=tennis&league=atp|wta`), poller/scheduler multi-sport.
-2. **Fix de timeout en API**: saltar `AthleteResolver` para tenis (nombres inline D49) — las peticiones pasan de ~20s a ~5s.
+2. **Fix de timeout en API**: saltar `AthleteResolver` para tenis (nombres inline D54) — las peticiones pasan de ~20s a ~5s.
 3. **Fix de `_log_alert`**: capturar valores primitivos en vez de pasar ORM (bug MissingGreenlet en `started`).
 4. **FakeRedis en dev**: `scheduler.py` usa `fakeredis.FakeRedis` cuando `APP_ENV=development` (Redis Windows 3.x es incompatible con redis-py moderno).
 5. **Verificación en vivo (ATP Generali Open)**:
@@ -31,6 +31,33 @@
 ---
 
 ## Última sesión
+
+**Fecha:** 2026-07-22 · **Sesión 23 — Piloto rediseño Home estilo Winamax completado (D46/D47): lista de cards con datos reales + CTA por card, nav reducida a 3 destinos, smoke visual en emulador OK. Rama `dev`, NO mergeado a main.**
+
+**Contexto:** sesión ejecutada según `validacion-sesion-fable5-home-winamax.md` (documento de validación resultado de un grilling con el owner, en la raíz del repo, sin commitear al inicio de la sesión). Alcance limitado a piloto de una sola pantalla: `HomeScreen` + cambios de navegación dependientes. `EventDetailScreen`/`BoutCard` explícitamente fuera (sesión posterior si el piloto valida).
+
+**Hecho en esta sesión:**
+
+1. **Tokens de diseño Winamax** — ingeniería inversa de las 3 capturas de `memoria/assets/` → nuevo doc `memoria/ui-design-tokens.md` (paleta, estructura de card, radios, adaptación sin apuestas). Tokens nuevos en `ui/theme/Color.kt`: `UfcRedDeep`, `PosterSurface`, `AccentGreen`.
+2. **Home rediseñado (D46, supersede "hero se queda así" de Sesión 15)** — `HomeViewModel` nuevo: top 4 de `GET /api/events` con render en dos fases (lista al instante, headshots después en paralelo). Card estilo Winamax: strip degradado "UFC · MMA · N combates", área de póster con fecha/hora centradas (HOY/MAÑANA/día en tz del dispositivo), nombre + main event, CTA "Avísame" por card → `event/{id}`. Botón global `onNextEvent`, `EventListLoader` y hero estático eliminados.
+3. **Desviación consciente del plan (D47)** — el "póster genérico UFC como asset" de la validación se sustituyó por backdrop dibujado en Compose (glows rojo/azul del octágono) + **headshots reales del main event** por evento (vía `GET /api/events/{id}`, fallback avatares de iniciales). Razón: un bitmap genérico habría sido el cartel de McGregor para todos los eventos (engañoso); los headshots son la única imagen real por evento que ESPN sirve (D42 sigue vigente para `image_url`). `hero.webp` borrado del APK.
+4. **Nav 3 destinos (D46)** — Buscar (`EventListScreen` reposicionado, título "TODOS LOS EVENTOS", sin fusión profunda) / Home / Alertas, fondo negro estilo Winamax. Ajustes fuera de la nav → icono ⚙️ en header de "Mis alertas" → ruta `settings` con flecha de volver. "Probar/Parar sonido" ya no está en Home (permanece en Ajustes).
+5. **Smoke visual en emulador (criterio de aceptación cumplido)** — `assembleDebug` verde a la primera; `pixel_6_api34` contra Railway en vivo: card con datos reales (UFC Fight Night: Ankalaev vs. Guskov, 13 combates, headshots de ambos, "SÁB 25 JUL · 13:00"), CTA → EventDetail correcto, 3 tabs funcionales, ⚙️ → Ajustes OK, logcat sin FATAL. Nota: ESPN solo tiene 1 evento próximo ahora mismo, así que Home muestra 1 card (correcto — el layout escala a N).
+6. **Decisiones D46 + D47 registradas** en `decisiones.md`; `fases.md` con sección nueva "Rediseño UI estilo Winamax (piloto Home)"; bitácora Sesión 23.
+
+**Desviaciones del plan de validación (explícitas para la siguiente sesión):**
+- **D47**: headshots reales en vez de póster genérico como asset (paso 4 de las instrucciones operativas). Mejor resultado con imagen real por evento y 0 bytes de asset.
+- La decisión **#12 de la validación (destino "Buscar") sigue siendo default por timeout del owner** — se aplicó el camino de menor riesgo (EventList reenganchado tal cual). **Confirmar con Javier** si quería la fusión profunda (buscador + listado completo).
+
+**Pendiente de la próxima sesión:**
+1. **Enseñar el piloto al owner** → si valida, replicar estilo Winamax en `EventDetailScreen`/`BoutCard` (sesión dedicada). NO mergear `dev` → `main` sin su confirmación.
+2. Confirmar decisión #12 (fusión Buscar/EventList o dejarlo como está).
+3. Los pendientes de la Sesión 22 siguen vivos: validación con evento real 25-jul (UFC Fight Night: Ankalaev vs Guskov, 13:00 UTC), Doze, fix `ApnsConfig` en `FcmNotifier`, spike iOS (ver `plan-mvp-ios.md`).
+4. El doc `validacion-sesion-fable5-home-winamax.md` está en la raíz sin commitear — decidir si se mueve a `memoria/` o se descarta tras el piloto.
+
+---
+
+## Sesión 22 (anterior)
 
 **Fecha:** 2026-07-21 · **Sesión 22 — Plan de dogfooding personal (Android compañero + iOS owner) documentado en `memoria/plan-mvp-ios.md`. Sin cambios de código.**
 
@@ -426,7 +453,8 @@ Sin FCM, las dos últimas (reprogramar en tiempo real y verify-then-ring con tim
 | Fase 4 — Boxeo/Tenis reales | Pendiente (fuera del MVP) |
 | Fase 5 — VoiceNotifier real (Twilio) | ❄️ **Obsoleta** — sustituida por FCM (D37/D40) |
 | Fase 6 — Rediseño visual + landing dinámica | ❄️ **Congelada** — rama `web` |
-| Fase 7 — App móvil | 🔶 **En curso** — Spike ✅, Fase 7a (backend Device/FCM) ✅, scaffold Kotlin (D43) ✅, Fase G (alarma D45) ✅, Railway deploy ✅. **Sesión 21: pipeline FCM verificado end-to-end en hardware físico (test-alarm sonó + push update del poller entregado).** **Sesión 22: plan de dogfooding Android+iOS documentado en `plan-mvp-ios.md`** (spike de riesgo iOS pendiente + fix `ApnsConfig` en backend). Publicación (Play Store/App Store) diferida explícitamente. |
+| Fase 7 — App móvil | 🔶 **En curso** — Spike ✅, Fase 7a (backend Device/FCM) ✅, scaffold Kotlin (D43) ✅, Fase G (alarma D45) ✅, Railway deploy ✅. **Sesión 21: pipeline FCM verificado end-to-end en hardware físico (test-alarm sonó + push update del poller entregado).** **Sesión 22: plan de dogfooding Android+iOS documentado en `plan-mvp-ios.md`** (spike de riesgo iOS pendiente + fix `ApnsConfig` en backend). **Sesión 23: piloto rediseño Home estilo Winamax (D46/D47) + nav 3 destinos, smoke emulador OK — pendiente validación del owner y réplica en EventDetail/BoutCard.** Publicación (Play Store/App Store) diferida explícitamente. |
+| Fase 8 — Tenis (ATP/WTA) | 🔶 **En curso** — Backend multi-sport completado (D51-D55), verificado en vivo con ATP Generali Open. App Android pendiente. Rama `feature/tenis`, mergeada con `dev` (Winamax). |
 
 Detalle de checkboxes en `fases.md`.
 

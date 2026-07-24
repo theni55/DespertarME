@@ -28,6 +28,7 @@ Este archivo (`AGENTS.md`) es la chuleta ejecutable: comandos, prerequisitos, re
 | [Plan MVP iOS + cierre Android — dogfooding personal](memoria/plan-mvp-ios.md) | Plan para estabilizar el MVP Android en el dispositivo del compañero y arrancar el MVP iOS (owner), antes de plantear publicación. Complementa `plan-mvp-android-fable5.md` (ese cubre solo Android). |
 | [Plan: Fase Tenis — ESPN ATP/WTA + integración multi-sport](memoria/plan-tenis.md) | Plan por fases con checkboxes para añadir tenis (ATP/WTA) al MVP, replicando el modelo de tarjeta escalonada por pista (court) en vez de matchNumber+1. Rama `feature/tenis`. |
 | [Plan: rediseño UI Android inspirado en Winamax](memoria/plan-ui-redesign-winamax.md) | Plan de trabajo para rediseñar la UI de `mobile-kotlin/` (Home, EventDetail, bottom nav) tomando como referencia visual la app Winamax. Fase de documentación — sin cambios de código todavía. |
+| [Tokens de diseño (referencia Winamax → DespertarME)](memoria/ui-design-tokens.md) | Tokens extraídos de las capturas Winamax (`memoria/assets/imagen_referencia_1..3.jpeg`) y su adaptación al dominio DespertarME (sin apuestas). Fuente de verdad para el rediseño visual de la app Kotlin (Sesión 23, piloto Home). |
 <!-- MEMORIA-INDEX:END -->
 
 ## Prerequisitos
