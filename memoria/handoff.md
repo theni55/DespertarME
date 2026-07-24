@@ -6,25 +6,27 @@
 
 ## Última sesión
 
-**Fecha:** 2026-07-24 · **Sesión 23 — Plan SDD para Tenis. Rama `feature/tenis` creada desde `dev`. Implementación en curso.**
+**Fecha:** 2026-07-24 · **Sesión 23 (cont.) — Backend tenis completo. Pipeline verificado en vivo con partido ATP real. Rama `feature/tenis`.**
 
-**Contexto:** el owner quiere expandir el MVP a tenis (ATP/WTA), replicando el modelo de "tarjeta escalonada" pero por pista (court): avisar X min antes de que empiece un partido, siguiendo el partido anterior en la misma pista. Investigación de fuentes completa: ESPN Core API soporta tenis con la misma estructura que UFC (state pre/in/post, sin auth). La fuente es viable.
+**Contexto:** el backend multi-sport está funcional y verificado end-to-end con un partido ATP real (Generali Open, Bublik vs Etcheverry): el poller detectó la transición `post` del partido previo (Hanfmann vs Halys) → calculó `estimated_start = 14:39` → envió push `update`. El partido empezó a las 14:41. Falta la app Android (cambios del compañero pendientes de subir).
 
 **Hecho en esta sesión:**
-1. **Investigación de fuentes**: ESPN Core API verificada en vivo para ATP (Generali Open, 54 partidos, 3 pistas) y WTA (63 partidos). Endpoint de status por competición devuelve `{type: {state}, period}` — mismo formato que MMA pero sin `clock`.
-2. **Plan SDD documentado** en `memoria/plan-tenis.md` con 7 fases (T1 Provider → T7 App Android) + decisiones D46-D49.
-3. **Rama `feature/tenis`** creada desde `dev` (commit `18095f3`, Sesión 21). `dev` queda intacto.
-4. **Memorias actualizadas**: `plan-tenis.md` (nuevo), `decisiones.md` (D46-D49), `fuentes-datos.md` (tabla + sección tenis), `fases.md` (Fase 8), `handoff.md`, `bitacora.md`.
+1. **T1-T5 completados** (ver fases.md): provider, dominio generalizado, DB, API multi-sport (`?sport=tennis&league=atp|wta`), poller/scheduler multi-sport.
+2. **Fix de timeout en API**: saltar `AthleteResolver` para tenis (nombres inline D49) — las peticiones pasan de ~20s a ~5s.
+3. **Fix de `_log_alert`**: capturar valores primitivos en vez de pasar ORM (bug MissingGreenlet en `started`).
+4. **FakeRedis en dev**: `scheduler.py` usa `fakeredis.FakeRedis` cuando `APP_ENV=development` (Redis Windows 3.x es incompatible con redis-py moderno).
+5. **Verificación en vivo (ATP Generali Open)**:
+   - Suscripción: Bublik vs Etcheverry (178887), Center Court, `sport=tennis`
+   - Previo (Hanfmann vs Halys, 178886): `in` → `post` detectado a las 14:32
+   - `update` push enviado: `estimated_start = 14:39 CEST`, `confidence=high`, acierto (empezó 14:41)
+   - `started` push pendiente de verificar tras fix de sesión SQLAlchemy
 
-**Pendiente de esta sesión:**
-1. **T1 — ESPN Tennis Provider**: crear `espn_tennis.py` + DTOs tenis en `models.py` + tests.
-2. **T2 — Generalización del dominio**: `court`, `sport` en `Bout`/`Card`/`BoutStatus`, `previous_bout()` por court+date.
-3. **T3 — DB + migración**: columna `sport` en `BoutSubscription`.
-4. **T4 — API multi-sport**: `?sport=` parameter, provider registry.
-5. **T5 — Poller multi-sport**: providers dict, mapeo sport-aware.
-6. **T6 — Tests**: todos verdes (MMA + tenis).
-7. **T7 — App Android**: selector de deporte, pantallas tenis.
-8. **T8 — Smoke**: `probe_tennis.py`, lint, typecheck, pytest.
+**Commits en `feature/tenis`:** `4a1302d`, `ca99026`, `38dd439`, + 1 pendiente (fix `_log_alert` + fakeredis + memorias).
+
+**Pendiente (próxima sesión):**
+1. Verificar push `started` al recrear suscripción con el fix de sesión SQLAlchemy.
+2. App Android: cuando el compañero suba sus cambios, los endpoints ya están listos (`?sport=tennis&league=atp|wta`, DTOs con `court`, `sport`, `round_description`).
+3. F1: OpenF1 requiere 9.90 EUR/mes para datos en vivo — diferido.
 
 ---
 

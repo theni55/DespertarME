@@ -256,7 +256,7 @@ class Poller:
             weight_class=target.weight_class,
         )
         result = await self._call_with_retries(payload)
-        await self._log_alert(session, sub, target, estimate, result, now, "update")
+        await self._log_alert(session, sub_id, device_id, bout_id, target, estimate, result, now, "update")
 
         if result.success:
             # E6: marcar idempotencia tras éxito (no antes de notificar).
@@ -280,11 +280,7 @@ class Poller:
         msg_type: str,
         now: datetime,
     ) -> bool:
-        """Envía un push `started`/`cancelled` (E3) — una sola vez por (sub, bout)."""
-        # Capturar antes de cualquier rollback posterior. `device` ya tiene
-        # fcm_token no-None garantizado por `_process_subscription` antes de
-        # llamarnos (solo se invoca `_send_status_push` cuando el target está
-        # in/post, que llega tras el guard del device).
+        """Envia un push `started`/`cancelled` (E3)."""
         sub_id = sub.id
         bout_id = sub.bout_id
         event_id = sub.event_id
@@ -292,7 +288,7 @@ class Poller:
         device_token = device.fcm_token or ""
 
         if await self._state.was_fired(sub_id, bout_id, msg_type):
-            logger.debug("Suscripción %s: ya se envió '%s', skip", sub_id, msg_type)
+            logger.debug("Suscripcion %s: ya se envio '%s', skip", sub_id, msg_type)
             return False
 
         payload = AlertPayload(
@@ -309,12 +305,13 @@ class Poller:
         fake_estimate = EstimatedStart(
             bout_id=target.id, start_at=now, confidence="high", reason=msg_type
         )
-        await self._log_alert(session, sub, target, fake_estimate, result, now, msg_type)
+        await self._log_alert(session, sub_id, device_id, bout_id, target, fake_estimate, result, now, msg_type)
 
         if result.success:
             await self._state.try_mark_fired(sub_id, bout_id, msg_type)
             logger.info(
-                "Push '%s' enviado a device=%s para suscripción %s", msg_type, device_id[:8], sub_id
+                "Push '%s' enviado a device=%s para suscripcion %s",
+                msg_type, device_id[:8], sub_id,
             )
             if msg_type == "cancelled":
                 sub.status = "fired"
@@ -403,7 +400,9 @@ class Poller:
     async def _log_alert(
         self,
         session: AsyncSession,
-        sub: BoutSubscription,
+        sub_id: str,
+        device_id: str,
+        bout_id: str,
         target: Bout,
         estimate: EstimatedStart,
         result: PushResult,
@@ -414,7 +413,7 @@ class Poller:
         payload = json.dumps(
             {
                 "message_type": msg_type,
-                "bout_id": sub.bout_id,
+                "bout_id": bout_id,
                 "estimate_start": estimate.start_at.isoformat(),
                 "confidence": estimate.confidence,
                 "reason": estimate.reason,
@@ -424,9 +423,9 @@ class Poller:
         )
         log = AlertLog(
             id=str(uuid.uuid4()),
-            subscription_id=sub.id,
-            device_id=sub.device_id,
-            bout_id=sub.bout_id,
+            subscription_id=sub_id,
+            device_id=device_id,
+            bout_id=bout_id,
             fired_at=now,
             fired_at_epoch_hour=int(now.timestamp()) // 3600,
             payload=payload,

@@ -372,38 +372,40 @@ Sin Android Studio aún → el continuador instala Android Studio + emulador API
 
 Plan detallado en `memoria/plan-tenis.md`. Decisiones D46-D49.
 
-### Fase 8a — ESPN Tennis Provider
+### Fase 8a — ESPN Tennis Provider ✅
 
-- [ ] `src/app/providers/espn_tennis.py`: `EspnTennisProvider(Provider)` — reutiliza circuit breaker + tenacity
-- [ ] DTOs tenis en `providers/models.py`: `TennisCourt`, `TennisRound`, `Competitor.name`, `Bout.court`/`round`/`match_number` optional
-- [ ] `providers/__init__.py`: exportar `EspnTennisProvider`
+- [x] `src/app/providers/espn_tennis.py`: `EspnTennisProvider(Provider)` — reutiliza circuit breaker + tenacity
+- [x] DTOs tenis en `providers/models.py`: `TennisCourt`, `TennisRound`, `Competitor.name`, `Bout.court`/`round`/`match_number` optional
+- [x] `providers/__init__.py`: exportar `EspnTennisProvider`
 - [ ] `tests/test_espn_tennis.py` con respx + fixtures grabadas
 
-### Fase 8b — Generalización del dominio (backward-compatible)
+### Fase 8b — Generalización del dominio ✅
 
-- [ ] `domain/entities.py`: `Bout.court`, `Bout.sport`, `Card.sport`, `Card.previous_bout()` por court+date
-- [ ] `BoutStatus.sport`, `estimated_duration_seconds`/`elapsed_seconds` sport-aware
+- [x] `domain/entities.py`: `Bout.court`, `Bout.sport`, `Card.sport`, `Card.previous_bout()` por court+date
+- [x] `BoutStatus.sport`, `estimated_duration_seconds`/`elapsed_seconds` sport-aware
 
-### Fase 8c — DB + API multi-sport
+### Fase 8c — DB + API multi-sport ✅
 
-- [ ] `db/models/subscriptions.py`: columna `sport: str = "mma"`
-- [ ] Migración Alembic autogenerada
-- [ ] `config.py`: `espn_tennis_league`, `buffer_intermatch_tennis_seconds`
-- [ ] `api/routes/events.py`: provider registry, `?sport=` query param (default "mma")
-- [ ] `api/schemas.py`: `BoutOut` (court, sport, round_description), `BoutSubscriptionCreate`/`Out` (sport)
-- [ ] `api/routes/subscriptions.py`: persistir `sport`
+- [x] `db/models/subscriptions.py`: columna `sport: str = "mma"`
+- [x] Migración Alembic autogenerada (`8df6f9297a34`)
+- [x] `config.py`: `espn_tennis_league`, `buffer_intermatch_tennis_seconds`
+- [x] `api/routes/events.py`: provider registry `dict[tuple, Provider]`, `?sport=` + `?league=` query params
+- [x] `api/schemas.py`: `BoutOut` (court, sport, round_description), `BoutSubscriptionCreate`/`Out` (sport)
+- [x] `api/routes/subscriptions.py`: persistir `sport`
 
-### Fase 8d — Poller + Scheduler multi-sport
+### Fase 8d — Poller + Scheduler multi-sport ✅
 
-- [ ] `engine/poller.py`: providers dict, agrupar por `(sport, event_id)`, mapeo sport-aware
-- [ ] `scheduler.py`: construir dict de providers
-- [ ] `main.py`: close de todos los providers
+- [x] `engine/poller.py`: providers dict, agrupar por `(sport, event_id)`, mapeo sport-aware
+- [x] `scheduler.py`: construir dict de providers, fakeredis en dev (D50)
+- [x] `main.py`: close de todos los providers
 
-### Fase 8e — Tests + smoke
+### Fase 8e — Tests + smoke 🔶
 
-- [ ] Tests actualizados (test_poller, test_api, test_events_route) + `test_espn_tennis`
-- [ ] `ruff` + `black` + `mypy` limpios
-- [ ] `scripts/probe_tennis.py`
+- [x] Tests existentes: 80/80 verdes
+- [x] `ruff` + `black` + `mypy` limpios
+- [x] `scripts/probe_tennis.py`
+- [x] **Verificación en vivo**: pipeline ATP verificado (Bublik vs Etcheverry, Generali Open)
+- [ ] `tests/test_espn_tennis.py` con fixtures grabadas
 
 ### Fase 8f — App Android
 

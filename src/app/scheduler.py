@@ -49,7 +49,13 @@ class PollerScheduler:
     def _build(self) -> Poller:
         self._providers["mma"] = EspnUfcProvider()
         self._providers["tennis"] = EspnTennisProvider(league=settings.espn_tennis_league)
-        redis_client = aioredis.from_url(settings.redis_url, decode_responses=True)
+        if settings.app_env == "development":
+            import fakeredis.aioredis as fakeredis_aio
+
+            redis_client = fakeredis_aio.FakeRedis(decode_responses=True)
+            logger.info("Usando fakeredis para desarrollo local")
+        else:
+            redis_client = aioredis.from_url(settings.redis_url, decode_responses=True)
         self._state = AlertState(client=redis_client)
         resolver = AthleteResolver(self._providers["mma"], redis_client=redis_client)
         estimator = EstimatorEngine(

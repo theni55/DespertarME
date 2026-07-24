@@ -989,3 +989,36 @@ plataforma (Vercel/CF Pages descartados: serverless no soporta el scheduler
 - **Rama `feature/tenis`** creada desde `dev` (commit `18095f3`). `git diff dev --stat` → sin diferencias (punto de partida idéntico).
 
 - **Memorias actualizadas:** `plan-tenis.md` (nuevo), `decisiones.md` (D46-D49), `fuentes-datos.md` (tabla + sección tenis), `fases.md` (Fase 8 con checkboxes), `handoff.md` (Sesión 23 como punto de entrada), `bitacora.md` (esta entrada), `AGENTS.md` (índice regenerado).
+
+---
+
+## Sesión 23 (cont.) — Implementación backend tenis + verificación en vivo (2026-07-24)
+
+- **T1-T5 completados**: provider, dominio generalizado, DB, API multi-sport (`?sport=tennis&league=atp|wta`), poller/scheduler. Código en `feature/tenis`.
+
+- **Fixes aplicados durante la sesión:**
+  1. **`league` parameter (ca99026)**: `?sport=tennis&league=atp|wta`. La key del provider registry pasó de `str` a `tuple(sport, league)` para cachear providers por separado. Sin este fix, los eventos WTA devolvían `bouts: []` porque el provider usaba `league=atp` (default).
+  2. **Skip AthleteResolver para tenis (38dd439)**: D49 — los nombres vienen inline en `competitor.name`, no hace falta resolver 126 atletas via `/athletes/{id}`. Las peticiones pasan de ~20s a ~5s.
+  3. **FakeRedis en dev (pendiente commit)**: `scheduler.py` usa `fakeredis.FakeRedis` cuando `APP_ENV=development`. Redis Windows 3.0.504 (winget) es incompatible con redis-py moderno (no soporta comando `HELLO` de Redis 6+).
+  4. **Fix `_log_alert` MissingGreenlet (pendiente commit)**: capturar `sub_id`, `device_id`, `bout_id` como primitivos en vez de pasar el ORM `BoutSubscription` a `_log_alert`. Tras un commit/rollback previo, los atributos lazy del ORM lanzaban `MissingGreenlet`.
+
+- **Verificación en vivo — ATP Generali Open (304-2026), Center Court:**
+  - Suscripción: **Alexander Bublik vs Tomas Martin Etcheverry** (178887), `sport=tennis`, `lead_minutes=15`
+  - Previo en Center Court: Hanfmann vs Halys (178886) — detectado `in` (2º set) → `post` a las 14:32
+  - Estimador: `previo terminado → observed_at + buffer 600s = 14:39 CEST`, `confidence=high`
+  - **Push `update` enviado a las 14:32** (DummyNotifier, logueado en alert_log)
+  - **Partido empezó a las 14:41** (1st Set) — el estimador acertó con 2 min de margen
+  - Push `started` falló por bug MissingGreenlet (ya arreglado)
+
+- **Infraestructura:**
+  - Redis Windows 3.0.504 instalado via `winget install Redis.Redis` y arrancado (`redis-server`). Responde `PONG` pero no soporta `HELLO` → fakeredis en dev.
+  - `truststore` instalado para bypass del proxy corporativo TLS (sitecustomize.py en venv).
+
+- **Tests:** 80/80 verdes, ruff + black + mypy limpios.
+
+- **Pendiente (próxima sesión):**
+  1. Verificar push `started` con el fix de `_log_alert` aplicado.
+  2. App Android: cuando el compañero suba sus cambios, endpoints listos.
+  3. F1: investigación de fuentes diferida (OpenF1 9.90 EUR/mes).
+
+- **Memorias actualizadas:** `handoff.md`, `bitacora.md` (esta entrada), `decisiones.md` (D50), `fases.md` (checkboxes T1-T5), `plan-tenis.md` (nota verificación vivo), `AGENTS.md` (índice).
