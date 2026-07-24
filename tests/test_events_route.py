@@ -114,7 +114,7 @@ def test_list_events_cache_only_applies_to_default_query(client: TestClient) -> 
         json=_load(f"event_{EVENT_ID}.json")
     )
 
-    events_route._providers["mma"] = EspnUfcProvider()
+    events_route._providers[("mma", "")] = EspnUfcProvider()
     fake_redis = fakeredis_aio.FakeRedis(decode_responses=True)
     events_route._redis = fake_redis
 
@@ -131,7 +131,7 @@ def test_list_events_cache_only_applies_to_default_query(client: TestClient) -> 
     )
     import asyncio
 
-    cache_key = events_route.EVENTS_LIST_CACHE_KEY.format(sport="mma")
+    cache_key = events_route.EVENTS_LIST_CACHE_KEY.format(sport="mma", league="")
     asyncio.run(fake_redis.set(cache_key, cached_list))
 
     # Query NO default → debe ignorar la caché y responder desde el provider.

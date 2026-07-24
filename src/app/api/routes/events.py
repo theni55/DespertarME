@@ -3,12 +3,12 @@
 Expone dos endpoints consumidos por las pantallas Home/Eventos/EventDetail de
 la app:
 
-- `GET /api/events?sport=mma|tennis` → lista de proximos eventos del deporte.
-- `GET /api/events/{id}?sport=mma|tennis` → tarjeta con bouts ordenados.
+- `GET /api/events?sport=mma|tennis&league=atp|wta` → lista de proximos eventos.
+- `GET /api/events/{id}?sport=mma|tennis&league=atp|wta` → tarjeta con bouts.
 
-Multi-sport (D47): el parametro `?sport=` enruta al Provider correspondiente
-(default "mma", backward-compatible). `previous_bout_id` se delega a
-`Card.previous_bout()` (court+date para tenis, matchNumber+1 para MMA).
+Multi-sport (D47): `sport` enruta al deporte, `league` a la liga/subclase
+dentro del deporte (atp/wta para tenis, ignorado para mma). `previous_bout_id`
+se delega a `Card.previous_bout()`.
 """
 
 from __future__ import annotations
@@ -40,24 +40,25 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/events", tags=["events"])
 
 EVENTS_LIST_TTL_SECONDS = 300
-EVENTS_LIST_CACHE_KEY = "events:upcoming:{sport}"
+EVENTS_LIST_CACHE_KEY = "events:upcoming:{sport}:{league}"
 
-_providers: dict[str, Provider] = {}
+_providers: dict[tuple[str, str], Provider] = {}
 _resolver: AthleteResolver | None = None
 _redis: Any = None
 
 
-def _get_provider(sport: str = "mma") -> Provider:
+def _get_provider(sport: str = "mma", league: str = "") -> Provider:
     global _providers, _resolver, _redis
-    if sport not in _providers:
+    key = (sport, league)
+    if key not in _providers:
         import redis.asyncio as aioredis
 
         from app.config import settings
 
         if sport == "mma":
-            _providers[sport] = EspnUfcProvider()
+            _providers[key] = EspnUfcProvider()
         elif sport == "tennis":
-            _providers[sport] = EspnTennisProvider(league=settings.espn_tennis_league)
+            _providers[key] = EspnTennisProvider(league=league or settings.espn_tennis_league)
         else:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -67,8 +68,8 @@ def _get_provider(sport: str = "mma") -> Provider:
         if _redis is None:
             _redis = aioredis.from_url(settings.redis_url, decode_responses=True)
         if _resolver is None:
-            _resolver = AthleteResolver(_providers[sport], redis_client=_redis)
-    return _providers[sport]
+            _resolver = AthleteResolver(_providers[key], redis_client=_redis)
+    return _providers[key]
 
 
 async def close_events_resources() -> None:
@@ -131,15 +132,17 @@ async def list_events(
     session: AsyncSession = Depends(get_session),
     include_past_hours: int = 0,
     sport: str = "mma",
+    league: str = "",
 ) -> list[EventSummaryOut]:
-    """Lista próximos eventos del deporte indicado.
+    """Lista proximos eventos del deporte/liga indicados.
 
-    `sport`: "mma" (default) o "tennis". Backward-compatible.
+    `sport`: "mma" (default) o "tennis".
+    `league`: "atp"|"wta" para tenis, ignorado para mma.
     """
-    provider = _get_provider(sport)
+    provider = _get_provider(sport, league)
     cutoff = datetime.now(UTC) - timedelta(hours=include_past_hours)
     cacheable = include_past_hours == 0
-    cache_key = EVENTS_LIST_CACHE_KEY.format(sport=sport)
+    cache_key = EVENTS_LIST_CACHE_KEY.format(sport=sport, league=league)
 
     raw_cache: str | None = None
     if cacheable and _redis is not None:
@@ -189,13 +192,14 @@ async def get_event_detail(
     event_id: str,
     session: AsyncSession = Depends(get_session),
     sport: str = "mma",
+    league: str = "",
 ) -> EventCardOut:
     """Tarjeta de un evento con bouts ordenados y `previous_bout_id` calculado.
 
     Multi-sport (D47): `previous_bout_id` se deriva via `Card.previous_bout()`
     segun el deporte (court+date para tenis, matchNumber+1 para MMA).
     """
-    provider = _get_provider(sport)
+    provider = _get_provider(sport, league)
     resolver = _resolver or AthleteResolver(provider)
     try:
         event = await provider.get_event_card(event_id)
