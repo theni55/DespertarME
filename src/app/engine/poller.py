@@ -256,7 +256,9 @@ class Poller:
             weight_class=target.weight_class,
         )
         result = await self._call_with_retries(payload)
-        await self._log_alert(session, sub_id, device_id, bout_id, target, estimate, result, now, "update")
+        await self._log_alert(
+            session, sub_id, device_id, bout_id, target, estimate, result, now, "update"
+        )
 
         if result.success:
             # E6: marcar idempotencia tras éxito (no antes de notificar).
@@ -305,13 +307,17 @@ class Poller:
         fake_estimate = EstimatedStart(
             bout_id=target.id, start_at=now, confidence="high", reason=msg_type
         )
-        await self._log_alert(session, sub_id, device_id, bout_id, target, fake_estimate, result, now, msg_type)
+        await self._log_alert(
+            session, sub_id, device_id, bout_id, target, fake_estimate, result, now, msg_type
+        )
 
         if result.success:
             await self._state.try_mark_fired(sub_id, bout_id, msg_type)
             logger.info(
                 "Push '%s' enviado a device=%s para suscripcion %s",
-                msg_type, device_id[:8], sub_id,
+                msg_type,
+                device_id[:8],
+                sub_id,
             )
             if msg_type == "cancelled":
                 sub.status = "fired"
