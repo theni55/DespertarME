@@ -366,5 +366,49 @@ Sin Android Studio aún → el continuador instala Android Studio + emulador API
 - [ ] Requisito mínimo iOS 26 (adopción mayoritaria esperada para cuando se ejecute esta fase). Sin fallback a Critical Alert — el entitlement es discrecional de Apple y lento.
 - [ ] Mismo contrato API + Retrofit-equivalente en Swift (async/await + URLSession), mismo `device_id` UUID v4ersistente en Keychain.
 
+---
 
+## Fase 8 — Tenis (ATP/WTA) 🔶 en curso (Sesión 23, rama `feature/tenis`)
 
+Plan detallado en `memoria/plan-tenis.md`. Decisiones D46-D49.
+
+### Fase 8a — ESPN Tennis Provider
+
+- [ ] `src/app/providers/espn_tennis.py`: `EspnTennisProvider(Provider)` — reutiliza circuit breaker + tenacity
+- [ ] DTOs tenis en `providers/models.py`: `TennisCourt`, `TennisRound`, `Competitor.name`, `Bout.court`/`round`/`match_number` optional
+- [ ] `providers/__init__.py`: exportar `EspnTennisProvider`
+- [ ] `tests/test_espn_tennis.py` con respx + fixtures grabadas
+
+### Fase 8b — Generalización del dominio (backward-compatible)
+
+- [ ] `domain/entities.py`: `Bout.court`, `Bout.sport`, `Card.sport`, `Card.previous_bout()` por court+date
+- [ ] `BoutStatus.sport`, `estimated_duration_seconds`/`elapsed_seconds` sport-aware
+
+### Fase 8c — DB + API multi-sport
+
+- [ ] `db/models/subscriptions.py`: columna `sport: str = "mma"`
+- [ ] Migración Alembic autogenerada
+- [ ] `config.py`: `espn_tennis_league`, `buffer_intermatch_tennis_seconds`
+- [ ] `api/routes/events.py`: provider registry, `?sport=` query param (default "mma")
+- [ ] `api/schemas.py`: `BoutOut` (court, sport, round_description), `BoutSubscriptionCreate`/`Out` (sport)
+- [ ] `api/routes/subscriptions.py`: persistir `sport`
+
+### Fase 8d — Poller + Scheduler multi-sport
+
+- [ ] `engine/poller.py`: providers dict, agrupar por `(sport, event_id)`, mapeo sport-aware
+- [ ] `scheduler.py`: construir dict de providers
+- [ ] `main.py`: close de todos los providers
+
+### Fase 8e — Tests + smoke
+
+- [ ] Tests actualizados (test_poller, test_api, test_events_route) + `test_espn_tennis`
+- [ ] `ruff` + `black` + `mypy` limpios
+- [ ] `scripts/probe_tennis.py`
+
+### Fase 8f — App Android
+
+- [ ] `DespertarApi.kt`: `@Query("sport")` en listEvents/getEvent
+- [ ] DTOs Kotlin: `BoutSubscriptionCreate.sport`, `BoutOut.court`/`roundDescription`
+- [ ] Home: selector de deporte (tabs MMA / Tenis)
+- [ ] EventDetail tenis: agrupado por court, badge round, nombres inline
+- [ ] SubscriptionsScreen: badge de deporte

@@ -1,8 +1,11 @@
-"""Router de suscripciones de combate (Fase 7a, device model).
+"""Router de suscripciones de combate (Fase 7a, device model + Fase 8 multi-sport).
 
-CRUD de bout_subscriptions para el device autenticado vía header `X-Device-Id`.
+CRUD de bout_subscriptions para el device autenticado via header `X-Device-Id`.
 El cliente NO manda `previous_bout_id` (E4): el backend lo deriva en runtime
 desde la card fresca en cada poll.
+
+Multi-sport (D47): `sport` se persiste en la suscripcion para que el Poller
+use el Provider correcto.
 
 UNIQUE `(device_id, bout_id)` (E6) impide re-suscribirse al mismo combate:
 el segundo intento devuelve 409.
@@ -53,6 +56,7 @@ async def create_subscription(
         bout_id=body.bout_id,
         target_match_number=body.target_match_number,
         lead_minutes=body.lead_minutes,
+        sport=body.sport,
         status="active",
     )
     session.add(sub)
@@ -62,7 +66,7 @@ async def create_subscription(
         await session.rollback()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Ya existe una suscripción activa para este combate en este device.",
+            detail="Ya existe una suscripcion activa para este combate en este device.",
         ) from None
     await session.refresh(sub)
     return sub

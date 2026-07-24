@@ -29,16 +29,18 @@ class Settings(BaseSettings):
     # ESPN Core API (D9, D13)
     espn_base_url: str = "https://sports.core.api.espn.com/v2"
     espn_league: str = "ufc"
+    espn_tennis_league: str = "atp"  # D46
     espn_timeout_seconds: float = 10.0
     espn_max_retries: int = 5
     espn_circuit_breaker_fails: int = 5
     espn_circuit_breaker_open_seconds: int = 60
-    athlete_cache_ttl_seconds: int = 604800  # 7 días (los atletas cambian rara vez)
+    athlete_cache_ttl_seconds: int = 604800  # 7 dias
 
-    # Polling & alertas (D15-D23)
+    # Polling & alertas (D15-D23, D48)
     scheduler_enabled: bool = True
     lead_minutes_default: int = 15
-    buffer_intercombate_seconds: int = 300
+    buffer_intercombate_seconds: int = 600  # 10 min MMA (revisado D45)
+    buffer_intermatch_tennis_seconds: int = 900  # 15 min tenis (D48)
     alert_idempotency_ttl_seconds: int = 7200
     poll_default_seconds: int = 60
     poll_prev_in_advanced_seconds: int = 10

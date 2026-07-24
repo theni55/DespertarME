@@ -32,13 +32,11 @@ def _load(name: str) -> dict[str, Any]:
 @pytest.fixture(autouse=True)
 def _reset_events_singletons():
     """Resetea los singletons module-level del router events entre tests."""
-    events_route._provider = None
+    events_route._providers = {}
     events_route._resolver = None
     events_route._redis = None
-    # Forzar también el path de Redis a fakeredis no aplica en estos tests
-    # (no tocamos la caché real, la mockeamos vía fakeredis patch).
     yield
-    events_route._provider = None
+    events_route._providers = {}
     events_route._resolver = None
     events_route._redis = None
 
@@ -116,11 +114,11 @@ def test_list_events_cache_only_applies_to_default_query(client: TestClient) -> 
         json=_load(f"event_{EVENT_ID}.json")
     )
 
-    events_route._provider = EspnUfcProvider()
+    events_route._providers["mma"] = EspnUfcProvider()
     fake_redis = fakeredis_aio.FakeRedis(decode_responses=True)
     events_route._redis = fake_redis
 
-    # Pre-poblar la caché con una lista distinta a la del provider.
+    # Pre-poblar la cache con una lista distinta a la del provider.
     cached_list = json.dumps(
         [
             {
@@ -133,7 +131,8 @@ def test_list_events_cache_only_applies_to_default_query(client: TestClient) -> 
     )
     import asyncio
 
-    asyncio.run(fake_redis.set(events_route.EVENTS_LIST_CACHE_KEY, cached_list))
+    cache_key = events_route.EVENTS_LIST_CACHE_KEY.format(sport="mma")
+    asyncio.run(fake_redis.set(cache_key, cached_list))
 
     # Query NO default → debe ignorar la caché y responder desde el provider.
     resp = client.get("/api/events", params={"include_past_hours": 24 * 365})

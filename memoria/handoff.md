@@ -6,6 +6,30 @@
 
 ## Última sesión
 
+**Fecha:** 2026-07-24 · **Sesión 23 — Plan SDD para Tenis. Rama `feature/tenis` creada desde `dev`. Implementación en curso.**
+
+**Contexto:** el owner quiere expandir el MVP a tenis (ATP/WTA), replicando el modelo de "tarjeta escalonada" pero por pista (court): avisar X min antes de que empiece un partido, siguiendo el partido anterior en la misma pista. Investigación de fuentes completa: ESPN Core API soporta tenis con la misma estructura que UFC (state pre/in/post, sin auth). La fuente es viable.
+
+**Hecho en esta sesión:**
+1. **Investigación de fuentes**: ESPN Core API verificada en vivo para ATP (Generali Open, 54 partidos, 3 pistas) y WTA (63 partidos). Endpoint de status por competición devuelve `{type: {state}, period}` — mismo formato que MMA pero sin `clock`.
+2. **Plan SDD documentado** en `memoria/plan-tenis.md` con 7 fases (T1 Provider → T7 App Android) + decisiones D46-D49.
+3. **Rama `feature/tenis`** creada desde `dev` (commit `18095f3`, Sesión 21). `dev` queda intacto.
+4. **Memorias actualizadas**: `plan-tenis.md` (nuevo), `decisiones.md` (D46-D49), `fuentes-datos.md` (tabla + sección tenis), `fases.md` (Fase 8), `handoff.md`, `bitacora.md`.
+
+**Pendiente de esta sesión:**
+1. **T1 — ESPN Tennis Provider**: crear `espn_tennis.py` + DTOs tenis en `models.py` + tests.
+2. **T2 — Generalización del dominio**: `court`, `sport` en `Bout`/`Card`/`BoutStatus`, `previous_bout()` por court+date.
+3. **T3 — DB + migración**: columna `sport` en `BoutSubscription`.
+4. **T4 — API multi-sport**: `?sport=` parameter, provider registry.
+5. **T5 — Poller multi-sport**: providers dict, mapeo sport-aware.
+6. **T6 — Tests**: todos verdes (MMA + tenis).
+7. **T7 — App Android**: selector de deporte, pantallas tenis.
+8. **T8 — Smoke**: `probe_tennis.py`, lint, typecheck, pytest.
+
+---
+
+## Última sesión
+
 **Fecha:** 2026-07-21 · **Sesión 22 — Plan de dogfooding personal (Android compañero + iOS owner) documentado en `memoria/plan-mvp-ios.md`. Sin cambios de código.**
 
 **Contexto:** el owner quiere seguir probando la app entre él y su compañero (Android) y él mismo en iOS antes de plantear publicación. Se hizo un repaso de la deuda técnica pendiente (fases.md, decisiones.md, plan-mvp-android-fable5.md) para separar lo bloqueante de dogfooding de lo que solo aplica a publicación.

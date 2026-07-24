@@ -68,24 +68,37 @@ MIN_DELTA_SECONDS = 60
 
 
 class Poller:
-    """Procesa suscripciones activas y mantiene la estimación fresca en cada device."""
+    """Procesa suscripciones activas y mantiene la estimacion fresca en cada device.
+
+    Multi-sport (D47): recibe un dict de providers (`sport` -> `Provider`) y
+    agrupa las suscripciones por `(sport, event_id)` para usar el provider
+    correcto con cada liga/deporte.
+    """
 
     def __init__(
         self,
         *,
-        provider: Provider,
+        provider: Provider | None = None,
+        providers: dict[str, Provider] | None = None,
         notifier: PushNotifier,
         state: AlertState,
         estimator: EstimatorEngine | None = None,
         retry_delays: tuple[float, ...] = RETRY_DELAYS,
         athlete_resolver: AthleteResolver | None = None,
     ) -> None:
-        self._provider = provider
+        # Backward-compat: single provider (MMA) sigue funcionando.
+        if providers is not None:
+            self._providers = providers
+        elif provider is not None:
+            self._providers = {"mma": provider}
+        else:
+            raise ValueError("provider o providers es obligatorio")
         self._notifier = notifier
         self._state = state
         self._estimator = estimator or EstimatorEngine()
         self._retry_delays = retry_delays
-        self._resolver = athlete_resolver or AthleteResolver(provider)
+        # Resolver se puede inicializar lazy con el primer provider.
+        self._resolver = athlete_resolver
 
     async def poll_once(self, session: AsyncSession, now: datetime | None = None) -> int:
         """Procesa todas las suscripciones activas. Devuelve nº de pushes enviados."""
@@ -97,25 +110,33 @@ class Poller:
         )
         subs = result.scalars().all()
 
-        # E8: agrupar por event_id para reutilizar la card en cada ciclo.
-        subs_by_event: dict[str, list[BoutSubscription]] = defaultdict(list)
+        # D47: agrupar por (sport, event_id) para usar el provider correcto.
+        subs_by_key: dict[tuple[str, str], list[BoutSubscription]] = defaultdict(list)
         for sub in subs:
-            subs_by_event[sub.event_id].append(sub)
+            subs_by_key[(sub.sport, sub.event_id)].append(sub)
 
-        # Caché de Card por event_id para este ciclo de poll.
         card_cache: dict[str, Card] = {}
 
-        for event_id, event_subs in subs_by_event.items():
-            try:
-                card = await self._load_card(event_id)
-                card_cache[event_id] = card
-            except Exception:
-                logger.exception(
-                    "Error cargando card del evento %s; saltando %d subs", event_id, len(event_subs)
+        for (sport, event_id), event_subs in subs_by_key.items():
+            provider = self._providers.get(sport)
+            if provider is None:
+                logger.warning(
+                    "Provider no encontrado para sport=%s, saltando %d subs", sport, len(event_subs)
                 )
                 continue
 
-            # Precarga los devices una sola vez por sub.
+            try:
+                card = await self._load_card(provider, event_id, sport)
+                card_cache[event_id] = card
+            except Exception:
+                logger.exception(
+                    "Error cargando card del evento %s (sport=%s); saltando %d subs",
+                    event_id,
+                    sport,
+                    len(event_subs),
+                )
+                continue
+
             device_ids = {s.device_id for s in event_subs}
             devices: dict[str, Device] = {}
             if device_ids:
@@ -126,11 +147,16 @@ class Poller:
             for sub in event_subs:
                 try:
                     if await self._process_subscription(
-                        session, sub, devices.get(sub.device_id), card_cache[event_id], now
+                        session,
+                        sub,
+                        devices.get(sub.device_id),
+                        card_cache[event_id],
+                        now,
+                        provider,
                     ):
                         pushed += 1
                 except Exception:
-                    logger.exception("Error procesando suscripción %s", sub.id)
+                    logger.exception("Error procesando suscripcion %s", sub.id)
 
         return pushed
 
@@ -141,13 +167,13 @@ class Poller:
         device: Device | None,
         card: Card,
         now: datetime,
+        provider: Provider,
     ) -> bool:
-        """Procesa una suscripción. Devuelve True si se envió un push."""
-        # Capturar atributos antes de cualquier commit/rollback que expiraría
-        # la instancia sub/device y dispararía lazy-load async (MissingGreenlet).
+        """Procesa una suscripcion. Devuelve True si se envio un push."""
         sub_id = sub.id
         bout_id = sub.bout_id
         event_id = sub.event_id
+        sport = sub.sport
 
         if device is None or not device.is_active:
             logger.warning("Suscripción %s: device inexistente o inactivo, skip", sub_id)
@@ -164,7 +190,7 @@ class Poller:
             return False
 
         # E3 — Guard del estado del combate objetivo.
-        target_status_raw = await self._provider.get_competition_status(event_id, bout_id)
+        target_status_raw = await provider.get_competition_status(event_id, bout_id)
         target_state = target_status_raw.type.state
         if target_state == "in":
             return await self._send_status_push(session, sub, device, card, target, "started", now)
@@ -178,7 +204,7 @@ class Poller:
         prev_bout_status: BoutStatus | None = None
         observed_at: datetime | None = None
         if prev is not None:
-            prev_raw = await self._provider.get_competition_status(event_id, prev.id)
+            prev_raw = await provider.get_competition_status(event_id, prev.id)
             prev_state = prev_raw.type.state
             prev_bout_status = BoutStatus(
                 bout_id=prev.id,
@@ -186,6 +212,7 @@ class Poller:
                 clock=prev_raw.clock,
                 period=prev_raw.period,
                 completed=prev_raw.type.completed,
+                sport=sport,
             )
             if prev_state == "post":
                 # E2: anclar la transición in→post al primer momento observado.
@@ -304,13 +331,18 @@ class Poller:
             return red or blue
         return None
 
-    async def _load_card(self, event_id: str) -> Card:
-        """Carga la tarjeta del evento vía Provider y mapea a dominio.
+    async def _load_card(self, provider: Provider, event_id: str, sport: str = "mma") -> Card:
+        """Carga la tarjeta del evento via Provider y mapea a dominio.
 
-        Resuelve los nombres de los atletas (con caché) para que el push pueda
-        decir "X vs Y" en vez de ids.
+        Multi-sport (D47): resuelve nombres de atletas con AthleteResolver para
+        MMA y con `competitor.name` inline para tenis (D49). Mapea `court` y
+        `round` de tennis al dominio.
         """
-        event = await self._provider.get_event_card(event_id)
+        # Lazy-init del resolver con el primer provider (backward-compat)
+        if self._resolver is None:
+            self._resolver = AthleteResolver(provider)
+
+        event = await provider.get_event_card(event_id)
 
         athlete_ids = [
             corner.athlete.athlete_id
@@ -321,7 +353,11 @@ class Poller:
         resolved = await self._resolver.resolve_many(athlete_ids)
 
         def _to_athlete(corner: ProviderCompetitor | None) -> Athlete | None:
-            if corner is None or corner.athlete is None:
+            if corner is None:
+                return None
+            if corner.name:
+                return Athlete(id=corner.id, name=corner.name)
+            if corner.athlete is None:
                 return None
             aid = corner.athlete.athlete_id
             if not aid:
@@ -345,9 +381,12 @@ class Poller:
                     round_seconds=comp.format.regulation.clock if comp.format else 300.0,
                     red=_to_athlete(comp.red_corner),
                     blue=_to_athlete(comp.blue_corner),
+                    sport=sport,
+                    court=comp.court.description if comp.court else None,
+                    round_description=comp.round.description if comp.round else None,
                 )
             )
-        return Card(event_id=event.id, event_name=event.name, bouts=bouts)
+        return Card(event_id=event.id, event_name=event.name, bouts=bouts, sport=sport)
 
     async def _call_with_retries(self, payload: AlertPayload) -> PushResult:
         """Envía el push con reintentos cortos (E7: 1 retry de 2 s)."""

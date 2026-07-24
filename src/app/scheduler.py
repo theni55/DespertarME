@@ -26,32 +26,37 @@ from app.engine.poller import Poller
 from app.engine.state import AlertState
 from app.notifiers import get_notifier
 from app.providers.athletes import AthleteResolver
+from app.providers.base import Provider
+from app.providers.espn_tennis import EspnTennisProvider
 from app.providers.espn_ufc import EspnUfcProvider
 
 logger = logging.getLogger(__name__)
 
 
 class PollerScheduler:
-    """Ciclo de vida del scheduler + singletons del pipeline de alertas."""
+    """Ciclo de vida del scheduler + singletons del pipeline de alertas.
+
+    Multi-sport (D47): mantiene un dict de providers (mma, tennis) y un unico
+    Poller que los recibe todos.
+    """
 
     def __init__(self) -> None:
         self._scheduler: AsyncIOScheduler | None = None
-        self._provider: EspnUfcProvider | None = None
+        self._providers: dict[str, Provider] = {}
         self._state: AlertState | None = None
         self._poller: Poller | None = None
 
     def _build(self) -> Poller:
-        self._provider = EspnUfcProvider()
+        self._providers["mma"] = EspnUfcProvider()
+        self._providers["tennis"] = EspnTennisProvider(league=settings.espn_tennis_league)
         redis_client = aioredis.from_url(settings.redis_url, decode_responses=True)
         self._state = AlertState(client=redis_client)
-        resolver = AthleteResolver(self._provider, redis_client=redis_client)
-        # D45: pasar buffer_intercombate_seconds al EstimatorEngine para que
-        # respete la configuración del `.env` (antes se hardcodeaba en 300s).
+        resolver = AthleteResolver(self._providers["mma"], redis_client=redis_client)
         estimator = EstimatorEngine(
             EstimatorConfig(buffer_intercombate_seconds=settings.buffer_intercombate_seconds)
         )
         return Poller(
-            provider=self._provider,
+            providers=self._providers,
             notifier=get_notifier(),
             state=self._state,
             estimator=estimator,
@@ -97,9 +102,12 @@ class PollerScheduler:
         if self._state is not None:
             await self._state.aclose()
             self._state = None
-        if self._provider is not None:
-            await self._provider.aclose()
-            self._provider = None
+        for provider in self._providers.values():
+            try:
+                await provider.aclose()
+            except Exception:
+                logger.exception("Error cerrando provider")
+        self._providers = {}
         self._poller = None
         logger.info("Scheduler parado")
 

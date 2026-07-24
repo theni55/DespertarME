@@ -55,13 +55,16 @@ class DeviceOut(BaseModel):
 class BoutSubscriptionCreate(BaseModel):
     """Crear alerta. El cliente NO manda `previous_bout_id`: el backend lo
     deriva en runtime desde la card fresca en cada poll (E4), porque UFC
-    reordena la card el día del evento y congelar el valor producía
-    estimaciones incoherentes silenciosas."""
+    reordena la card el dia del evento.
+
+    Multi-sport (D47): `sport` indica el deporte ("mma"|"tennis") — default "mma"
+    para backward-compatibilidad."""
 
     event_id: str
     bout_id: str
-    target_match_number: int
+    target_match_number: int = 0
     lead_minutes: int = 15
+    sport: str = "mma"
 
     @field_validator("lead_minutes")
     @classmethod
@@ -79,6 +82,7 @@ class BoutSubscriptionOut(BaseModel):
     target_match_number: int
     lead_minutes: int
     status: str
+    sport: str = "mma"
 
     model_config = {"from_attributes": True}
 
@@ -105,7 +109,10 @@ class BoutAthleteOut(BaseModel):
 
 
 class BoutOut(BaseModel):
-    """Combate en la tarjeta de un evento."""
+    """Combate en la tarjeta de un evento.
+
+    Multi-sport (D47): `court`, `sport` y `round_description` son campos
+    especificos de tenis (None para MMA)."""
 
     id: str
     match_number: int
@@ -116,6 +123,9 @@ class BoutOut(BaseModel):
     red: BoutAthleteOut | None = None
     blue: BoutAthleteOut | None = None
     previous_bout_id: str | None = None  # E4: calculado server-side
+    court: str | None = None
+    sport: str = "mma"
+    round_description: str | None = None
 
 
 class EventSummaryOut(BaseModel):

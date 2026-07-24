@@ -953,3 +953,39 @@ plataforma (Vercel/CF Pages descartados: serverless no soporta el scheduler
   5. Explícitamente fuera de alcance: Play Store/App Store, hardening de seguridad de `X-Device-Id`, fix del UNIQUE de `alert_log`, validación estricta de UUID en `DeviceCreate`.
 
 - **Memorias actualizadas:** `handoff.md` (Sesión 22 como punto de entrada), `bitacora.md` (esta entrada), `AGENTS.md` (índice regenerado), `memoria/plan-mvp-ios.md` (nuevo).
+
+---
+
+## Sesión 23 — Plan SDD Tenis + rama feature/tenis (2026-07-24)
+
+- **Contexto:** el owner quiere expandir el MVP a tenis (ATP/WTA) y F1, replicando el modelo de tarjeta escalonada. Se prioriza tenis por ser más cercano al modelo existente (partido anterior en la misma pista en vez de combate anterior en la tarjeta). F1 queda para después (requiere fuente de datos de pago, OpenF1 9.90 EUR/mes).
+
+- **Investigación de fuentes Tenis** (`webfetch` a ESPN Core API):
+  - **ATP** (`/v2/sports/tennis/leagues/atp/`): activo. Evento Generali Open Kitzbuhel (304-2026) con 54 partidos, 3 pistas (Center Court, Grandstand, Küchenmeister). Status de competición: `{type: {state: "post", completed: true}, period: 2}` — mismo patrón que MMA pero sin `clock`.
+  - **WTA** (`/v2/sports/tennis/leagues/wta/`): activo. 3 torneos hoy (401-2026, 525-2026, 1002-2026). 63 partidos, pistas "Court 1", "Court 2", "Livesport Arena".
+  - **Estructura confirmada**: `court.description` por partido, `competitors[].name` inline (a diferencia de MMA que solo da `$ref` y requiere `AthleteResolver`), `round` (QF/SF/Final), `type.text` ("Men's Singles", "Men's Doubles"), `format.regulation.periods` (3 para best-of-3, 5 para best-of-5). **Sin `matchNumber`** — el orden es cronológico por `date` dentro de cada pista.
+
+- **Investigación F1** (diferida):
+  - ESPN Core API tiene F1 (`/v2/sports/racing/leagues/f1/`): Hungarian GP 600057440 con sesiones (FP1/FP2/FP3/Qualy/Race). Status endpoint sí funciona, pero **no tiene datos de vueltas** (solo state pre/in/post).
+  - **OpenF1** (`api.openf1.org`): API gratuita open-source. Endpoint `/v1/laps` con vueltas en vivo. **Datos en vivo requieren plan sponsor 9.90 EUR/mes** (histórico gratis). Es la única opción viable para "quedan X vueltas".
+  - **Jolpica F1** (`api.jolpi.ca`): Ergast-compatible. Endpoint `/laps` solo es histórico (post-carrera), no sirve para datos en vivo.
+  - **Conclusión**: F1 viable solo con OpenF1 de pago → diferido. Tenis primero.
+
+- **Plan SDD documentado** en `memoria/plan-tenis.md` (nuevo fichero):
+  1. **T1 — ESPN Tennis Provider**: nuevo `EspnTennisProvider` en `providers/espn_tennis.py`, reutiliza circuit breaker + tenacity de `EspnUfcProvider`. DTOs tenis en `models.py` (`TennisCourt`, `TennisRound`, `Competitor.name`, `Bout.match_number` optional, `Bout.court`/`round`).
+  2. **T2 — Generalización del dominio**: `Bout.court`/`Bout.sport`, `Card.sport`, `Card.previous_bout()` por court+date cuando `court is not None` (MMA sigue con matchNumber+1), `BoutStatus.sport`, `estimated_duration_seconds`/`elapsed_seconds` sport-aware.
+  3. **T3 — DB + migración**: columna `sport VARCHAR(20) DEFAULT 'mma'` en `BoutSubscription` + índice.
+  4. **T4 — API multi-sport**: provider registry (`dict[str, Provider]`), `?sport=mma|tennis` query param (default "mma", backward compatible), refactor `previous_bout_id` para delegar a `Card.previous_bout()`.
+  5. **T5 — Poller + Scheduler multi-sport**: providers dict, agrupar subs por `(sport, event_id)`, mapeo sport-aware en `_load_card`.
+  6. **T6 — App Android**: `@Query("sport")` en Retrofit, DTOs con `sport`/`court`/`roundDescription`, Home con selector de deporte, EventDetail tennis agrupado por court, Subscriptions con badge de deporte.
+  7. **T7 — Tests + smoke**: `test_espn_tennis.py` con respx, tests actualizados de poller/API/events, `probe_tennis.py`, lint + typecheck.
+
+- **Decisiones registradas** en `decisiones.md`:
+  - D46: ESPN Core API como fuente de Tenis (ATP+WTA), mismo patrón que UFC.
+  - D47: Modelo multi-sport: `sport` field en `BoutSubscription` + `Card`, `previous_bout()` generalizado por pista.
+  - D48: Buffer inter-partidos tenis: 15 min (`BUFFER_INTERMATCH_TENNIS_SECONDS=900`).
+  - D49: Nombres inline de `Competitor.name` en tenis (sin `AthleteResolver`).
+
+- **Rama `feature/tenis`** creada desde `dev` (commit `18095f3`). `git diff dev --stat` → sin diferencias (punto de partida idéntico).
+
+- **Memorias actualizadas:** `plan-tenis.md` (nuevo), `decisiones.md` (D46-D49), `fuentes-datos.md` (tabla + sección tenis), `fases.md` (Fase 8 con checkboxes), `handoff.md` (Sesión 23 como punto de entrada), `bitacora.md` (esta entrada), `AGENTS.md` (índice regenerado).
