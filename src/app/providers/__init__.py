@@ -1,5 +1,6 @@
 from app.providers.athletes import AthleteResolver, ResolvedAthlete
 from app.providers.base import Provider
+from app.providers.espn_nba import EspnNbaProvider
 from app.providers.espn_tennis import EspnTennisProvider
 from app.providers.espn_ufc import CircuitBreakerOpenError, EspnUfcProvider
 from app.providers.models import (
@@ -8,9 +9,12 @@ from app.providers.models import (
     CompetitionStatus,
     Event,
     EventSummary,
+    TeamDetail,
+    TeamRef,
     TennisCourt,
     TennisRound,
 )
+from app.providers.teams import ResolvedTeam, TeamResolver
 
 __all__ = [
     "AthleteDetail",
@@ -18,12 +22,17 @@ __all__ = [
     "Bout",
     "CircuitBreakerOpenError",
     "CompetitionStatus",
+    "EspnNbaProvider",
     "EspnTennisProvider",
     "EspnUfcProvider",
     "Event",
     "EventSummary",
     "Provider",
     "ResolvedAthlete",
+    "ResolvedTeam",
+    "TeamDetail",
+    "TeamRef",
     "TennisCourt",
     "TennisRound",
+    "TeamResolver",
 ]

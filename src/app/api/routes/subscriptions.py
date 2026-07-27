@@ -49,6 +49,13 @@ async def create_subscription(
     device: Device = Depends(get_current_device),
     session: AsyncSession = Depends(get_session),
 ) -> BoutSubscription:
+    # D56 NBA: validacion contextual (lead=0 solo en Q2-Q4 NBA; >=5 resto).
+    try:
+        body.validate_for_sport()
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from None
     sub = BoutSubscription(
         id=new_uuid(),
         device_id=device.id,

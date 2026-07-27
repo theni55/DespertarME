@@ -19,6 +19,7 @@ from pydantic import BaseModel, ConfigDict, Field
 BoutState = Literal["pre", "in", "post"]
 
 _ATHLETE_ID_RE = re.compile(r"/athletes/(\d+)")
+_TEAM_ID_RE = re.compile(r"/teams/(\d+)")
 
 
 class _ESPNBase(BaseModel):
@@ -34,6 +35,21 @@ class AthleteRef(_ESPNBase):
     def athlete_id(self) -> str | None:
         """Extrae el id del atleta del `$ref` (ej. `.../athletes/4686725?lang=en`)."""
         m = _ATHLETE_ID_RE.search(self.ref)
+        return m.group(1) if m else None
+
+
+class TeamRef(_ESPNBase):
+    """Referencia (URL) a un equipo NBA (D56); el nombre se resuelve bajo demanda.
+
+    NBA competitors no traen `athlete $ref` (son equipos, no atletas). El
+    `team $ref` apunta a `.../seasons/{year}/teams/{id}` desde donde se obtiene
+    `displayName` + `logos[]`."""
+
+    ref: str = Field(alias="$ref")
+
+    @property
+    def team_id(self) -> str | None:
+        m = _TEAM_ID_RE.search(self.ref)
         return m.group(1) if m else None
 
 
@@ -60,16 +76,40 @@ class AthleteDetail(_ESPNBase):
         return None
 
 
+class TeamLogo(_ESPNBase):
+    href: str
+    alt: str | None = None
+
+
+class TeamDetail(_ESPNBase):
+    """Detalle de un equipo NBA (`/sports/basketball/leagues/nba/seasons/{year}/teams/{id}`)."""
+
+    id: str
+    display_name: str = Field(default="", alias="displayName")
+    abbreviation: str | None = None
+    logos: list[TeamLogo] = Field(default_factory=list)
+
+    @property
+    def logo_url(self) -> str | None:
+        """Primera logo disponible (ESPN devuelve multiples tamanos)."""
+        if self.logos:
+            return self.logos[0].href
+        return None
+
+
 class Competitor(_ESPNBase):
     """Un lado de un combate (red corner=order 1, blue=order 2).
 
     En tenis, el nombre viene inline (D49): el campo `name` se rellena
-    directamente desde el JSON de ESPN sin necesidad de seguir el `$ref`."""
+    directamente desde el JSON de ESPN sin necesidad de seguir el `$ref`.
+    En NBA (D56), el nombre se resuelve via `TeamResolver` siguiendo el
+    `$ref` del campo `team` (no `athlete`)."""
 
     id: str
     order: int
     winner: bool = False
     athlete: AthleteRef | None = None
+    team: TeamRef | None = None
     name: str | None = None
 
 

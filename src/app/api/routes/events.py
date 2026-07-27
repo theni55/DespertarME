@@ -30,10 +30,12 @@ from app.db.session import get_session
 from app.domain.entities import Card
 from app.providers.athletes import AthleteResolver
 from app.providers.base import Provider
+from app.providers.espn_nba import EspnNbaProvider
 from app.providers.espn_tennis import EspnTennisProvider
 from app.providers.espn_ufc import EspnUfcProvider
 from app.providers.models import Bout as ProviderBout
 from app.providers.models import Competitor as ProviderCompetitor
+from app.providers.teams import TeamResolver
 
 logger = logging.getLogger(__name__)
 
@@ -44,11 +46,12 @@ EVENTS_LIST_CACHE_KEY = "events:upcoming:{sport}:{league}"
 
 _providers: dict[tuple[str, str], Provider] = {}
 _resolver: AthleteResolver | None = None
+_team_resolver: TeamResolver | None = None
 _redis: Any = None
 
 
 def _get_provider(sport: str = "mma", league: str = "") -> Provider:
-    global _providers, _resolver, _redis
+    global _providers, _resolver, _team_resolver, _redis
     key = (sport, league)
     if key not in _providers:
         import redis.asyncio as aioredis
@@ -59,6 +62,8 @@ def _get_provider(sport: str = "mma", league: str = "") -> Provider:
             _providers[key] = EspnUfcProvider()
         elif sport == "tennis":
             _providers[key] = EspnTennisProvider(league=league or settings.espn_tennis_league)
+        elif sport == "nba":
+            _providers[key] = EspnNbaProvider(league=league or settings.espn_nba_league)
         else:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -69,11 +74,16 @@ def _get_provider(sport: str = "mma", league: str = "") -> Provider:
             _redis = aioredis.from_url(settings.redis_url, decode_responses=True)
         if _resolver is None:
             _resolver = AthleteResolver(_providers[key], redis_client=_redis)
+        if _team_resolver is None and sport == "nba":
+            _team_resolver = TeamResolver(
+                _providers[key],  # type: ignore[arg-type]
+                redis_client=_redis,
+            )
     return _providers[key]
 
 
 async def close_events_resources() -> None:
-    global _providers, _resolver, _redis
+    global _providers, _resolver, _team_resolver, _redis
     for provider in _providers.values():
         try:
             await provider.aclose()
@@ -84,6 +94,7 @@ async def close_events_resources() -> None:
         await _redis.aclose()
         _redis = None
     _resolver = None
+    _team_resolver = None
 
 
 def _parse_iso_z(raw: str) -> datetime:
@@ -214,7 +225,21 @@ async def get_event_detail(
     # D49: tenis tiene nombres inline en competitor.name — no hace falta
     # resolver atletas via el endpoint /athletes/{id} (costoso: 126 llamadas
     # para 63 partidos, ~16s). Para MMA seguimos usando AthleteResolver.
-    if sport != "tennis":
+    # D58: NBA usa TeamResolver (competitors llevan `team $ref`, no `athlete`).
+    resolved: dict[str, Any] = {}
+    resolved_teams: dict[str, Any] = {}
+    if sport == "tennis":
+        pass  # tenis: nombres inline, no resolver.
+    elif sport == "nba":
+        team_ids = [
+            c.team.team_id
+            for b in event.bouts
+            for c in (b.red_corner, b.blue_corner)
+            if c and c.team and c.team.team_id
+        ]
+        if _team_resolver is not None and team_ids:
+            resolved_teams = await _team_resolver.resolve_many(team_ids)
+    else:
         athlete_ids = [
             c.athlete.athlete_id
             for b in event.bouts
@@ -222,24 +247,36 @@ async def get_event_detail(
             if c and c.athlete and c.athlete.athlete_id
         ]
         resolved = await resolver.resolve_many(athlete_ids)
-    else:
-        resolved = {}
 
     def _to_athlete_out(corner: ProviderCompetitor | None) -> BoutAthleteOut | None:
-        if corner is None or corner.athlete is None:
-            if corner and corner.name:
-                return BoutAthleteOut(id=corner.id, name=corner.name)
+        if corner is None:
             return None
-        aid = corner.athlete.athlete_id
-        name = corner.name
-        if not aid and not name:
-            return None
-        found = resolved.get(aid) if aid else None
-        return BoutAthleteOut(
-            id=aid or corner.id or "",
-            name=name or (found.name if found else None),
-            headshot_url=found.headshot_url if found else None,
-        )
+        # D49 tenis: nombre inline directo.
+        if corner.name:
+            return BoutAthleteOut(id=corner.id, name=corner.name)
+        # MMA: athlete $ref.
+        if corner.athlete is not None:
+            aid = corner.athlete.athlete_id
+            if not aid:
+                return None
+            found = resolved.get(aid)
+            return BoutAthleteOut(
+                id=aid,
+                name=found.name if found else None,
+                headshot_url=found.headshot_url if found else None,
+            )
+        # D58 NBA: team $ref → name + logo_url.
+        if corner.team is not None:
+            tid = corner.team.team_id
+            if not tid:
+                return None
+            found = resolved_teams.get(tid)
+            return BoutAthleteOut(
+                id=tid,
+                name=found.name if found else None,
+                headshot_url=found.logo_url if found else None,
+            )
+        return None
 
     bouts_out: list[BoutOut] = []
     for b in event.bouts:

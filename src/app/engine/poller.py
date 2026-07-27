@@ -34,6 +34,7 @@ import logging
 import uuid
 from collections import defaultdict
 from datetime import UTC, datetime
+from typing import Any
 
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -54,6 +55,7 @@ from app.notifiers.base import AlertPayload, PushNotifier, PushResult
 from app.providers.athletes import AthleteResolver
 from app.providers.base import Provider
 from app.providers.models import Competitor as ProviderCompetitor
+from app.providers.teams import TeamResolver
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +87,7 @@ class Poller:
         estimator: EstimatorEngine | None = None,
         retry_delays: tuple[float, ...] = RETRY_DELAYS,
         athlete_resolver: AthleteResolver | None = None,
+        team_resolver: TeamResolver | None = None,
     ) -> None:
         # Backward-compat: single provider (MMA) sigue funcionando.
         if providers is not None:
@@ -99,6 +102,9 @@ class Poller:
         self._retry_delays = retry_delays
         # Resolver se puede inicializar lazy con el primer provider.
         self._resolver = athlete_resolver
+        # D58: NBA usa TeamResolver (no AthleteResolver). Se inicializa lazy
+        # con el provider de NBA si no se inyecto explicitamente.
+        self._team_resolver = team_resolver
 
     async def poll_once(self, session: AsyncSession, now: datetime | None = None) -> int:
         """Procesa todas las suscripciones activas. Devuelve nº de pushes enviados."""
@@ -337,13 +343,19 @@ class Poller:
     async def _load_card(self, provider: Provider, event_id: str, sport: str = "mma") -> Card:
         """Carga la tarjeta del evento via Provider y mapea a dominio.
 
-        Multi-sport (D47): resuelve nombres de atletas con AthleteResolver para
-        MMA y con `competitor.name` inline para tenis (D49). Mapea `court` y
-        `round` de tennis al dominio.
+        Multi-sport (D47/D56): resuelve nombres de atletas con AthleteResolver
+        para MMA, con `competitor.name` inline para tenis (D49), y con
+        `TeamResolver` siguiendo el `team $ref` para NBA (D58). Mapea `court`
+        y `round` de tennis al dominio.
         """
         # Lazy-init del resolver con el primer provider (backward-compat)
         if self._resolver is None:
             self._resolver = AthleteResolver(provider)
+        # D58: NBA lazy-init del team resolver; solo aplica si hay provider NBA.
+        if self._team_resolver is None and sport == "nba":
+            nba_provider = self._providers.get("nba")
+            if nba_provider is not None:
+                self._team_resolver = TeamResolver(nba_provider)  # type: ignore[arg-type]
 
         event = await provider.get_event_card(event_id)
 
@@ -353,20 +365,37 @@ class Poller:
             for corner in (comp.red_corner, comp.blue_corner)
             if corner and corner.athlete and corner.athlete.athlete_id
         ]
-        resolved = await self._resolver.resolve_many(athlete_ids)
+        # D58: para NBA, los competitors traen `team $ref` (no `athlete $ref`).
+        team_ids = [
+            corner.team.team_id
+            for comp in event.bouts
+            for corner in (comp.red_corner, comp.blue_corner)
+            if corner and corner.team and corner.team.team_id
+        ]
+        resolved_athletes = await self._resolver.resolve_many(athlete_ids)
+        resolved_teams: dict[str, Any] = {}
+        if team_ids and self._team_resolver is not None:
+            resolved_teams = await self._team_resolver.resolve_many(team_ids)
 
         def _to_athlete(corner: ProviderCompetitor | None) -> Athlete | None:
             if corner is None:
                 return None
             if corner.name:
                 return Athlete(id=corner.id, name=corner.name)
-            if corner.athlete is None:
-                return None
-            aid = corner.athlete.athlete_id
-            if not aid:
-                return None
-            found = resolved.get(aid)
-            return Athlete(id=aid, name=found.name if found else None)
+            if corner.athlete is not None:
+                aid = corner.athlete.athlete_id
+                if not aid:
+                    return None
+                found = resolved_athletes.get(aid)
+                return Athlete(id=aid, name=found.name if found else None)
+            # D58: NBA `team $ref`.
+            if corner.team is not None:
+                tid = corner.team.team_id
+                if not tid:
+                    return None
+                found = resolved_teams.get(tid)
+                return Athlete(id=tid, name=found.name if found else None)
+            return None
 
         bouts: list[Bout] = []
         for comp in event.bouts:

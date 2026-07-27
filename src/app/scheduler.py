@@ -15,29 +15,47 @@ intervalo fijo (default 60 s) es suficiente para precisión de minuto con
 from __future__ import annotations
 
 import logging
+from datetime import timedelta
+from typing import Any
 
 import redis.asyncio as aioredis
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from app.config import settings
 from app.db.session import SessionLocal
+from app.domain.entities import Bout
 from app.engine.estimator import EstimatorConfig, EstimatorEngine
 from app.engine.poller import Poller
 from app.engine.state import AlertState
 from app.notifiers import get_notifier
 from app.providers.athletes import AthleteResolver
 from app.providers.base import Provider
+from app.providers.espn_nba import EspnNbaProvider
 from app.providers.espn_tennis import EspnTennisProvider
 from app.providers.espn_ufc import EspnUfcProvider
+from app.providers.teams import TeamResolver
 
 logger = logging.getLogger(__name__)
+
+
+def _nba_buffer_for(target: Bout) -> timedelta | None:
+    """D57: buffer asimetrico NBA. Q3 (target.match_number==3) requiere Q2->Q3
+    halftime (15 min). El resto Q2/Q4 usa comercial corto (2 min). Otros
+    deportes devuelven None y el estimator cae al buffer fijo (comportamiento
+    pre-NBA); aportar None es equivalente a no definir `buffer_for`."""
+    if target.sport != "nba":
+        return None
+    if target.match_number == 3:
+        return timedelta(seconds=settings.buffer_nba_halftime_seconds)
+    return timedelta(seconds=settings.buffer_nba_quarter_seconds)
 
 
 class PollerScheduler:
     """Ciclo de vida del scheduler + singletons del pipeline de alertas.
 
-    Multi-sport (D47): mantiene un dict de providers (mma, tennis) y un unico
-    Poller que los recibe todos.
+    Multi-sport (D47): mantiene un dict de providers (mma, tennis, nba) y un
+    unico Poller que los recibe todos. D57: el estimador usa un callback
+    `buffer_for` que selecciona el buffer segun el deporte del target.
     """
 
     def __init__(self) -> None:
@@ -49,24 +67,41 @@ class PollerScheduler:
     def _build(self) -> Poller:
         self._providers["mma"] = EspnUfcProvider()
         self._providers["tennis"] = EspnTennisProvider(league=settings.espn_tennis_league)
+        self._providers["nba"] = EspnNbaProvider(league=settings.espn_nba_league)
         if settings.app_env == "development":
             import fakeredis.aioredis as fakeredis_aio
 
-            redis_client = fakeredis_aio.FakeRedis(decode_responses=True)
+            redis_client: Any = fakeredis_aio.FakeRedis(decode_responses=True)
             logger.info("Usando fakeredis para desarrollo local")
         else:
             redis_client = aioredis.from_url(settings.redis_url, decode_responses=True)
         self._state = AlertState(client=redis_client)
-        resolver = AthleteResolver(self._providers["mma"], redis_client=redis_client)
+        athlete_resolver = AthleteResolver(self._providers["mma"], redis_client=redis_client)
+        team_resolver = TeamResolver(
+            self._providers["nba"],  # type: ignore[arg-type]
+            redis_client=redis_client,
+        )
+
+        # D57: buffer_for aplica a ambos branches (in y post) cuando el previo
+        # esta en juego. Para NBA usa halftime vs comercial; para MMA/Tenis
+        # devuelve None y el estimator cae al buffer fijo (comportamiento
+        # pre-NBA).
+        def buffer_for(target: Bout) -> timedelta | None:
+            return _nba_buffer_for(target)
+
         estimator = EstimatorEngine(
-            EstimatorConfig(buffer_intercombate_seconds=settings.buffer_intercombate_seconds)
+            EstimatorConfig(
+                buffer_intercombate_seconds=settings.buffer_intercombate_seconds,
+                buffer_for=buffer_for,
+            )
         )
         return Poller(
             providers=self._providers,
             notifier=get_notifier(),
             state=self._state,
             estimator=estimator,
-            athlete_resolver=resolver,
+            athlete_resolver=athlete_resolver,
+            team_resolver=team_resolver,
         )
 
     async def _poll_job(self) -> None:

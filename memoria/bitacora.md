@@ -2,6 +2,73 @@
 
 > Registro cronológico de cada sesión de trabajo: qué se hizo y qué quedó pendiente.
 
+## Sesión NBA — Backend NBA completado (Fases N1-N5)
+
+**Fecha:** 2026-07-27 · **Rama:** `feature/nba` (desde `feature/tenis`; `feature/tenis/nba` no era válido en git por jerarquía de refs).
+
+**Contexto:** el owner pidió añadir NBA al MVP: "avisar tanto del inicio del partido como del inicio de cada cuarto, misma dinámica que el resto de deportes". Tras investigación de la API ESPN NBA en vivo (vía webfetch) se detectó la limitación crítica: ESPN solo expone status global del juego (`state` + `period` + `clock`), NO pre/in/post por cuartos. Eso obligó a sintetizar el estado por cuarto detectando transiciones de `period` entre polls.
+
+**Decisiones de diseño registradas:** D56 (NBA MVP: ESPN Core API, modelo "Bout = Cuarto", OT ignorado, Q1 = "Inicio del partido" con selector 5/10/15/30, Q2-Q4 chip "Cuando empieza"→lead=0→Android `handleUpdate` branch `trigger = max(now+60s, est-60s)`), D57 (buffers asimétricos NBA: 120s Q1→Q2/Q3→Q4 comerciales, 900s halftime Q2→Q3 — callback `EstimatorConfig.buffer_for`), D58 (`TeamResolver` mirror `AthleteResolver` para resolver `team $ref` → name + logo con caché Redis TTL 30d).
+
+**Hecho en esta sesión:**
+
+1. **Investigación ESPN NBA** con `webfetch`: verificación en vivo de `/v2/sports/basketball/leagues/nba/events` (preseason 2 partidos), `events/{id}` ( Lakers@Kings single competition, competitor con `team $ref` sin `athlete $ref`), `status` (state pre con period=0; capturado status post period=4 de un partido real 2026-04-15), `teams/{id}` (displayName + logos[]). Hallazgo crítico: no hay per-quarter status — solo global con `period` indicando el cuarto en curso.
+
+2. **Fase N1 ESPN NBA Provider** (3 ficheros nuevos ~480 líneas):
+   - `src/app/providers/espn_nba.py` (`EspnNbaProvider`):
+     - Reutiliza `CircuitBreakerOpenError`/`_is_retryable` de `espn_ufc` (mismo patrón que tennis).
+     - `get_event_card` sintetiza una `Event` con **4 `Bout` Q1-Q4** a partir del único `competition[0]` NBA. Cada bout: `id="{eventId}_q{N}"`, `matchNumber=N`, `cardSegment="Regulation"`, `format.regulation={periods:1, clock:720}`. Remapeo `order 0/1 (home/away) → 1/2 (red/blue corner)` para encajar con `Bout.red_corner`/`blue_corner` (hardcoded order==1/2).
+     - `get_competition_status(event_id, competition_id)` extrae `qN` del bout_id sintético via regex `_q(\d+)$`, fetch-el status global con cache en memoria de 3 s (TTL corto para evitar servir data stalada entre polls pero dedupar target+prev dentro del mismo poll), deriva estado per-quarter comparando `period`: `N < period` → post, `N > period` → pre, `N == period` → usa `state` global.
+     - `get_team(team_id)`: endpoint NBA teams cuelga de `/seasons/{year}/teams/{id}` — probing de `[current, current+1, current-1]` para cubrir cualquier season activa.
+   - `src/app/providers/teams.py` (`TeamResolver`): clon de `AthleteResolver` con key `team:{id}`, TTL 30 días (`team_cache_ttl_seconds=2592000`), degradación a "TBD" sin cachear fallos. Método `TeamResolver.resolve_many` con `asyncio.Semaphore(4)` concurrente.
+   - `src/app/providers/models.py`: añadido `TeamRef` (regex `/teams/(\d+)`), `TeamLogo`, `TeamDetail` (con `logo_url` property), y `Competitor.team: TeamRef | None` junto al `athlete` existente. `Competitor.name` sigue para tenis inline.
+   - `src/app/providers/__init__.py`: exports `EspnNbaProvider`, `TeamResolver`, `ResolvedTeam`, `TeamRef`, `TeamDetail`.
+
+3. **Fase N2 entidades + buffer asimétrico en estimator**:
+   - `domain/entities.py`:
+     - `Bout.estimated_duration_seconds` branch NBA: `periods * round_seconds` (1 quarter sintético = 720s sin descanso intercuarto; el descanso lo mete el estimador via `buffer_for`).
+     - `BoutStatus.elapsed_seconds` branch NBA: `(period-1)*720 + (720-clock)` cuando state=="in" (clock = segundos restantes countdown, period = número del cuarto global 1..4+).
+     - `Card.previous_bout` branch NBA: `bout_by_match_number(target.match_number - 1)` (NBA mn asciende con tiempo, opuesto a MMA donde mn desciende).
+   - `engine/estimator.py`: nuevo campo `EstimatorConfig.buffer_for: Callable[[Bout], timedelta | None] | None`. En `estimate()`, se calcula `effective_buffer`: si callback se setea y devuelve None para un sport concreto → cae al `default_buffer` fijo (regresión MMA/Tenis confirmada por test). `effective_buffer` aplica tanto al branch `in` como al `post` (D45).
+   - `scheduler.py`: `_nba_buffer_for(target)` — NBA Q3 (mn==3) usa `buffer_nba_halftime_seconds=900`, otros NBA `buffer_nba_quarter_seconds=120`. Para no-NBA devuelve None → fallback al `default_buffer`. Scheduler ahora construye `athlete_resolver` y `team_resolver` en paralelo, ambos pasados al Poller. `EstimatorConfig.buffer_for` wired con el callback NBA.
+   - `config.py`: nuevo `espn_nba_league="nba"`, `buffer_nba_quarter_seconds=120`, `buffer_nba_halftime_seconds=900`, `team_cache_ttl_seconds=2592000`.
+
+4. **Fase N3 Poller multi-sport NBA**:
+   - `engine/poller.py`: añadido `team_resolver: TeamResolver | None = None` al constructor (lazy-init con el provider NBA la primera vez). `_load_card` ahora recolecta `athlete_ids` (MMA) Y `team_ids` (NBA competitors tienen `team $ref`, no `athlete $ref`). `_to_athlete` extendido con branch NBA: si `corner.athlete` es None pero `corner.team` tiene `team_id`, resuelve via `team_resolver` y devuelve `Athlete(id=team_id, name=team_display_name)`.
+   - `Any` importado para type del resolved dict.
+   - **Sin tocar la orquestación del poller** — el flujo D45 (push update on `in→post`, MIN_DELTA_SECONDS=60, idempotencia E6, OBSERVED_AT anchor E2) funciona idéntico para NBA. El provider ya cachea el status global 3 s, así que `provider.get_competition_status(event_id, target.id)` y `provider.get_competition_status(event_id, prev.id)` hacen solo 1 fetch ESPN por ciclo (no 2), verificado por test `test_get_competition_status_caches_global_status_within_poll` (assert route.call_count == 1).
+
+5. **Fase N4 API + schemas multi-sport NBA**:
+   - `api/schemas.py`: validator básico relajado a `lead_minutes >= 0` (era `>=5`). Añadido método `BoutSubscriptionCreate.validate_for_sport()`: NBA Q2-Q4 requiere `lead_minutes == 0`; resto (MMA/Tenis/NBA Q1) requiere `>= MIN_LEAD_MINUTES=5`. Constants `MIN_LEAD_MINUTES=5` + `NBA_QUARTER_LEAD_MINUTES=0`.
+   - `api/routes/subscriptions.py`: `create_subscription` llama `body.validate_for_sport()` antes de persistir; raises 422 si viola. Regresión positiva: `test_create_subscription_lead_minutes_minimum` (MMA con lead=2) sigue recibiendo 422 via el validator contextual.
+   - `api/routes/events.py`: NBA branch en `_get_provider` (`EspnNbaProvider(league=league or settings.espn_nba_league)`); `_team_resolver` module-level inicializado lazy en paralelo a `_resolver`; `_to_athlete_out` extendido con branch NBA: si `corner.athlete` es None y `corner.team` está set, resuelve via `team_resolver`, con `logo_url` mapeado a `headshot_url`.
+   - `_previous_bout_id_map` ya funciona para NBA porque delega en `Card.previous_bout` que tiene el branch mn-1.
+   - **DB: sin migración Alembic necesaria** — la columna `sport` ya es `String(20)` indexada (Fase 8d migración `8df6f9297a34`).
+
+6. **Fase N5 Tests + smoke en vivo**:
+   - `tests/test_espn_nba.py`: 26 tests:
+     - `test_list_upcoming_events_returns_non_empty_list` (mocks event_list + event_detail).
+     - `test_get_event_card_synthesizes_four_quarters` (assert 4 bouts, mn=[1,2,3,4], id=`{eventId}_q{N}`, cardSegment "Regulation", format periods=1 clock=720).
+     - `test_get_event_card_remaps_nba_competitor_order_to_red_blue` (red.order==1, blue.order==2, red.athlete is None, red.team.team_id==23, blue.team.team_id==13).
+     - Per-quarter status derivation: 6 tests cubren todas las combinaciones de `period` global vs target Q (pre_when_game_not_started, in_q1_marks_q1_in_others_pre_post, in_q2/in_q3/in_q4 variations, post_marks_all_quarters_post).
+     - Cache status test: `test_get_competition_status_caches_global_status_within_poll` asserts `route.call_count == 1` despite 4 calls.
+     - Circuit breaker: 2 tests (5xx abre, 404 no abre — E5).
+     - Team tests: `test_get_team_returns_display_name_and_logo`, `test_team_resolver_caches_after_first_fetch`, `test_team_resolver_degrades_to_tbd_on_failure`.
+     - Estimator: 3 tests (Q2 short buffer + Q3 halftime buffer when prev post, Q2 when prev in uses quarter buffer, MMA regression with `buffer_for` returning None).
+     - Schemas: 4 tests (lead=0 NBA Q2-Q4 aceptado, lead=0 MMA rechazado via `validate_for_sport`, lead<0 pydantic rechazado, NBA Q2 con lead>0 rechazado).
+     - Domain: 4 tests (Bout.estimated_duration, BoutStatus.elapsed in Q1, Q2, y not-in).
+   - Fixtures `tests/fixtures/espn_nba/` grabados en vivo: `event_list.json` (2 preseason events), `event_401898716.json` (Lakers@Kings), 6 statuses (`pre` real, 4 `in_q*` sintetizados con period/clock realistas, `post` real de un partido completado), `team_13.json` (Lakers), `team_23.json` (Kings). Limpieza BOM PowerShell (PS `Set-Content -Encoding utf8` añade BOM que rompe `json.loads`).
+   - **Verificación final backend**: `pytest 106/106` (80 preexistentes + 26 nuevos), `ruff check`/`black --check`/`mypy src/app` limpios.
+   - **Smoke API local end-to-end** contra Railway-ESPN: `GET /api/events?sport=nba&league=nba` → 2 partidos preseason; `GET /api/events/401898716?sport=nba` → 4 bouts con `previous_bout_id` encadenado Q4→Q3→Q2→Q1 (ruta NBA mn-1) y `red.name="Sacramento Kings"` (TeamResolver working en vivo); `/health` 200.
+
+**Errores solucionados Documentados:**
+- **E1 - `display_clock` kwarg ignored silently**: al construir `CompetitionStatus(display_clock="0.0", short_detail="TBD")`, pydantic v2 con `Field(alias="displayClock")` ignora los kwargs del field name (sin `populate_by_name=True`). Fix: refactor a `CompetitionStatus.model_validate({...})` con alias keys (`displayClock`, `shortDetail`). Mypy complied.
+- **E2 - NBA Q prev lookup returned None**: card `[Q1,Q2,Q3]` con target=Q3 y `previous_bout = mn+1` buscaba mn=4 → None → "no hay combate previo; fecha programada". Root cause: NBA mn asciende con tiempo; UFC mn desciende. Fix: branch NBA en `Card.previous_bout` usando `mn - 1`.
+- **E3 - `effective_buffer = None` crash**: al setear `buffer_for` callback que devuelve None para MMA, `anchor + None` explotaba con TypeError. Fix: tipo del callback corregido a `timedelta | None`, y fallback al `default_buffer` cuando callback devuelve None.
+- **E4 - `feature/tenis/nba` ref inválido**: git no permite refs jerárquicos cuando el padre ya existe. Cambiado a `feature/nba`.
+
+**Pendiente para próxima sesión:** Fase N6 Android nativo (todos los cambios documentados en `memoria/fases.md` sección "Fase NBA"). Incluye `NbaBlue` token, NBA fetch en `HomeViewModel`, NBA branch en `CompetitionsScreen`/`SubscriptionsScreen`, NBA render con etiquetas "Inicio del partido"/"2º cuarto"/"3º cuarto"/"4º cuarto" en `EventDetailScreen`, `LEAD_OPTIONS` dinámico (NBA Q2-Q4 → chip "Cuando empieza"=lead 0), branch universal `if (lead == 0) trigger = max(now+60s, est-60s)` en `DespertarMeFirebaseService.handleUpdate()`, y smoke en emulador.
+
 ## Sesión 1 — Inicio del proyecto
 
 - Recogida de requisitos con el usuario vía preguntas estructuradas.

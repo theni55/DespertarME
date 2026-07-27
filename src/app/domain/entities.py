@@ -55,10 +55,18 @@ class Bout:
 
         MMA (D18): rounds * duracion_round + 1 min de descanso entre rounds.
         Tenis: periods * avg_set_seconds (best-of-3 ~90 min, best-of-5 ~150 min).
+        NBA (D56): un cuarto sintetico = `periods * round_seconds`. El buffer
+            inter-cuarto (halftime vs comercial corto) lo anade el estimator
+            aparte (D57 callback `buffer_for`), no entra aqui.
         """
         if self.sport == "tennis":
             avg_set_seconds = 2700.0
             return self.periods * avg_set_seconds
+        if self.sport == "nba":
+            # Bout = un cuarto. `periods` sintetico es siempre 1; `round_seconds`
+            # es 720 (12:00 reglamentario). El descanso inter-cuarto se anade
+            # aparte en el estimator (D57 `buffer_for`), no en la duracion.
+            return self.periods * self.round_seconds
         rest_between = 60
         return self.periods * self.round_seconds + max(0, self.periods - 1) * rest_between
 
@@ -83,16 +91,22 @@ class Card:
         return next((b for b in self.bouts if b.id == bout_id), None)
 
     def previous_bout(self, target: Bout) -> Bout | None:
-        """Combate inmediatamente anterior al objetivo (D47).
+        """Combate inmediatamente anterior al objetivo (D47, D56).
 
         Tenis: partido anterior en la misma pista por fecha.
-        MMA: matchNumber + 1 (comportamiento original, sin cambios).
+        NBA (D56): matchNumber ASCIENDE con el tiempo (Q1=mn1, Q4=mn4) ->
+            previo es mn-1.
+        MMA: matchNumber DESCIENDE con el tiempo (mn1=main event=ultimo de
+            la card) -> previo es mn+1 (comportamiento original).
         """
         if target.court is not None:
             same_court = [b for b in self.bouts if b.court == target.court and b.date < target.date]
             if not same_court:
                 return None
             return max(same_court, key=lambda b: b.date)
+        # NBA: prev temporal es mn-1. MMA: mn+1.
+        if self.sport == "nba":
+            return self.bout_by_match_number(target.match_number - 1)
         return self.bout_by_match_number(target.match_number + 1)
 
 
@@ -117,14 +131,23 @@ class BoutStatus:
     def elapsed_seconds(self) -> float:
         """Tiempo transcurrido del combate si esta `in`, 0 si `pre`.
 
-        MMA: `period * 300 - clock`. Tenis: `(period-1) * avg_set_seconds`
-        (sin clock, estimacion conservadora por sets completados).
+        MMA: `period * 300 - clock` (clock = segundos transcurridos del round).
+        Tenis: `(period-1) * avg_set_seconds` (sin clock, estimacion conservadora
+            por sets completados).
+        NBA (D56): `Bout` = un cuarto. `period` = numero del cuarto en el
+            juego global (1..4 o mas para OT). `clock` = segundos restantes
+            (count-down desde 720.0). Elapsed = `(period-1)*720 + (720 - clock)`
+            — suma lo jugado en cuartos anteriores mas lo jugado en el actual.
         """
         if self.state != "in":
             return 0.0
         if self.sport == "tennis":
             avg_set_seconds = 2700.0
             return max(0, self.period - 1) * avg_set_seconds
+        if self.sport == "nba":
+            # Period 1-indexed; clock = segundos restantes del cuarto actual.
+            # Si el tout es la Q2 (period=2) y clock=300, elapsed = 720 + 420.
+            return max(0.0, (self.period - 1) * 720.0 + (720.0 - self.clock))
         return self.period * 300.0 - self.clock if self.clock >= 0 else 0.0
 
 
