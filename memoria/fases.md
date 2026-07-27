@@ -480,14 +480,22 @@ Plan detallado en el handoff de la sesión NBA. Decisiones **D56-D58**. Modelo "
 - [x] Smoke API local: `GET /api/events?sport=nba` → 2 partidos preseason; `GET /api/events/401898716?sport=nba` → 4 bouts Q1-Q4 con `previous_bout_id` encadenado Q4→Q3→Q2→Q1, red corner (Kings) y blue corner (Lakers) resueltos con logos.
 - [x] Verificación `TeamResolver` en vivo: Sacramento Kings + Los Angeles Lakers con sus logos ESPN.
 
-### N6 — App Android ⏳ pendiente (siguiente sesión)
+### N6 — App Android ⏳ en curso (rama `feature/nba`)
 
-- [ ] `mobile-kotlin/.../ui/theme/Color.kt`: nuevo token `NbaBlue`.
-- [ ] `HomeViewModel.kt`: 4º async fetch `listEvents("nba","")`.
-- [ ] `CompetitionsViewModel.kt` + `CompetitionsScreen.kt`: NBA branch con sección propia.
-- [ ] `EventDetailScreen.kt`: NBA render (logos equipos, etiquetas "Inicio del partido"/"2º cuarto"/"3º cuarto"/"4º cuarto").
-- [ ] `EventDetailScreen.kt`: `LEAD_OPTIONS` dinámico por bout — NBA Q2-Q4 = `listOf(0)` label "Cuando empieza"; NBA Q1 + MMA + Tenis = `5/10/15/30`.
-- [ ] `DespertarMeFirebaseService.handleUpdate()`: nuevo branch `if (lead == 0) trigger = max(now+60s, est - 60s)`.
-- [ ] `SubscriptionsScreen.kt` + `SubscriptionsViewModel.kt`: badge NBA + label "Cuarto #N"/"Inicio".
-- [ ] `MainActivity.kt`: tile NBA en Home/EventList → events/nba.
-- [ ] Build `gradlew assembleDebug` + smoke en emulador.
+- [x] `mobile-kotlin/.../ui/theme/Color.kt`: nuevo token `NbaBlue`.
+- [x] `HomeViewModel.kt`: 4º async fetch `listEvents("nba","")`.
+- [x] `CompetitionsViewModel.kt` + `CompetitionsScreen.kt`: NBA branch con sección propia.
+- [x] `EventDetailScreen.kt`: NBA render (logos equipos, etiquetas "Inicio del partido"/"2º cuarto"/"3º cuarto"/"4º cuarto").
+- [x] `EventDetailScreen.kt`: `LEAD_OPTIONS` dinámico por bout — NBA Q2-Q4 = `listOf(0)` label "Cuando empieza"; NBA Q1 + MMA + Tenis = `5/10/15/30`.
+- [x] `DespertarMeFirebaseService.handleUpdate()`: nuevo branch `if (lead == 0) trigger = max(now+60s, est - 60s)`.
+- [x] `SubscriptionsScreen.kt` + `SubscriptionsViewModel.kt`: badge NBA + label "Cuarto #N"/"Inicio".
+- [x] `MainActivity.kt`: tile NBA en Home/EventList → events/nba.
+- [x] Fix race condition tenis: `loadJob?.cancel()` en CompetitionsViewModel y EventDetailViewModel.
+- [x] Fix `baseUrl`: Railway → `10.0.2.2:8000` (backend local con 3 providers).
+- [x] Build `gradlew assembleDebug` + smoke en emulador: SUCCESSFUL, sin FATAL.
+
+### N7 — Refactor ✅ (commit `28a5075`)
+
+- [x] `_EspnBaseProvider` unifica CB + tenacity + HTTP de UFC/Tenis/NBA.
+- [x] `CacheResolver[T]` genérico para AthleteResolver y TeamResolver.
+- [x] −134 líneas netas, 106/106 tests verdes.

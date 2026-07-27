@@ -6,6 +6,54 @@
 
 ## Última sesión
 
+**Fecha:** 2026-07-27 · **Sesión NBA (cont.) — Refactor providers + Fase N6 Android completada. App funcional en emulador con los 3 deportes (MMA + Tenis + NBA). Rama `feature/nba`. Sin merge a `feature/tennis`.**
+
+**Contexto:** la app mostraba datos de MMA tanto para Tenis como para NBA. Tras diagnóstico se descubrió que `AppContainer.baseUrl` apuntaba a Railway (`despertarme-production.up.railway.app`) que NO tiene el código NBA (rama `feature/nba` sin deployar) y posiblemente tenía el bug pre-fix de tenis (Sesión 24). Cambiado a `http://10.0.2.2:8000/` para desarrollo local. Además se ejecutó el refactor de código duplicado entre providers y resolvers.
+
+**Hecho en esta sesión:**
+
+1. **Refactor `_EspnBaseProvider`** (nuevo `_base_provider.py`): unifica CB + tenacity + HTTP que estaba duplicado en `EspnUfcProvider`, `EspnTennisProvider` y `EspnNbaProvider` (~100 líneas cada uno). Cada provider baja de ~230 a ~100 líneas. `CircuitBreakerOpenError` y `_is_retryable` movidos al módulo compartido, imports actualizados en `__init__.py`, `espn_tennis.py`, `espn_nba.py`.
+2. **Refactor `CacheResolver`** (nuevo `_cache_resolver.py`): clase genérica `CacheResolver[T]` con Redis + memoria L1. `AthleteResolver` y `TeamResolver` pasan de ~120 líneas a wrappers de ~20 líneas cada uno. Parametrizado por `key_prefix` + `_fetch_one` + `_to_dict`/`_from_dict`.
+   - Cambio neto: +475 insertadas, −609 borradas = **−134 líneas** en 8 ficheros.
+   - 106/106 tests verdes, ruff/black/mypy limpios.
+3. **Fix race condition tenis** (2 archivos Android):
+   - `CompetitionsViewModel.load()`: añadido `loadJob?.cancel()` antes del nuevo `viewModelScope.launch`.
+   - `EventDetailViewModel.load()`: ídem + captura `sport`/`league` al inicio de `load()` para evitar que la corutina lea valores cambiados a mitad de ejecución.
+4. **Fase N6 Android NBA** (11 archivos, +108 líneas):
+   - `Color.kt`: `NbaBlue = Color(0xFF1D428A)`.
+   - `HomeScreen`: strip NBA, label "NBA" + "Próximo", contador "cuartos".
+   - `EventListScreen`: tile "NBA" → `onSportClick("nba")`.
+   - `CompetitionsViewModel`: branch `"nba"` → `listEvents("nba","")`.
+   - `CompetitionsScreen`: sección NBA, NbaBlue strip, label NBA.
+   - `EventDetailScreen`: render por quarter ("Inicio del partido"/"2º cuarto"/"3º cuarto"/"4º cuarto"), 12 min label. `LEAD_OPTIONS` dinámico: NBA Q2-Q4 → un solo chip "Cuando empieza" (lead=0), resto 5/10/15/30.
+   - `DespertarMeFirebaseService.handleUpdate()`: nuevo branch universal `lead==0` → `trigger = max(now+60s, est-60s)` (alarma 1 min antes del tip-off).
+   - `SubscriptionsViewModel`: label NBA ("Inicio" para Q1, "Cuarto #N" para Q2-Q4).
+   - `SubscriptionsScreen`: badge "NBA" con NbaBlue.
+   - `HomeViewModel`: 4º async fetch `listEvents("nba","")` en paralelo.
+5. **Root cause "tenis y NBA muestran MMA"**: `AppContainer.baseUrl` apuntaba a Railway (que no tiene código NBA ni fix de tenis). Cambiado a `http://10.0.2.2:8000/` (local via `adb reverse + 10.0.2.2`). Backend local verificado con curl: los 3 providers responden correctamente (tenis → "Mifel Tennis Open", NBA → "Lakers at Kings", MMA → "UFC Fight Night").
+6. **Verificación**: `pytest 106/106` verdes, `ruff`/`black`/`mypy` limpios. `assembleDebug` BUILD SUCCESSFUL (20s incremental). Emulador `pixel_6_api34`: APK instalada, sin FATAL, app arranca con backend local accesible vía `adb reverse`.
+
+**Errores encontrados y solucionados:**
+
+- **E1 (refactor) — `display_clock` kwarg ignorado**: al sintetizar `CompetitionStatus(display_clock="0.0")` en `espn_nba.py`, pydantic ignoraba el kwarg (esperaba el alias `displayClock`). Fix: refactor a `CompetitionStatus.model_validate({...})` con alias keys explícitos.
+- **E2 (refactor) — `Card.previous_bout` devolvía None para NBA**: NBA mn asciende con el tiempo (Q1 primero, Q4 último), pero la ruta MMA (`mn+1`) buscaba mn que no existían. Fix: branch NBA en `Card.previous_bout` usando `mn-1`.
+- **E3 (refactor) — `effective_buffer = None` crash**: `EstimatorConfig.buffer_for` callback devolvía None para MMA sin fallback. Fix: `if callback returns None → use default_buffer`.
+- **E4 (refactor) — `feature/tenis/nba` ref inválido**: git no permite refs jerárquicos cuando el padre existe. Cambiado a `feature/nba`.
+- **E5 (debug) — `catch (Throwable)` atrapa `CancellationException`**: corutinas canceladas escribían error al state en vez de morir limpiamente. Queda pendiente de cambiar `Throwable` → `Exception` en los catch blocks (próxima sesión).
+- **E6 (debug) — Root cause real del bug "tenis/NBA muestran MMA"**: `baseUrl` apuntaba a Railway, no al backend local.
+
+**Pendiente (próxima sesión):**
+1. **Merge `feature/nba` → `feature/tenis`** (el owner dijo "sin merge aun", pero al final de la sesión NBA procedería unificarlo en `feature/tenis` o `dev`).
+2. **Deploy a Railway** con código NBA (tras merge a `dev`/`main`). Restaurar `baseUrl` Railway en `AppContainer.kt` para el deploy.
+3. **`catch (Throwable)` → `catch (Exception)`** en `CompetitionsViewModel` y `EventDetailViewModel` (E5 pendiente).
+4. **Validación con partido real NBA** — preseason Lakers @ Kings, 2026-10-05 04:00 UTC.
+5. **Validación con torneo real de tenis** (Mifel Tennis Open, en curso).
+6. **Handoff: decisiones de diseño visual** — el owner quería decidir cómo se ve todo en general (estilo Winamax, colores por deporte, fusión Buscar/EventList).
+
+---
+
+## Última sesión
+
 **Fecha:** 2026-07-27 · **Sesión NBA — Fases N1-N5 backend NBA completadas. MVP multi-sport ahora incluye NBA + MMA + Tenis, con modelo "Bout = Cuarto" y TeamResolver. Rama `feature/nba` desde `feature/tenis`.**
 
 **Contexto:** el owner pidió añadir NBA al MVP con dos alcance: (1) avisar del inicio del partido (Q1 = "Inicio del partido" para el usuario, lead selector como MMA/Tenis), (2) avisar del inicio de Q2/Q3/Q4 ("Cuando empieza" → lead=0, alarma 1 min antes del tip-off). Misma dinámica que el resto de deportes. Misma rama (no nueva, actualizada a `feature/nba` partiendo de `feature/tenis` — `feature/tenis/nba` no era válido en git por jerarquía de refs).

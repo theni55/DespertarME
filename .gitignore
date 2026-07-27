@@ -89,4 +89,5 @@ Thumbs.db
 uvicorn.out
 uvicorn.err
 uvicorn.pid
+uvicorn_diag.*
 

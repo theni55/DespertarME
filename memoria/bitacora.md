@@ -2,6 +2,23 @@
 
 > Registro cronológico de cada sesión de trabajo: qué se hizo y qué quedó pendiente.
 
+## Sesión NBA (cont.) — Refactor + Fase N6 Android + fix baseUrl (2026-07-27)
+
+**Rama:** `feature/nba` · **4 commits** (backend `a386c09`, refactor `28a5075`, Android N6 `45c62b0`, baseUrl fix `f930320`)
+
+**Contexto:** la app mostraba datos de MMA para Tenis y NBA. Tras diagnóstico exhaustivo se descubrió que `AppContainer.baseUrl` apuntaba a Railway (sin código NBA desplegado, posiblemente con bug pre-fix de tenis Sesión 24). Cambiado a `http://10.0.2.2:8000/`. Además se ejecutó refactor de ~400 líneas duplicadas entre providers y resolvers.
+
+**Hecho:**
+1. **Refactor `_EspnBaseProvider`** — unifica CB + tenacity + HTTP copiado 3 veces en UFC/Tenis/NBA (~100 líneas c/u). Cada provider ahora hereda y baja a ~100 líneas.
+2. **Refactor `CacheResolver[T]`** — genérico Redis + memoria L1. AthleteResolver y TeamResolver pasan de ~120 líneas a ~20. **−134 líneas netas**.
+3. **Fix race condition tenis**: `loadJob?.cancel()` en CompetitionsViewModel y EventDetailViewModel.
+4. **Fase N6 Android NBA**: 11 archivos, +108 líneas — NbaBlue, Home+Buscar+EventDetail+Alertas NBA, LEAD_OPTIONS dinámico, lead==0 en handleUpdate.
+5. **Root cause baseUrl**: Railway → `10.0.2.2:8000` para dev local. Backend local verificado con curl: 3 providers correctos.
+
+**Errores:** E1 (display_clock alias), E2 (previous_bout mn-1), E3 (effective_buffer None), E4 (feature/tenis/nba ref inválido), E5 (catch Throwable atrapa CancellationException — pendiente), E6 (baseUrl Railway sin NBA).
+
+**Pendiente:** catch(Exception), merge feature/nba→feature/tenis, deploy Railway, validación partido real.
+
 ## Sesión NBA — Backend NBA completado (Fases N1-N5)
 
 **Fecha:** 2026-07-27 · **Rama:** `feature/nba` (desde `feature/tenis`; `feature/tenis/nba` no era válido en git por jerarquía de refs).
