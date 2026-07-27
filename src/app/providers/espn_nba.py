@@ -6,26 +6,16 @@ period + clock); no expone estado pre/in/post por cuartos. Ergo el provider
 deriva el estado de cada cuarto comparando el `period` global vs el quarter
 objetivo.
 
-Endpoints (verificados en vivo, Sesion NBA):
-- `GET /sports/basketball/leagues/{league}/events?seasontype=2` → lista de partidos.
-- `GET /sports/basketball/leagues/{league}/events/{id}` → partido con 1 competition.
-- `GET /sports/basketball/leagues/{league}/events/{id}/competitions/{cId}/status`
-  → estado global del partido (`clock`, `period`, `type.state`). Para NBA,
-  `competition_id == event_id`.
-- `GET /sports/basketball/leagues/nba/seasons/{year}/teams/{id}` → team
-  detail (`displayName`, `logos[]`).
+Resiliencia (D20): heredada de `_EspnBaseProvider`.
 
-Diferencias clave con MMA/Tenis (D56):
-- 1 competition por evento → sintetizamos 4 competitions Q1-Q4 con
-  `Bout.id = "{eventId}_q{N}"`, `matchNumber = N`.
-- Competitors tienen `team $ref` (no `athlete $ref`): los nombres se
-  resuelven via `TeamResolver` (D58), no `AthleteResolver`.
-- ESPN competitor `order` es 0 (home) / 1 (away); remapeamos a 1 (red) /
-  2 (blue) para encajar con `Bout.red_corner`/`blue_corner`.
-- `get_competition_status(event_id, competition_id)` ignora el
-  `competition_id` (NBA tiene 1 solo por event) y cachea el status global
-  3 s en memoria para evitar llamadas duplicadas dentro del mismo poll
-  cycle (target + prev comparten el mismo endpoint).
+Endpoints (verificados en vivo, Sesion NBA):
+- `GET /sports/basketball/leagues/{league}/events?seasontype=2` -> lista de partidos.
+- `GET /sports/basketball/leagues/{league}/events/{id}` -> partido con 1 competition.
+- `GET /sports/basketball/leagues/{league}/events/{id}/competitions/{cId}/status`
+  -> estado global del partido (`clock`, `period`, `type.state`). Para NBA,
+  `competition_id == event_id`.
+- `GET /sports/basketball/leagues/nba/seasons/{year}/teams/{id}` -> team
+  detail (`displayName`, `logos[]`).
 """
 
 from __future__ import annotations
@@ -33,29 +23,16 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
-import time
 from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
-from typing import Any, cast
+from typing import Any
 from urllib.parse import urlparse
 
 import httpx
-from tenacity import (
-    AsyncRetrying,
-    retry_if_exception,
-    stop_after_attempt,
-    wait_exponential_jitter,
-)
 
 from app.config import settings
-from app.providers.base import Provider
-from app.providers.espn_ufc import CircuitBreakerOpenError, _is_retryable
-from app.providers.models import (
-    CompetitionStatus,
-    Event,
-    EventSummary,
-    TeamDetail,
-)
+from app.providers._base_provider import _EspnBaseProvider
+from app.providers.models import CompetitionStatus, Event, EventSummary, TeamDetail
 
 logger = logging.getLogger(__name__)
 
@@ -63,8 +40,7 @@ _EVENT_ID_RE = re.compile(r"/events/(\d+)")
 _QUARTER_RE = re.compile(r"_q(\d+)$")
 
 # Cache en memoria del status global por event_id: (timestamp, status_dict).
-# TTL corto (3s) para dedupe llamadas dentro del mismo poll cycle sin servir
-# data stalada entre ciclos.
+# TTL corto (3s) para dedupe llamadas dentro del mismo poll cycle.
 _STATUS_CACHE_TTL = 3.0
 
 
@@ -83,7 +59,7 @@ def _parse_event_date(raw: str) -> datetime:
     return datetime.fromisoformat(value)
 
 
-class EspnNbaProvider(Provider):
+class EspnNbaProvider(_EspnBaseProvider):
     """Provider concreto para ESPN Core API (NBA)."""
 
     def __init__(
@@ -98,95 +74,19 @@ class EspnNbaProvider(Provider):
         client: httpx.AsyncClient | None = None,
         clock: Callable[[], float] | None = None,
     ) -> None:
-        self._base_url = (base_url or settings.espn_base_url).rstrip("/")
-        self._league = league or settings.espn_nba_league
-        self._timeout = timeout if timeout is not None else settings.espn_timeout_seconds
-        self._max_retries = max_retries if max_retries is not None else settings.espn_max_retries
-        self._cb_fails = cb_fails if cb_fails is not None else settings.espn_circuit_breaker_fails
-        self._cb_open_seconds = (
-            cb_open_seconds
-            if cb_open_seconds is not None
-            else settings.espn_circuit_breaker_open_seconds
+        super().__init__(
+            base_url=base_url,
+            league=league or settings.espn_nba_league,
+            timeout=timeout,
+            max_retries=max_retries,
+            cb_fails=cb_fails,
+            cb_open_seconds=cb_open_seconds,
+            client=client,
+            clock=clock,
         )
-        self._client = client or httpx.AsyncClient(timeout=self._timeout)
-        self._owns_client = client is None
-        self._clock = clock or time.monotonic
-        self._consecutive_failures = 0
-        self._open_until: float = 0.0
-        # Cache en memoria del estado global: event_id -> (expira_en, status dict).
         self._status_cache: dict[str, tuple[float, dict[str, Any]]] = {}
 
-    async def aclose(self) -> None:
-        if self._owns_client:
-            await self._client.aclose()
-
-    async def __aenter__(self) -> EspnNbaProvider:
-        return self
-
-    async def __aexit__(self, *exc_info: object) -> None:
-        await self.aclose()
-
-    # --- Circuit breaker -------------------------------------------------
-
-    def _check_circuit(self) -> None:
-        if self._clock() < self._open_until:
-            raise CircuitBreakerOpenError(
-                f"Circuit breaker abierto hasta {self._open_until:.1f}s "
-                f"(fails={self._cb_fails}, open={self._cb_open_seconds}s)"
-            )
-
-    def _on_success(self) -> None:
-        if self._consecutive_failures or self._open_until:
-            logger.debug("Circuit breaker reset tras exito")
-        self._consecutive_failures = 0
-        self._open_until = 0.0
-
-    def _on_failure(self) -> None:
-        self._consecutive_failures += 1
-        if self._consecutive_failures >= self._cb_fails:
-            self._open_until = self._clock() + self._cb_open_seconds
-            self._consecutive_failures = 0
-            logger.warning(
-                "Circuit breaker ABIERTO por %ss tras %s fallos consecutivos",
-                self._cb_open_seconds,
-                self._cb_fails,
-            )
-
-    @property
-    def is_circuit_open(self) -> bool:
-        return self._clock() < self._open_until
-
-    # --- HTTP con tenacity + circuit breaker -----------------------------
-
-    def _url(self, path: str) -> str:
-        return f"{self._base_url}{path}"
-
-    async def _request(self, url: str) -> dict[str, Any]:
-        self._check_circuit()
-        try:
-            data = await self._request_with_retry(url)
-        except Exception as exc:
-            if _is_retryable(exc):
-                self._on_failure()
-            raise
-        self._on_success()
-        return data
-
-    async def _request_with_retry(self, url: str) -> dict[str, Any]:
-        retrying = AsyncRetrying(
-            stop=stop_after_attempt(self._max_retries),
-            wait=wait_exponential_jitter(initial=1, max=60),
-            retry=retry_if_exception(_is_retryable),
-            reraise=True,
-        )
-        async for attempt in retrying:
-            with attempt:
-                response = await self._client.get(url)
-                response.raise_for_status()
-                return cast(dict[str, Any], response.json())
-        raise RuntimeError("retry loop exited without a result")
-
-    # --- Contrato Provider (base.py) -------------------------------------
+    # --- Provider ABC ----------------------------------------------------
 
     async def list_upcoming_events(
         self, *, min_date: datetime | None = None, max_concurrent: int = 4
@@ -251,7 +151,6 @@ class EspnNbaProvider(Provider):
             return Event.model_validate(data)
         real_comp = competitions[0]
         real_competitors = real_comp.get("competitors") or []
-        # Remapear order NBA (0=home, 1=away) -> 1=red, 2=blue corner.
         remapped_competitors = [
             {
                 **c,
@@ -263,7 +162,7 @@ class EspnNbaProvider(Provider):
         clock_per_quarter = regulation.get("clock", 720.0)
         type_obj = real_comp.get("type")
         synthetic_competitions: list[dict[str, Any]] = []
-        for q in range(1, 5):  # Q1, Q2, Q3, Q4
+        for q in range(1, 5):
             quarter_comp = {
                 "id": f"{event_id}_q{q}",
                 "matchNumber": q,
@@ -280,20 +179,7 @@ class EspnNbaProvider(Provider):
         return Event.model_validate(synthetic_data)
 
     async def get_competition_status(self, event_id: str, competition_id: str) -> CompetitionStatus:
-        """Deriva el status de UN cuartel especifico a partir del status global.
-
-        NBA: `competition_id == event_id` en ESPN. Aqui `competition_id` puede
-        ser el bout_id sintetico `"{eventId}_q{N}"` (en el poller, target y prev
-        usan bout_id como argumento). El cuarto N se extrae via regex.
-
-        Logica de derivacion:
-        - N > global.period: quarter aun no empezo → state=pre.
-        - N == global.period AND global.state == in: este cuarto en curso.
-        - N == global.period AND global.state == pre: todo el juego en pre.
-        - N == global.period AND global.state == post: juego acabo en este cuarto.
-        - N < global.period: este cuarto ya termino → state=post.
-        """
-        # Extraer el numero de quarter del bout_id sintetico.
+        """Deriva el status de UN cuartel especifico a partir del status global."""
         m = _QUARTER_RE.search(competition_id or "")
         quarter_n = int(m.group(1)) if m else 0
         global_status = await self._fetch_global_status_cached(event_id)
@@ -322,7 +208,6 @@ class EspnNbaProvider(Provider):
         g_period = int(global_status_data.get("period", 0) or 0)
 
         if quarter_n == 0:
-            # Sin quarter especificado -> devolver el status global crudo.
             return CompetitionStatus.model_validate(global_status_data)
 
         def _synth(state: str, *, completed: bool) -> CompetitionStatus:
@@ -341,18 +226,13 @@ class EspnNbaProvider(Provider):
             )
 
         if g_period == 0:
-            # Juego no ha empezado.
             return _synth("pre", completed=False)
         if quarter_n < g_period:
-            # Este quarter ya paso.
             return _synth("post", completed=True)
         if quarter_n > g_period:
-            # Este quarter no ha empezado todavia.
             return _synth("pre", completed=False)
-        # quarter_n == g_period: este es el cuarto en curso (o el ultimo si post).
         if g_state == "pre":
             return _synth("pre", completed=False)
-        # in o post: el cuarto coincide con el estado global.
         return CompetitionStatus.model_validate(global_status_data)
 
     async def get_athlete(self, athlete_id: str) -> Any:  # noqa: ANN401
@@ -362,14 +242,8 @@ class EspnNbaProvider(Provider):
         raise NotImplementedError("NBA usa get_team, no get_athlete")
 
     async def get_team(self, team_id: str) -> TeamDetail:
-        """Detalle de un equipo NBA. El endpoint cuelga de `/seasons/{year}/teams/{id}`,
-        pero el ano depende de la URL del `$ref` original. Para no acoplar al
-        provider al ano, hacemos probing: probamos el ano actual y el siguiente
-        (ESPN expone el equipo en cualquier season con el mismo id).
-        """
-        # Intentamos primero la season mas reciente conocida via el endpoint
-        # generico `/sports/basketball/leagues/nba/seasons/{year}/teams/{id}`.
-        # Como fallback, probamos varios anos.
+        """Detalle de un equipo NBA. Hace probing de years para encontrar el
+        equipo en cualquier season activa (current, current+1, current-1)."""
         years = [datetime.now(UTC).year, datetime.now(UTC).year + 1, datetime.now(UTC).year - 1]
         last_exc: Exception | None = None
         for year in years:

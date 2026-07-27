@@ -1,19 +1,17 @@
 """Provider de ESPN Core API para Tenis ATP/WTA (D46).
 
 Endpoints (verificados en vivo, Sesion 23):
-- `GET /sports/tennis/leagues/{league}/events?seasontype=2` → lista de torneos.
-- `GET /sports/tennis/leagues/{league}/events/{id}` → torneo completo.
+- `GET /sports/tennis/leagues/{league}/events?seasontype=2` -> lista de torneos.
+- `GET /sports/tennis/leagues/{league}/events/{id}` -> torneo completo.
 - `GET /sports/tennis/leagues/{league}/events/{id}/competitions/{cId}/status`
-  → `{period, type:{state:"pre"|"in"|"post", completed}}` (sin `clock`).
+  -> `{period, type:{state:"pre"|"in"|"post", completed}}` (sin `clock`).
 
-Resiliencia (D20): misma estrategia que EspnUfcProvider — backoff exponencial
-con jitter + circuit breaker manual. Codigo compartido via herencia de la logica
-de CB + tenacity de la clase base comun _EspnBaseProvider.
+Resiliencia (D20): heredada de `_EspnBaseProvider`.
 
 Diferencias clave con MMA (D49):
-- Nombres de jugadores inline en `competitors[].name` → no requiere AthleteResolver.
-- Sin `matchNumber` → orden por `date` dentro de cada `court`.
-- Sin `clock` en status → solo `period` (numero de set).
+- Nombres de jugadores inline en `competitors[].name` -> no requiere AthleteResolver.
+- Sin `matchNumber` -> orden por `date` dentro de cada `court`.
+- Sin `clock` en status -> solo `period` (numero de set).
 """
 
 from __future__ import annotations
@@ -21,23 +19,14 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
-import time
 from collections.abc import Callable, Sequence
 from datetime import UTC, datetime, timedelta
-from typing import Any, cast
 from urllib.parse import urlparse
 
 import httpx
-from tenacity import (
-    AsyncRetrying,
-    retry_if_exception,
-    stop_after_attempt,
-    wait_exponential_jitter,
-)
 
 from app.config import settings
-from app.providers.base import Provider
-from app.providers.espn_ufc import CircuitBreakerOpenError, _is_retryable
+from app.providers._base_provider import _EspnBaseProvider
 from app.providers.models import AthleteDetail, CompetitionStatus, Event, EventSummary
 
 logger = logging.getLogger(__name__)
@@ -60,7 +49,7 @@ def _parse_event_date(raw: str) -> datetime:
     return datetime.fromisoformat(value)
 
 
-class EspnTennisProvider(Provider):
+class EspnTennisProvider(_EspnBaseProvider):
     """Provider concreto para ESPN Core API (Tenis ATP/WTA)."""
 
     def __init__(
@@ -75,93 +64,18 @@ class EspnTennisProvider(Provider):
         client: httpx.AsyncClient | None = None,
         clock: Callable[[], float] | None = None,
     ) -> None:
-        self._base_url = (base_url or settings.espn_base_url).rstrip("/")
-        self._league = league or settings.espn_tennis_league
-        self._timeout = timeout if timeout is not None else settings.espn_timeout_seconds
-        self._max_retries = max_retries if max_retries is not None else settings.espn_max_retries
-        self._cb_fails = cb_fails if cb_fails is not None else settings.espn_circuit_breaker_fails
-        self._cb_open_seconds = (
-            cb_open_seconds
-            if cb_open_seconds is not None
-            else settings.espn_circuit_breaker_open_seconds
+        super().__init__(
+            base_url=base_url,
+            league=league or settings.espn_tennis_league,
+            timeout=timeout,
+            max_retries=max_retries,
+            cb_fails=cb_fails,
+            cb_open_seconds=cb_open_seconds,
+            client=client,
+            clock=clock,
         )
-        self._client = client or httpx.AsyncClient(timeout=self._timeout)
-        self._owns_client = client is None
-        self._clock = clock or time.monotonic
-        self._consecutive_failures = 0
-        self._open_until: float = 0.0
 
-    async def aclose(self) -> None:
-        if self._owns_client:
-            await self._client.aclose()
-
-    async def __aenter__(self) -> EspnTennisProvider:
-        return self
-
-    async def __aexit__(self, *exc_info: object) -> None:
-        await self.aclose()
-
-    # --- Circuit breaker -------------------------------------------------
-
-    def _check_circuit(self) -> None:
-        if self._clock() < self._open_until:
-            raise CircuitBreakerOpenError(
-                f"Circuit breaker abierto hasta {self._open_until:.1f}s "
-                f"(fails={self._cb_fails}, open={self._cb_open_seconds}s)"
-            )
-
-    def _on_success(self) -> None:
-        if self._consecutive_failures or self._open_until:
-            logger.debug("Circuit breaker reset tras exito")
-        self._consecutive_failures = 0
-        self._open_until = 0.0
-
-    def _on_failure(self) -> None:
-        self._consecutive_failures += 1
-        if self._consecutive_failures >= self._cb_fails:
-            self._open_until = self._clock() + self._cb_open_seconds
-            self._consecutive_failures = 0
-            logger.warning(
-                "Circuit breaker ABIERTO por %ss tras %s fallos consecutivos",
-                self._cb_open_seconds,
-                self._cb_fails,
-            )
-
-    @property
-    def is_circuit_open(self) -> bool:
-        return self._clock() < self._open_until
-
-    # --- HTTP con tenacity + circuit breaker -----------------------------
-
-    def _url(self, path: str) -> str:
-        return f"{self._base_url}{path}"
-
-    async def _request(self, url: str) -> dict[str, Any]:
-        self._check_circuit()
-        try:
-            data = await self._request_with_retry(url)
-        except Exception as exc:
-            if _is_retryable(exc):
-                self._on_failure()
-            raise
-        self._on_success()
-        return data
-
-    async def _request_with_retry(self, url: str) -> dict[str, Any]:
-        retrying = AsyncRetrying(
-            stop=stop_after_attempt(self._max_retries),
-            wait=wait_exponential_jitter(initial=1, max=60),
-            retry=retry_if_exception(_is_retryable),
-            reraise=True,
-        )
-        async for attempt in retrying:
-            with attempt:
-                response = await self._client.get(url)
-                response.raise_for_status()
-                return cast(dict[str, Any], response.json())
-        raise RuntimeError("retry loop exited without a result")
-
-    # --- Contrato Provider (base.py) -------------------------------------
+    # --- Provider ABC ----------------------------------------------------
 
     async def list_upcoming_events(
         self, *, min_date: datetime | None = None, max_concurrent: int = 4
@@ -195,9 +109,6 @@ class EspnTennisProvider(Provider):
         summaries = [s for s in raw_summaries if s is not None]
 
         cutoff = min_date or datetime.now(UTC)
-        # Tenis: torneos duran 1-2 semanas. Incluir torneos en curso
-        # aunque su fecha de inicio ya paso (ej. Generali Open empezo
-        # 18-jul pero hoy 24-jul sigue activo con semifinales).
         min_cutoff = datetime.now(UTC) - timedelta(days=14)
         if cutoff > min_cutoff:
             cutoff = min_cutoff
