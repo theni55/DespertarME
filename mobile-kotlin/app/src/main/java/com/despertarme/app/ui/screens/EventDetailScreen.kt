@@ -57,12 +57,21 @@ import coil.request.ImageRequest
 import com.despertarme.app.data.remote.BoutOut
 import com.despertarme.app.ui.theme.AccentGreen
 import com.despertarme.app.ui.theme.BlueCorner
+import com.despertarme.app.ui.theme.NbaBlue
 import com.despertarme.app.ui.theme.RedCorner
 import com.despertarme.app.ui.theme.SurfaceDark
 import com.despertarme.app.ui.theme.TextSecondary
 import com.despertarme.app.ui.theme.UfcRed
 
 private val LEAD_OPTIONS = listOf(5, 10, 15, 30)
+private val NBA_QUARTER_LEAD_OPTIONS = listOf(0)
+
+private fun leadOptionsFor(bout: BoutOut): List<Pair<Int, String>> {
+    if (bout.sport == "nba" && bout.matchNumber in 2..4) {
+        return NBA_QUARTER_LEAD_OPTIONS.map { it to "Cuando empieza" }
+    }
+    return LEAD_OPTIONS.map { it to "$it" }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -189,6 +198,26 @@ private fun BoutCard(
                         color = TextSecondary,
                         fontSize = 12.sp,
                     )
+                } else if (bout.sport == "nba") {
+                    val quarterLabel = when (bout.matchNumber) {
+                        1 -> "Inicio del partido"
+                        2 -> "2º cuarto"
+                        3 -> "3º cuarto"
+                        4 -> "4º cuarto"
+                        else -> "Q${bout.matchNumber}"
+                    }
+                    Text(
+                        text = quarterLabel,
+                        color = NbaBlue,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "12 min",
+                        color = TextSecondary,
+                        fontSize = 12.sp,
+                    )
                 } else {
                     Text(
                         text = "#${bout.matchNumber}",
@@ -224,22 +253,23 @@ private fun BoutCard(
             }
             if (!subscribed) {
                 Spacer(modifier = Modifier.height(12.dp))
+                val options = leadOptionsFor(bout)
                 FlowRow(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
-                    LEAD_OPTIONS.forEach { mins ->
+                    options.forEach { (mins, label) ->
                         FilterChip(
                             selected = selectedLead == mins,
                             onClick = { selectedLead = mins },
-                            label = { Text("$mins") },
+                            label = { Text(label) },
                         )
                     }
                 }
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "min antes",
+                    text = if (bout.sport == "nba" && bout.matchNumber in 2..4) "" else "min antes",
                     color = TextSecondary,
                     fontSize = 12.sp,
                 )

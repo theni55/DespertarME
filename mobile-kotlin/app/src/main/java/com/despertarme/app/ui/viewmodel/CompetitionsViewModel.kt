@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.despertarme.app.data.AppContainer
 import com.despertarme.app.data.remote.EventSummaryOut
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -32,9 +33,12 @@ class CompetitionsViewModel(
     private val _state = MutableStateFlow(CompetitionsState())
     val state: StateFlow<CompetitionsState> = _state.asStateFlow()
 
+    private var loadJob: Job? = null
+
     fun load(sport: String) {
+        loadJob?.cancel()
         _state.value = CompetitionsState(isLoading = true)
-        viewModelScope.launch {
+        loadJob = viewModelScope.launch {
             try {
                 val tournaments = when (sport) {
                     "tennis" -> {
@@ -49,6 +53,10 @@ class CompetitionsViewModel(
                         }
                         atp.map { CompetitionUi(it, "tennis", "atp") } +
                             wta.map { CompetitionUi(it, "tennis", "wta") }
+                    }
+                    "nba" -> {
+                        val events = container.api.listEvents("nba", "")
+                        events.map { CompetitionUi(it, "nba", "") }
                     }
                     else -> {
                         val events = container.api.listEvents("mma", "")

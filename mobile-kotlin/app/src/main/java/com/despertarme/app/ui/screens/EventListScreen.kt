@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.despertarme.app.ui.theme.AccentGreen
 import com.despertarme.app.ui.theme.BackgroundDark
+import com.despertarme.app.ui.theme.NbaBlue
 import com.despertarme.app.ui.theme.SurfaceDark
 import com.despertarme.app.ui.theme.TextSecondary
 import com.despertarme.app.ui.theme.UfcRed
@@ -70,6 +71,14 @@ fun EventListScreen(
             subtitle = "ATP + WTA",
             stripColor = AccentGreen,
             onClick = { onSportClick("tennis") },
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        SportCard(
+            icon = Icons.Filled.SportsMma,
+            title = "NBA",
+            subtitle = "National Basketball Association",
+            stripColor = NbaBlue,
+            onClick = { onSportClick("nba") },
         )
     }
 }

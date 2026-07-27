@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.despertarme.app.ui.theme.AccentGreen
 import com.despertarme.app.ui.theme.BackgroundDark
+import com.despertarme.app.ui.theme.NbaBlue
 import com.despertarme.app.ui.theme.SurfaceDark
 import com.despertarme.app.ui.theme.TextSecondary
 import com.despertarme.app.ui.theme.UfcRed
@@ -54,6 +55,7 @@ fun CompetitionsScreen(
     Column(modifier = Modifier.fillMaxSize().background(BackgroundDark)) {
         val sportLabel = when (sport) {
             "tennis" -> "Tenis"
+            "nba" -> "NBA"
             else -> "MMA"
         }
         Row(
@@ -99,6 +101,7 @@ fun CompetitionsScreen(
                     val atpList = state.tournaments.filter { it.league == "atp" }
                     val wtaList = state.tournaments.filter { it.league == "wta" }
                     val mmaList = state.tournaments.filter { it.sport == "mma" }
+                    val nbaList = state.tournaments.filter { it.sport == "nba" }
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
@@ -140,6 +143,16 @@ fun CompetitionsScreen(
                                 )
                             }
                         }
+                        if (nbaList.isNotEmpty()) {
+                            items(nbaList, key = { "nba-${it.event.id}" }) { comp ->
+                                CompetitionCard(
+                                    comp = comp,
+                                    onClick = {
+                                        onEventClick(comp.event.id, comp.sport, comp.league)
+                                    },
+                                )
+                            }
+                        }
                         item { Spacer(modifier = Modifier.height(24.dp)) }
                     }
                 }
@@ -172,6 +185,7 @@ private fun CompetitionCard(
     }
     val stripColor = when (comp.sport) {
         "tennis" -> AccentGreen
+        "nba" -> NbaBlue
         else -> UfcRed
     }
     Card(

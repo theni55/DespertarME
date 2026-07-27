@@ -92,7 +92,11 @@ class SubscriptionsViewModel(
             val label = if (bout != null) {
                 "${bout.red?.name ?: "TBD"} vs ${bout.blue?.name ?: "TBD"}"
             } else {
-                if (sub.sport == "tennis") "Partido #${sub.targetMatchNumber}" else "Combate #${sub.targetMatchNumber}"
+                when (sub.sport) {
+                    "tennis" -> "Partido #${sub.targetMatchNumber}"
+                    "nba" -> if (sub.targetMatchNumber == 1) "Inicio" else "Cuarto #${sub.targetMatchNumber}"
+                    else -> "Combate #${sub.targetMatchNumber}"
+                }
             }
             SubscriptionUi(
                 sub = sub,

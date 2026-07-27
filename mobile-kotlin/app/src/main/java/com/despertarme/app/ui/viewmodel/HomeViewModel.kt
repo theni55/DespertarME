@@ -61,7 +61,12 @@ class HomeViewModel(
                             .getOrDefault(emptyList())
                             .map { Triple(it, "tennis", "wta") }
                     }
-                    (mmaDeferred.await() + atpDeferred.await() + wtaDeferred.await())
+                    val nbaDeferred = async {
+                        runCatching { container.api.listEvents("nba", "") }
+                            .getOrDefault(emptyList())
+                            .map { Triple(it, "nba", "") }
+                    }
+                    (mmaDeferred.await() + atpDeferred.await() + wtaDeferred.await() + nbaDeferred.await())
                         .sortedBy { (event, _, _) -> parseDateEpoch(event.date) }
                         .take(MAX_FEATURED)
                 }

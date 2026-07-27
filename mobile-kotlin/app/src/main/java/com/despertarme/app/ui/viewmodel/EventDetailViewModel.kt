@@ -8,6 +8,7 @@ import com.despertarme.app.alarm.PendingAlarm
 import com.despertarme.app.alarm.PendingAlarmStorage
 import com.despertarme.app.data.AppContainer
 import com.despertarme.app.ui.screens.EventDetailState
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -26,6 +27,8 @@ class EventDetailViewModel(
     var currentSport: String = "mma"
     var currentLeague: String = ""
 
+    private var loadJob: Job? = null
+
     fun clearSnack() { _snack.value = null }
 
     fun load(eventId: String) {
@@ -34,10 +37,13 @@ class EventDetailViewModel(
             return
         }
         if (_state.value.event?.id == eventId && _state.value.error == null) return
+        loadJob?.cancel()
         _state.value = EventDetailState(isLoading = true)
-        viewModelScope.launch {
+        val sport = currentSport
+        val league = currentLeague
+        loadJob = viewModelScope.launch {
             try {
-                val card = container.api.getEvent(eventId, currentSport, currentLeague)
+                val card = container.api.getEvent(eventId, sport, league)
                 _state.value = EventDetailState(isLoading = false, event = card)
             } catch (t: Throwable) {
                 _state.value = EventDetailState(

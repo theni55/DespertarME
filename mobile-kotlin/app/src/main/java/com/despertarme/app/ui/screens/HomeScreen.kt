@@ -51,6 +51,7 @@ import com.despertarme.app.data.remote.BoutAthleteOut
 import com.despertarme.app.ui.theme.BackgroundDark
 import com.despertarme.app.ui.theme.BlueCorner
 import com.despertarme.app.ui.theme.ErrorRed
+import com.despertarme.app.ui.theme.NbaBlue
 import com.despertarme.app.ui.theme.PosterSurface
 import com.despertarme.app.ui.theme.RedCorner
 import com.despertarme.app.ui.theme.SurfaceDark
@@ -178,19 +179,21 @@ private fun HomeEventCard(
                 "wta" -> "WTA" to "Tenis"
                 else -> "Tenis" to "Tenis"
             }
+            "nba" -> "NBA" to "NBA"
             else -> "UFC" to "MMA"
         }
-        val boutCountLabel = if (ui.sport == "tennis") {
-            val n = ui.boutCount
-            if (n != null && n > 0) "partidos" else "partidos"
-        } else {
-            val n = ui.boutCount
-            if (n != null && n > 0) "combates" else "combates"
+        val boutCountLabel = when (ui.sport) {
+            "tennis" -> "partidos"
+            "nba" -> "cuartos"
+            else -> "combates"
         }
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Brush.horizontalGradient(listOf(UfcRed, UfcRedDeep)))
+                .background(Brush.horizontalGradient(listOf(
+                    if (ui.sport == "nba") NbaBlue else UfcRed,
+                    if (ui.sport == "nba") NbaBlue.copy(alpha = 0.7f) else UfcRedDeep
+                )))
                 .padding(horizontal = 14.dp, vertical = 9.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -298,7 +301,7 @@ private fun HomeEventCard(
             val blue = ui.mainBlue?.name
             if (red != null || blue != null) {
                 Spacer(modifier = Modifier.height(3.dp))
-                val mainLabel = if (ui.sport == "tennis") "Proximo" else "Main event"
+                val mainLabel = if (ui.sport == "tennis" || ui.sport == "nba") "Proximo" else "Main event"
                 Text(
                     text = "$mainLabel: ${red ?: "TBD"} vs ${blue ?: "TBD"}",
                     color = TextSecondary,
