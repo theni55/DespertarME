@@ -132,15 +132,34 @@ fun EventDetailScreen(
                             modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp),
                         )
                     }
-                    items(state.event.bouts, key = { it.id }) { bout ->
-                        BoutCard(
-                            bout = bout,
-                            // El backend lista los combates en orden cronologico:
-                            // el primero es el proximo en suceder (evento futuro).
-                            isNext = bout.id == state.event.bouts.firstOrNull()?.id,
-                            subscribed = state.subscribedBouts.contains(bout.id),
-                            onSubscribe = { lead -> onSubscribe(bout, lead) },
-                        )
+                    val bouts = state.event.bouts
+                    val isNba = bouts.firstOrNull()?.sport == "nba"
+                    if (isNba) {
+                        // NBA: el backend sirve 4 bouts sintéticos Q1-Q4 por partido
+                        // (id "{eventId}_qN"). Se agrupan en UNA card por partido para
+                        // que no parezcan 4 partidos distintos (solo presentación).
+                        val games = bouts
+                            .groupBy { it.id.substringBefore("_q") }
+                            .values
+                            .toList()
+                        items(games, key = { it.first().id.substringBefore("_q") }) { gameBouts ->
+                            NbaGameCard(
+                                bouts = gameBouts.sortedBy { it.matchNumber },
+                                subscribedBouts = state.subscribedBouts,
+                                onSubscribe = onSubscribe,
+                            )
+                        }
+                    } else {
+                        items(bouts, key = { it.id }) { bout ->
+                            BoutCard(
+                                bout = bout,
+                                // El backend lista los combates en orden cronologico:
+                                // el primero es el proximo en suceder (evento futuro).
+                                isNext = bout.id == bouts.firstOrNull()?.id,
+                                subscribed = state.subscribedBouts.contains(bout.id),
+                                onSubscribe = { lead -> onSubscribe(bout, lead) },
+                            )
+                        }
                     }
                     item { Spacer(modifier = Modifier.height(24.dp)) }
                 }
@@ -291,6 +310,140 @@ private fun BoutCard(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(text = "Avisando ✓", color = Color(0xFF4ADE80), fontWeight = FontWeight.SemiBold)
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Card única por partido NBA: cabecera con equipos + hora, y dentro los avisos
+ * de los 4 cuartos agrupados. Q1 con selector de lead (5/10/15/30 min antes),
+ * Q2-Q4 solo "Cuando empieza". Solo presentación — los bouts/ids del backend
+ * no cambian.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun NbaGameCard(
+    bouts: List<BoutOut>,
+    subscribedBouts: Set<String>,
+    onSubscribe: (BoutOut, Int) -> Unit,
+) {
+    val q1 = bouts.firstOrNull { it.matchNumber == 1 } ?: bouts.first()
+    var selectedLead by remember { mutableStateOf(15) }
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = SurfaceDark),
+        border = BorderStroke(1.dp, NbaBlue.copy(alpha = 0.5f)),
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "NBA",
+                    color = NbaBlue,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.sp,
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = formatDate(q1.date),
+                    color = TextSecondary,
+                    fontSize = 12.sp,
+                )
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                AthleteColumn(q1.red?.name, q1.red?.headshotUrl, RedCorner)
+                Text(
+                    text = "VS",
+                    color = Color.White.copy(alpha = 0.7f),
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(horizontal = 12.dp),
+                )
+                AthleteColumn(q1.blue?.name, q1.blue?.headshotUrl, BlueCorner)
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                text = "AVISOS",
+                color = TextSecondary,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.sp,
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            bouts.forEach { bout ->
+                val quarterLabel = when (bout.matchNumber) {
+                    1 -> "Inicio del partido"
+                    2 -> "2º cuarto"
+                    3 -> "3º cuarto"
+                    4 -> "4º cuarto"
+                    else -> "Q${bout.matchNumber}"
+                }
+                val isQ1 = bout.matchNumber == 1
+                val subscribed = subscribedBouts.contains(bout.id)
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = quarterLabel,
+                            color = Color.White,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        if (isQ1 && !subscribed) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp),
+                            ) {
+                                LEAD_OPTIONS.forEach { mins ->
+                                    FilterChip(
+                                        selected = selectedLead == mins,
+                                        onClick = { selectedLead = mins },
+                                        label = { Text("$mins") },
+                                    )
+                                }
+                            }
+                            Text(
+                                text = "min antes",
+                                color = TextSecondary,
+                                fontSize = 11.sp,
+                            )
+                        } else if (!isQ1 && !subscribed) {
+                            Text(
+                                text = "Cuando empieza",
+                                color = TextSecondary,
+                                fontSize = 11.sp,
+                            )
+                        }
+                    }
+                    if (subscribed) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFF4ADE80)),
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Avisando ✓",
+                                color = Color(0xFF4ADE80),
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                        }
+                    } else {
+                        OutlinedButton(
+                            onClick = { onSubscribe(bout, if (isQ1) selectedLead else 0) },
+                        ) {
+                            Text(text = "Avisarme", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
                 }
             }
         }
