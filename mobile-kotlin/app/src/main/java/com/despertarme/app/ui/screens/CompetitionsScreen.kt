@@ -1,5 +1,6 @@
 package com.despertarme.app.ui.screens
 
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -20,6 +21,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -27,9 +29,14 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -102,6 +109,10 @@ fun CompetitionsScreen(
                     val wtaList = state.tournaments.filter { it.league == "wta" }
                     val mmaList = state.tournaments.filter { it.sport == "mma" }
                     val nbaList = state.tournaments.filter { it.sport == "nba" }
+                    // Acordeones ATP/WTA colapsados por defecto (decisión del owner):
+                    // la lista plana mezclaba demasiados torneos.
+                    var atpExpanded by remember { mutableStateOf(false) }
+                    var wtaExpanded by remember { mutableStateOf(false) }
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
@@ -109,28 +120,42 @@ fun CompetitionsScreen(
                     ) {
                         if (atpList.isNotEmpty()) {
                             item {
-                                SectionHeader(title = "ATP")
-                            }
-                            items(atpList, key = { "atp-${it.event.id}" }) { comp ->
-                                CompetitionCard(
-                                    comp = comp,
-                                    onClick = {
-                                        onEventClick(comp.event.id, comp.sport, comp.league)
-                                    },
+                                AccordionHeader(
+                                    title = "ATP",
+                                    count = atpList.size,
+                                    expanded = atpExpanded,
+                                    onToggle = { atpExpanded = !atpExpanded },
                                 )
+                            }
+                            if (atpExpanded) {
+                                items(atpList, key = { "atp-${it.event.id}" }) { comp ->
+                                    CompetitionCard(
+                                        comp = comp,
+                                        onClick = {
+                                            onEventClick(comp.event.id, comp.sport, comp.league)
+                                        },
+                                    )
+                                }
                             }
                         }
                         if (wtaList.isNotEmpty()) {
                             item {
-                                SectionHeader(title = "WTA")
-                            }
-                            items(wtaList, key = { "wta-${it.event.id}" }) { comp ->
-                                CompetitionCard(
-                                    comp = comp,
-                                    onClick = {
-                                        onEventClick(comp.event.id, comp.sport, comp.league)
-                                    },
+                                AccordionHeader(
+                                    title = "WTA",
+                                    count = wtaList.size,
+                                    expanded = wtaExpanded,
+                                    onToggle = { wtaExpanded = !wtaExpanded },
                                 )
+                            }
+                            if (wtaExpanded) {
+                                items(wtaList, key = { "wta-${it.event.id}" }) { comp ->
+                                    CompetitionCard(
+                                        comp = comp,
+                                        onClick = {
+                                            onEventClick(comp.event.id, comp.sport, comp.league)
+                                        },
+                                    )
+                                }
                             }
                         }
                         if (mmaList.isNotEmpty()) {
@@ -162,15 +187,47 @@ fun CompetitionsScreen(
 }
 
 @Composable
-private fun SectionHeader(title: String) {
-    Text(
-        text = title,
-        color = Color.White.copy(alpha = 0.7f),
-        fontSize = 14.sp,
-        fontWeight = FontWeight.Bold,
-        letterSpacing = 1.sp,
-        modifier = Modifier.padding(top = 4.dp, bottom = 2.dp),
+private fun AccordionHeader(
+    title: String,
+    count: Int,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+) {
+    val chevronRotation by animateFloatAsState(
+        targetValue = if (expanded) 180f else 0f,
+        label = "chevron-$title",
     )
+    Card(
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onToggle),
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = SurfaceDark),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = title,
+                color = Color.White,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Black,
+                letterSpacing = 2.sp,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                text = "$count torneos",
+                color = TextSecondary,
+                fontSize = 13.sp,
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Icon(
+                imageVector = Icons.Filled.KeyboardArrowDown,
+                contentDescription = if (expanded) "Colapsar $title" else "Expandir $title",
+                tint = TextSecondary,
+                modifier = Modifier.rotate(chevronRotation),
+            )
+        }
+    }
 }
 
 @Composable
