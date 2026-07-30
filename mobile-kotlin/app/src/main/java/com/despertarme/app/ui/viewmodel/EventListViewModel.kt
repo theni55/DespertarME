@@ -30,7 +30,7 @@ class EventListViewModel(
             try {
                 val events = container.api.listEvents()
                 _state.value = EventListState(isLoading = false, events = events)
-            } catch (t: Throwable) {
+            } catch (t: Exception) {
                 _state.value = EventListState(
                     isLoading = false,
                     error = "No se pudieron cargar los eventos: ${t.message ?: "desconocido"}",

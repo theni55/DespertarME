@@ -51,7 +51,7 @@ class SubscriptionsViewModel(
                     subscriptions = uiSubs,
                     alerts = alerts,
                 )
-            } catch (t: Throwable) {
+            } catch (t: Exception) {
                 _state.value = _state.value.copy(
                     isLoading = false,
                     error = "No se pudieron cargar las alertas: ${t.message ?: "desconocido"}",
@@ -73,7 +73,7 @@ class SubscriptionsViewModel(
                 if (current != null) {
                     AlarmScheduler.cancel(DespertarMeApp.instance, current.boutId)
                 }
-            } catch (t: Throwable) {
+            } catch (t: Exception) {
                 _snack.value = "No se pudo cancelar: ${t.message ?: "error"}"
             }
         }

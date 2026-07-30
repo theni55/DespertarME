@@ -45,7 +45,7 @@ class EventDetailViewModel(
             try {
                 val card = container.api.getEvent(eventId, sport, league)
                 _state.value = EventDetailState(isLoading = false, event = card)
-            } catch (t: Throwable) {
+            } catch (t: Exception) {
                 _state.value = EventDetailState(
                     isLoading = false,
                     error = "No se pudo cargar el evento: ${t.message ?: "desconocido"}",
@@ -68,7 +68,7 @@ class EventDetailViewModel(
                 }
                 val card = container.api.getEvent(next.id, currentSport, currentLeague)
                 _state.value = EventDetailState(isLoading = false, event = card)
-            } catch (t: Throwable) {
+            } catch (t: Exception) {
                 _state.value = EventDetailState(
                     isLoading = false,
                     error = "No se pudo cargar el evento: ${t.message ?: "desconocido"}",
@@ -117,7 +117,7 @@ class EventDetailViewModel(
                         fired = false,
                     ),
                 )
-            } catch (t: Throwable) {
+            } catch (t: Exception) {
                 _snack.value = "No se pudo crear la alerta: ${t.message ?: "error"}"
             }
         }

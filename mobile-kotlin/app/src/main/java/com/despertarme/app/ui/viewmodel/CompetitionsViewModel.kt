@@ -64,7 +64,7 @@ class CompetitionsViewModel(
                     }
                 }
                 _state.value = CompetitionsState(isLoading = false, tournaments = tournaments)
-            } catch (t: Throwable) {
+            } catch (t: Exception) {
                 _state.value = CompetitionsState(
                     isLoading = false,
                     error = "No se pudieron cargar las competiciones: ${t.message ?: "desconocido"}",

@@ -70,7 +70,7 @@ class HomeViewModel(
                         .sortedBy { (event, _, _) -> parseDateEpoch(event.date) }
                         .take(MAX_FEATURED)
                 }
-            } catch (t: Throwable) {
+            } catch (t: Exception) {
                 _state.value = HomeState(
                     isLoading = false,
                     error = "No se pudieron cargar los eventos: ${t.message ?: "desconocido"}",
