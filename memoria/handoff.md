@@ -6,6 +6,30 @@
 
 ## Última sesión
 
+**Fecha:** 2026-07-30 · **Sesión UI fixes tenis/NBA — Fases 1-4 del plan `memoria/plan-ui-fixes-tenis-nba.md` completadas + baseUrl Railway restaurado + checks backend verdes. Rama `feature/tenis-nba`. PENDIENTE: assembleDebug/emulador, merge a dev y deploy (portátil Windows offline).**
+
+**Hecho en esta sesión (VPS Linux, sin toolchain Android):**
+
+1. **Fase 1 (E5)**: `catch (Throwable)` → `catch (Exception)` en los 5 ViewModels (Competitions, Home, Subscriptions, EventDetail, EventList). Los `Throwable` de `AppContainer.kt` y `DespertarMeFirebaseService.kt` NO se tocaron (fuera del alcance E5: no son corutinas de ViewModel).
+2. **Fase 2**: acordeones ATP/WTA en `CompetitionsScreen.kt` — `AccordionHeader` clicable con chevron rotatorio (`animateFloatAsState`), ambos colapsados por defecto, contador "N torneos", keys compuestas intactas.
+3. **Fase 3**: `HomeViewModel.selectHomeEvents()` — 1 destacado (el más próximo) por deporte + relleno cronológico deduplicado (clave `sport-league-id`), orden final por fecha. `MAX_FEATURED` 4 → 6.
+4. **Fase 4**: `EventDetailScreen.kt` — para NBA agrupa los 4 bouts sintéticos por `id.substringBefore("_q")` en una sola `NbaGameCard`: cabecera equipos + 4 filas de aviso (Q1 con chips 5/10/15/30, Q2-Q4 "Cuando empieza"), estado "Avisando ✓" por fila, cada fila suscribe contra su bout_id propio. Cero cambios de backend.
+5. **Fase 5 parcial**: `AppContainer.baseUrl` restaurado a `https://despertarme-production.up.railway.app/`. Backend verificado en la VPS con `.venv` python3.12 nuevo: **pytest 106/106, ruff, black, mypy limpios**.
+6. **Fase 6 parcial**: `validacion-sesion-fable5-home-winamax.md` movido de la raíz a `memoria/` (git mv), plan commiteado con checkboxes marcados.
+
+**Commits (atómicos por fase):** fix ViewModels, acordeones, home destacados, card NBA, baseUrl Railway, docs.
+
+**BLOQUEADO / pendiente próxima sesión (requiere portátil prt-jromero online):**
+1. `assembleDebug` verde con los cambios de Fases 1-4 (no se ha compilado Kotlin: la VPS no tiene Android SDK; sintaxis revisada a mano).
+2. Smoke en emulador: acordeones tenis, Home 3 deportes, card NBA única, Mis Alertas con labels correctos.
+3. Merge `feature/tenis-nba` → `dev`, push, deploy Railway.
+4. Smoke post-deploy (health + eventos de los 3 deportes) + APK contra Railway sin `adb reverse`.
+5. Push de `feature/tenis-nba` a origin (hecho desde la VPS si hay red; verificar).
+
+---
+
+## Última sesión
+
 **Fecha:** 2026-07-27 · **Sesión NBA (cont.) — Refactor providers + Fase N6 Android completada. App funcional en emulador con los 3 deportes (MMA + Tenis + NBA). Rama `feature/nba`. Sin merge a `feature/tennis`.**
 
 **Contexto:** la app mostraba datos de MMA tanto para Tenis como para NBA. Tras diagnóstico se descubrió que `AppContainer.baseUrl` apuntaba a Railway (`despertarme-production.up.railway.app`) que NO tiene el código NBA (rama `feature/nba` sin deployar) y posiblemente tenía el bug pre-fix de tenis (Sesión 24). Cambiado a `http://10.0.2.2:8000/` para desarrollo local. Además se ejecutó el refactor de código duplicado entre providers y resolvers.

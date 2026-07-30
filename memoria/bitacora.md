@@ -1140,3 +1140,17 @@ plataforma (Vercel/CF Pages descartados: serverless no soporta el scheduler
 - **Errores**: E1 (key collision), E2 (tenis cutoff), E3 (baseUrl Railway sin tenis)
 - **Pendiente**: cuestionario diseño visual para proxima sesion, headshots ausentes, restaurar baseUrl Railway
 - **Memorias actualizadas**: handoff.md, bitacora.md (esta entrada), fases.md (Fase 8f checkboxes), AGENTS.md (indice)
+
+
+---
+
+## Sesión 26 — UI fixes tenis/NBA (Fases 1-5 parcial) (2026-07-30)
+
+- Ejecutado `memoria/plan-ui-fixes-tenis-nba.md` desde la VPS Linux (portátil Windows offline → sin build/emulador).
+- **Fase 1 (E5)**: `catch (Throwable)` → `catch (Exception)` en los 5 ViewModels.
+- **Fase 2**: acordeones ATP/WTA colapsados por defecto en CompetitionsScreen (chevron animado, contador de torneos).
+- **Fase 3**: `selectHomeEvents()` en HomeViewModel — 1 destacado por deporte + relleno cronológico dedup, orden final por fecha, MAX_FEATURED=6.
+- **Fase 4**: `NbaGameCard` — una card por partido NBA con los 4 avisos de cuarto dentro (Q1 selector lead, Q2-Q4 "Cuando empieza"). Agrupación por prefijo del bout id, solo presentación.
+- **Fase 5 parcial**: baseUrl Railway restaurado; backend en VPS: pytest 106/106, ruff/black/mypy limpios (venv python3.12 nuevo — el pyproject exige >=3.12).
+- **Fase 6 parcial**: doc huérfano `validacion-sesion-fable5-home-winamax.md` movido a `memoria/`; checkboxes del plan marcados.
+- **Pendiente**: assembleDebug + smokes en emulador, merge a dev, deploy Railway y smoke post-deploy — bloqueado por portátil offline.
