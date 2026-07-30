@@ -212,8 +212,15 @@ async def get_event_detail(
     """
     provider = _get_provider(sport, league)
     resolver = _resolver or AthleteResolver(provider)
+    # Detectar sufijo _doubles para filtrar por modalidad (solo tenis).
+    base_event_id = event_id
+    doubles_only = False
+    if sport == "tennis" and event_id.endswith("_doubles"):
+        base_event_id = event_id[: -len("_doubles")]
+        doubles_only = True
+
     try:
-        event = await provider.get_event_card(event_id)
+        event = await provider.get_event_card(base_event_id)
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -293,6 +300,11 @@ async def get_event_detail(
                 continue
             if (red.name or "").upper() == "TBD" or (blue.name or "").upper() == "TBD":
                 continue
+            # Filtrar por modalidad si se pidio solo doubles.
+            if doubles_only:
+                bout_type = (b.weight_class.text if b.weight_class else "") or ""
+                if "Doubles" not in bout_type:
+                    continue
 
         bouts_out.append(
             BoutOut(
@@ -316,8 +328,8 @@ async def get_event_detail(
         )
 
     return EventCardOut(
-        id=event.id,
-        name=event.name,
+        id=event_id,
+        name=event.name if not doubles_only else f"{event.name} Dobles",
         date=_parse_iso_z(event.date),
         image_url=None,
         bouts=bouts_out,
