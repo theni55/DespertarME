@@ -58,6 +58,7 @@ import com.despertarme.app.data.remote.BoutOut
 import java.time.OffsetDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.util.Locale
 import com.despertarme.app.ui.theme.AccentGreen
 import com.despertarme.app.ui.theme.BlueCorner
 import com.despertarme.app.ui.theme.NbaBlue
@@ -561,11 +562,11 @@ private fun initialsOf(name: String?): String? {
     return initial.uppercase()
 }
 
-private fun formatDate(iso: String): String {
-    return runCatching {
-        if (iso.length >= 16) "${iso.substring(0, 10)} ${iso.substring(11, 16)} UTC" else iso
-    }.getOrDefault(iso)
-}
+private fun formatDate(iso: String): String = runCatching {
+    val zoned = OffsetDateTime.parse(iso).atZoneSameInstant(ZoneId.systemDefault())
+    val locale = Locale("es", "ES")
+    zoned.format(DateTimeFormatter.ofPattern("d MMM \u00b7 HH:mm", locale))
+}.getOrDefault(iso)
 
 private fun formatBoutTime(iso: String): String = runCatching {
     OffsetDateTime.parse(iso).atZoneSameInstant(ZoneId.systemDefault())
