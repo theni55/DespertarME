@@ -99,6 +99,9 @@ class EspnTennisProvider(_EspnBaseProvider):
                 except Exception:
                     logger.warning("No se pudo cargar resumen del torneo %s", eid)
                     return None
+            ev_status = (ev_data.get("status") or {}).get("type") or {}
+            if ev_status.get("state") == "post":
+                return None
             return EventSummary(
                 id=ev_data["id"],
                 name=ev_data.get("name", ""),

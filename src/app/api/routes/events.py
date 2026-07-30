@@ -280,6 +280,20 @@ async def get_event_detail(
 
     bouts_out: list[BoutOut] = []
     for b in event.bouts:
+        red = b.red_corner
+        blue = b.blue_corner
+
+        # Saltar combates ya acabados (winner=true) — MMA + Tenis.
+        if (red and red.winner) or (blue and blue.winner):
+            continue
+
+        # Tenis: saltar partidos cuyos jugadores aun no se conocen (TBD).
+        if sport == "tennis":
+            if red is None or blue is None:
+                continue
+            if (red.name or "").upper() == "TBD" or (blue.name or "").upper() == "TBD":
+                continue
+
         bouts_out.append(
             BoutOut(
                 id=b.id,
