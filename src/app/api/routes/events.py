@@ -31,7 +31,7 @@ from app.domain.entities import Card
 from app.providers.athletes import AthleteResolver
 from app.providers.base import Provider
 from app.providers.espn_nba import EspnNbaProvider
-from app.providers.espn_tennis import EspnTennisProvider
+from app.providers.espn_tennis import _TOURNAMENT_DISPLAY_NAMES, EspnTennisProvider
 from app.providers.espn_ufc import EspnUfcProvider
 from app.providers.models import Bout as ProviderBout
 from app.providers.models import Competitor as ProviderCompetitor
@@ -215,9 +215,12 @@ async def get_event_detail(
     # Detectar sufijo _doubles para filtrar por modalidad (solo tenis).
     base_event_id = event_id
     doubles_only = False
+    singles_only = False
     if sport == "tennis" and event_id.endswith("_doubles"):
         base_event_id = event_id[: -len("_doubles")]
         doubles_only = True
+    elif sport == "tennis":
+        singles_only = True
 
     try:
         event = await provider.get_event_card(base_event_id)
@@ -300,10 +303,12 @@ async def get_event_detail(
                 continue
             if (red.name or "").upper() == "TBD" or (blue.name or "").upper() == "TBD":
                 continue
-            # Filtrar por modalidad si se pidio solo doubles.
-            if doubles_only:
+            # Filtrar por modalidad si se pidio solo doubles o singles.
+            if doubles_only or singles_only:
                 bout_type = (b.weight_class.text if b.weight_class else "") or ""
-                if "Doubles" not in bout_type:
+                if doubles_only and "Doubles" not in bout_type:
+                    continue
+                if singles_only and "Singles" not in bout_type:
                     continue
 
         bouts_out.append(
@@ -327,9 +332,16 @@ async def get_event_detail(
             )
         )
 
+    # Nombre "comun" para tenis (mapping), manteniendo el de ESPN como fallback.
+    display_name = event.name
+    if sport == "tennis":
+        tournament_id = base_event_id.split("-")[0]
+        mapped = _TOURNAMENT_DISPLAY_NAMES.get((league or "atp", tournament_id), event.name)
+        display_name = mapped
+
     return EventCardOut(
         id=event_id,
-        name=event.name if not doubles_only else f"{event.name} Dobles",
+        name=display_name if not doubles_only else f"{display_name} Dobles",
         date=_parse_iso_z(event.date),
         image_url=None,
         bouts=bouts_out,
