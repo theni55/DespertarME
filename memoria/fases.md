@@ -366,6 +366,8 @@ Sin Android Studio aún → el continuador instala Android Studio + emulador API
 - [ ] Requisito mínimo iOS 26 (adopción mayoritaria esperada para cuando se ejecute esta fase). Sin fallback a Critical Alert — el entitlement es discrecional de Apple y lento.
 - [ ] Mismo contrato API + Retrofit-equivalente en Swift (async/await + URLSession), mismo `device_id` UUID v4ersistente en Keychain.
 
+---
+
 ### Rediseño UI estilo Winamax (piloto Home — Sesión 23, D46/D47)
 
 **Alcance del piloto**: solo `HomeScreen` + cambios de navegación dependientes (validación en `validacion-sesion-fable5-home-winamax.md`).
@@ -380,6 +382,120 @@ Sin Android Studio aún → el continuador instala Android Studio + emulador API
 - [ ] Replicar el estilo en `EventDetailScreen`/`BoutCard` (sesión posterior, si el piloto valida).
 - [ ] Fusión visual profunda Buscar/EventList (fuera del piloto; decisión #12 tomada por default — confirmar con el owner).
 
+---
 
+## Fase 8 — Tenis (ATP/WTA) 🔶 en curso (Sesión 23, rama `feature/tenis`)
 
+Plan detallado en `memoria/plan-tenis.md`. Decisiones D51-D54.
 
+### Fase 8a — ESPN Tennis Provider ✅
+
+- [x] `src/app/providers/espn_tennis.py`: `EspnTennisProvider(Provider)` — reutiliza circuit breaker + tenacity
+- [x] DTOs tenis en `providers/models.py`: `TennisCourt`, `TennisRound`, `Competitor.name`, `Bout.court`/`round`/`match_number` optional
+- [x] `providers/__init__.py`: exportar `EspnTennisProvider`
+- [ ] `tests/test_espn_tennis.py` con respx + fixtures grabadas
+
+### Fase 8b — Generalización del dominio ✅
+
+- [x] `domain/entities.py`: `Bout.court`, `Bout.sport`, `Card.sport`, `Card.previous_bout()` por court+date
+- [x] `BoutStatus.sport`, `estimated_duration_seconds`/`elapsed_seconds` sport-aware
+
+### Fase 8c — DB + API multi-sport ✅
+
+- [x] `db/models/subscriptions.py`: columna `sport: str = "mma"`
+- [x] Migración Alembic autogenerada (`8df6f9297a34`)
+- [x] `config.py`: `espn_tennis_league`, `buffer_intermatch_tennis_seconds`
+- [x] `api/routes/events.py`: provider registry `dict[tuple, Provider]`, `?sport=` + `?league=` query params
+- [x] `api/schemas.py`: `BoutOut` (court, sport, round_description), `BoutSubscriptionCreate`/`Out` (sport)
+- [x] `api/routes/subscriptions.py`: persistir `sport`
+
+### Fase 8d — Poller + Scheduler multi-sport ✅
+
+- [x] `engine/poller.py`: providers dict, agrupar por `(sport, event_id)`, mapeo sport-aware
+- [x] `scheduler.py`: construir dict de providers, fakeredis en dev (D55)
+- [x] `main.py`: close de todos los providers
+
+### Fase 8e — Tests + smoke 🔶
+
+- [x] Tests existentes: 80/80 verdes
+- [x] `ruff` + `black` + `mypy` limpios
+- [x] `scripts/probe_tennis.py`
+- [x] **Verificación en vivo**: pipeline ATP verificado (Bublik vs Etcheverry, Generali Open)
+- [ ] `tests/test_espn_tennis.py` con fixtures grabadas
+
+### Fase 8f — App Android ✅ (Sesión 24, rama `feature/tenis`)
+
+- [x] `DespertarApi.kt`: `@Query("sport")` en listEvents/getEvent
+- [x] DTOs Kotlin: `BoutSubscriptionCreate.sport`, `BoutOut.court`/`roundDescription`
+- [x] Home: fetch multi-sport (paralelo mma+atp+wta), cards mixtas con labels dinamicos
+- [x] EventDetail tenis: court badge (AccentGreen), roundDescription, "N sets" vs "Nr"
+- [x] Buscar: navegacion jerarquica (Deportes → Competiciones → EventDetail)
+- [x] CompetitionsScreen: secciones ATP/WTA, cards torneo con fecha y liga
+- [x] SubscriptionsScreen: badge de deporte (MMA/Tenis)
+
+---
+
+## Fase NBA — MVP básico multi-cuarto 🔶 en curso (rama `feature/nba` desde `feature/tenis`)
+
+Plan detallado en el handoff de la sesión NBA. Decisiones **D56-D58**. Modelo "Bout = Cuarto" + TeamResolver.
+
+### N1 — ESPN NBA Provider ✅
+
+- [x] `src/app/providers/espn_nba.py`: `EspnNbaProvider(Provider)` — reutiliza `CircuitBreakerOpenError`/`_is_retryable` de `espn_ufc`.
+- [x] Síntesis de 4 quarters por evento: `Bout.id="{eventId}_q{N}"`, `matchNumber=N`, `cardSegment="Regulation"`, `format.regulation.periods=1 clock=720`.
+- [x] Remapeo `order 0/1 (home/away) -> 1/2 (red/blue corner)`.
+- [x] `get_competition_status` deriva estado del cuarto N desde el status global (period+state), con cache en memoria 3 s.
+- [x] `get_team(team_id)` con probing de years.
+- [x] DTOs en `providers/models.py`: `TeamRef`, `TeamLogo`, `TeamDetail`, `Competitor.team`.
+- [x] `providers/__init__.py`: exports `EspnNbaProvider`, `TeamResolver`, `ResolvedTeam`, `TeamRef`, `TeamDetail`.
+- [x] `src/app/providers/teams.py`: `TeamResolver` mirror `AthleteResolver` (Redis TTL 30 días + memoria).
+
+### N2 — Generalización del dominio + buffer asimétrico ✅
+
+- [x] `domain/entities.py`: `Bout.estimated_duration_seconds` branch NBA (1 quarter = `periods * round_seconds`), `BoutStatus.elapsed_seconds` branch NBA (`(period-1)*720 + (720-clock)`).
+- [x] `Card.previous_bout` branch NBA: `mn - 1` (opuesto a MMA `mn + 1`).
+- [x] `engine/estimator.py`: `EstimatorConfig.buffer_for: Callable[[Bout], timedelta | None] | None`. Si callback devuelve None → cae al `buffer_intercombate_seconds` fijo (comportamiento pre-NBA).
+- [x] `scheduler.py`: NBA provider + `_nba_buffer_for(target)` callback (Q3 = halftime 900s, otros = 120s comercial).
+
+### N3 — Poller + síntesis de BoutStatus por cuarto ✅
+
+- [x] Poller acepta `team_resolver` paralelo a `athlete_resolver`.
+- [x] `_load_card` recolecta tanto `athlete_ids` (MMA) como `team_ids` (NBA) y resuelve.
+- [x] El provider ya cachea el status global 3 s para evitar 2 fetches ESPN por ciclo (target + prev comparten el endpoint).
+
+### N4 — API + schemas multi-sport ✅
+
+- [x] `api/schemas.py`: relax `lead_minutes >= 0` (era >=5); `BoutSubscriptionCreate.validate_for_sport()` enforce contextual lead=0 solo NBA Q2-Q4, >=5 resto.
+- [x] `api/routes/subscriptions.py`: llama `validate_for_sport()` antes de persistir; 422 si viola.
+- [x] `api/routes/events.py`: NBA branch en `_get_provider`, exports `EspnNbaProvider` + `TeamResolver` con `_team_resolver` module-level.
+- [x] `_to_athlete_out` branch NBA: resuelve vía `team_resolver` (name + logo_url).
+- [x] `_previous_bout_id_map` ya funciona con la ruta NBA `mn - 1`.
+- [x] DB: sin migración Alembic (columna `sport` ya es `String(20)` indexada).
+
+### N5 — Tests + smoke en vivo ✅
+
+- [x] `tests/test_espn_nba.py`: 26 tests (list, get_event_card síntesis 4Q, remap corners, derivación status para Q1-Q4/pre/in/post, circuit breaker, team resolver, estimador buffer asimétrico NBA, schemas lead=0).
+- [x] Fixtures `tests/fixtures/espn_nba/`: event_list, event_401898716, status pre/in_q1/in_q2/in_q3/in_q4/post, team_13 (LAL), team_23 (SAC) — todos grabados en vivo (preseason 2026-10).
+- [x] `pytest` 106/106 verdes (80 preexistentes + 26 nuevos), `ruff`/`black`/`mypy` limpios.
+- [x] Smoke API local: `GET /api/events?sport=nba` → 2 partidos preseason; `GET /api/events/401898716?sport=nba` → 4 bouts Q1-Q4 con `previous_bout_id` encadenado Q4→Q3→Q2→Q1, red corner (Kings) y blue corner (Lakers) resueltos con logos.
+- [x] Verificación `TeamResolver` en vivo: Sacramento Kings + Los Angeles Lakers con sus logos ESPN.
+
+### N6 — App Android ⏳ en curso (rama `feature/nba`)
+
+- [x] `mobile-kotlin/.../ui/theme/Color.kt`: nuevo token `NbaBlue`.
+- [x] `HomeViewModel.kt`: 4º async fetch `listEvents("nba","")`.
+- [x] `CompetitionsViewModel.kt` + `CompetitionsScreen.kt`: NBA branch con sección propia.
+- [x] `EventDetailScreen.kt`: NBA render (logos equipos, etiquetas "Inicio del partido"/"2º cuarto"/"3º cuarto"/"4º cuarto").
+- [x] `EventDetailScreen.kt`: `LEAD_OPTIONS` dinámico por bout — NBA Q2-Q4 = `listOf(0)` label "Cuando empieza"; NBA Q1 + MMA + Tenis = `5/10/15/30`.
+- [x] `DespertarMeFirebaseService.handleUpdate()`: nuevo branch `if (lead == 0) trigger = max(now+60s, est - 60s)`.
+- [x] `SubscriptionsScreen.kt` + `SubscriptionsViewModel.kt`: badge NBA + label "Cuarto #N"/"Inicio".
+- [x] `MainActivity.kt`: tile NBA en Home/EventList → events/nba.
+- [x] Fix race condition tenis: `loadJob?.cancel()` en CompetitionsViewModel y EventDetailViewModel.
+- [x] Fix `baseUrl`: Railway → `10.0.2.2:8000` (backend local con 3 providers).
+- [x] Build `gradlew assembleDebug` + smoke en emulador: SUCCESSFUL, sin FATAL.
+
+### N7 — Refactor ✅ (commit `28a5075`)
+
+- [x] `_EspnBaseProvider` unifica CB + tenacity + HTTP de UFC/Tenis/NBA.
+- [x] `CacheResolver[T]` genérico para AthleteResolver y TeamResolver.
+- [x] −134 líneas netas, 106/106 tests verdes.

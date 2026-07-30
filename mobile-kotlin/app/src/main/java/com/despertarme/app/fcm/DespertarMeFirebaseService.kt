@@ -99,7 +99,11 @@ class DespertarMeFirebaseService : FirebaseMessagingService() {
             }
 
             val now = System.currentTimeMillis()
-            val trigger: Long = if (existing.leadMinutes >= 30) {
+            val trigger: Long = if (existing.leadMinutes == 0) {
+                // D56 NBA Q2-Q4 "Cuando empieza": alarma 1 min antes del
+                // tip-off real. El est viaja como epoch millis desde el backend.
+                maxOf(now + 60_000L, estimatedStartMs - 60_000L)
+            } else if (existing.leadMinutes >= 30) {
                 // lead>=30: suena al recibir primer push + cushion 1 min
                 // ("cuando empieza el combate previo" tras cushion).
                 now + 60_000L

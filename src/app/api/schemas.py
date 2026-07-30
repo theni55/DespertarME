@@ -17,8 +17,11 @@ from pydantic import BaseModel, Field, field_validator
 
 # E2 sigue sin arreglarse del todo en producción (necesita datos reales para
 # calibrar el buffer); para evitar estimaciones "post" inalcanzables con
-# D18=300s, exigimos un lead mínimo de 5 minutos.
+# D18=300s, exigimos un lead mínimo de 5 minutos para MMA/Tenis.
+# D56 NBA: Q2-Q4 permiten lead=0 ("Cuando empieza") — la alarma dispara a
+# `est - 60s` con cushion de 1 min sobre lead 0 (mismo patrón D45).
 MIN_LEAD_MINUTES = 5
+NBA_QUARTER_LEAD_MINUTES = 0
 
 
 class DeviceCreate(BaseModel):
@@ -55,20 +58,41 @@ class DeviceOut(BaseModel):
 class BoutSubscriptionCreate(BaseModel):
     """Crear alerta. El cliente NO manda `previous_bout_id`: el backend lo
     deriva en runtime desde la card fresca en cada poll (E4), porque UFC
-    reordena la card el día del evento y congelar el valor producía
-    estimaciones incoherentes silenciosas."""
+    reordena la card el dia del evento.
+
+    Multi-sport (D47): `sport` indica el deporte ("mma"|"tennis"|"nba") —
+    default "mma" para backward-compatibilidad.
+
+    D56 NBA: lead=0 permitido para Q2-Q4 ("Cuando empieza"); Q1 sigue
+    requiriendo >=5 min (es el inicio del partido, mismo modelo que MMA/Tenis)."""
 
     event_id: str
     bout_id: str
-    target_match_number: int
+    target_match_number: int = 0
     lead_minutes: int = 15
+    sport: str = "mma"
 
     @field_validator("lead_minutes")
     @classmethod
     def _validate_lead(cls, v: int) -> int:
-        if v < MIN_LEAD_MINUTES:
-            raise ValueError(f"lead_minutes debe ser >= {MIN_LEAD_MINUTES}")
+        # D56 NBA Q2-Q4: lead=0 ("Cuando empieza"). El resto (MMA/Tenis/NBA Q1)
+        # requiere >= MIN_LEAD_MINUTES (5). La validacion de "Q2-Q4 NBA" no se
+        # puede hacer aqui sin saber el `target_match_number`; la UI restringe
+        # en cliente. Aqui solo validamos el rango absoluto >= 0.
+        if v < 0:
+            raise ValueError("lead_minutes debe ser >= 0")
         return v
+
+    def validate_for_sport(self) -> None:
+        """Validacion contextual post-load: la UI debe llamar esta antes de
+        persistir. Permite lead=0 solo para NBA Q2-Q4.
+        """
+        if self.sport == "nba" and self.target_match_number in (2, 3, 4):
+            if self.lead_minutes != NBA_QUARTER_LEAD_MINUTES:
+                raise ValueError(f"NBA Q2-Q4 requiere lead_minutes={NBA_QUARTER_LEAD_MINUTES}")
+        else:
+            if self.lead_minutes < MIN_LEAD_MINUTES:
+                raise ValueError(f"lead_minutes debe ser >= {MIN_LEAD_MINUTES}")
 
 
 class BoutSubscriptionOut(BaseModel):
@@ -79,6 +103,7 @@ class BoutSubscriptionOut(BaseModel):
     target_match_number: int
     lead_minutes: int
     status: str
+    sport: str = "mma"
 
     model_config = {"from_attributes": True}
 
@@ -105,7 +130,10 @@ class BoutAthleteOut(BaseModel):
 
 
 class BoutOut(BaseModel):
-    """Combate en la tarjeta de un evento."""
+    """Combate en la tarjeta de un evento.
+
+    Multi-sport (D47): `court`, `sport` y `round_description` son campos
+    especificos de tenis (None para MMA)."""
 
     id: str
     match_number: int
@@ -116,6 +144,9 @@ class BoutOut(BaseModel):
     red: BoutAthleteOut | None = None
     blue: BoutAthleteOut | None = None
     previous_bout_id: str | None = None  # E4: calculado server-side
+    court: str | None = None
+    sport: str = "mma"
+    round_description: str | None = None
 
 
 class EventSummaryOut(BaseModel):

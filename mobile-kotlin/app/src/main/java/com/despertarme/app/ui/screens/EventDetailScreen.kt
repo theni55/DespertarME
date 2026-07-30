@@ -55,13 +55,23 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.despertarme.app.data.remote.BoutOut
+import com.despertarme.app.ui.theme.AccentGreen
 import com.despertarme.app.ui.theme.BlueCorner
+import com.despertarme.app.ui.theme.NbaBlue
 import com.despertarme.app.ui.theme.RedCorner
 import com.despertarme.app.ui.theme.SurfaceDark
 import com.despertarme.app.ui.theme.TextSecondary
 import com.despertarme.app.ui.theme.UfcRed
 
 private val LEAD_OPTIONS = listOf(5, 10, 15, 30)
+private val NBA_QUARTER_LEAD_OPTIONS = listOf(0)
+
+private fun leadOptionsFor(bout: BoutOut): List<Pair<Int, String>> {
+    if (bout.sport == "nba" && bout.matchNumber in 2..4) {
+        return NBA_QUARTER_LEAD_OPTIONS.map { it to "Cuando empieza" }
+    }
+    return LEAD_OPTIONS.map { it to "$it" }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -122,15 +132,34 @@ fun EventDetailScreen(
                             modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp),
                         )
                     }
-                    items(state.event.bouts, key = { it.id }) { bout ->
-                        BoutCard(
-                            bout = bout,
-                            // El backend lista los combates en orden cronologico:
-                            // el primero es el proximo en suceder (evento futuro).
-                            isNext = bout.id == state.event.bouts.firstOrNull()?.id,
-                            subscribed = state.subscribedBouts.contains(bout.id),
-                            onSubscribe = { lead -> onSubscribe(bout, lead) },
-                        )
+                    val bouts = state.event.bouts
+                    val isNba = bouts.firstOrNull()?.sport == "nba"
+                    if (isNba) {
+                        // NBA: el backend sirve 4 bouts sintéticos Q1-Q4 por partido
+                        // (id "{eventId}_qN"). Se agrupan en UNA card por partido para
+                        // que no parezcan 4 partidos distintos (solo presentación).
+                        val games = bouts
+                            .groupBy { it.id.substringBefore("_q") }
+                            .values
+                            .toList()
+                        items(games, key = { it.first().id.substringBefore("_q") }) { gameBouts ->
+                            NbaGameCard(
+                                bouts = gameBouts.sortedBy { it.matchNumber },
+                                subscribedBouts = state.subscribedBouts,
+                                onSubscribe = onSubscribe,
+                            )
+                        }
+                    } else {
+                        items(bouts, key = { it.id }) { bout ->
+                            BoutCard(
+                                bout = bout,
+                                // El backend lista los combates en orden cronologico:
+                                // el primero es el proximo en suceder (evento futuro).
+                                isNext = bout.id == bouts.firstOrNull()?.id,
+                                subscribed = state.subscribedBouts.contains(bout.id),
+                                onSubscribe = { lead -> onSubscribe(bout, lead) },
+                            )
+                        }
                     }
                     item { Spacer(modifier = Modifier.height(24.dp)) }
                 }
@@ -170,25 +199,65 @@ private fun BoutCard(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                 }
-                Text(
-                    text = "#${bout.matchNumber}",
-                    color = TextSecondary,
-                    fontWeight = FontWeight.Bold,
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                if (bout.cardSegment != null) {
-                    SegmentBadge(segment = bout.cardSegment)
+                if (bout.sport == "tennis") {
+                    if (bout.court != null) {
+                        TennisCourtBadge(court = bout.court)
+                        Spacer(modifier = Modifier.width(8.dp))
+                    }
+                    if (bout.roundDescription != null) {
+                        Text(
+                            text = bout.roundDescription,
+                            color = TextSecondary,
+                            fontSize = 12.sp,
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                    }
+                    Text(
+                        text = "${bout.periods} sets",
+                        color = TextSecondary,
+                        fontSize = 12.sp,
+                    )
+                } else if (bout.sport == "nba") {
+                    val quarterLabel = when (bout.matchNumber) {
+                        1 -> "Inicio del partido"
+                        2 -> "2º cuarto"
+                        3 -> "3º cuarto"
+                        4 -> "4º cuarto"
+                        else -> "Q${bout.matchNumber}"
+                    }
+                    Text(
+                        text = quarterLabel,
+                        color = NbaBlue,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "12 min",
+                        color = TextSecondary,
+                        fontSize = 12.sp,
+                    )
+                } else {
+                    Text(
+                        text = "#${bout.matchNumber}",
+                        color = TextSecondary,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    if (bout.cardSegment != null) {
+                        SegmentBadge(segment = bout.cardSegment)
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    if (bout.weightClass != null) {
+                        Text(text = bout.weightClass, color = TextSecondary, fontSize = 12.sp)
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "${bout.periods}r",
+                        color = TextSecondary,
+                        fontSize = 12.sp,
+                    )
                 }
-                Spacer(modifier = Modifier.width(8.dp))
-                if (bout.weightClass != null) {
-                    Text(text = bout.weightClass, color = TextSecondary, fontSize = 12.sp)
-                }
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "${bout.periods}r",
-                    color = TextSecondary,
-                    fontSize = 12.sp,
-                )
             }
             Spacer(modifier = Modifier.height(12.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -203,22 +272,23 @@ private fun BoutCard(
             }
             if (!subscribed) {
                 Spacer(modifier = Modifier.height(12.dp))
+                val options = leadOptionsFor(bout)
                 FlowRow(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
-                    LEAD_OPTIONS.forEach { mins ->
+                    options.forEach { (mins, label) ->
                         FilterChip(
                             selected = selectedLead == mins,
                             onClick = { selectedLead = mins },
-                            label = { Text("$mins") },
+                            label = { Text(label) },
                         )
                     }
                 }
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "min antes",
+                    text = if (bout.sport == "nba" && bout.matchNumber in 2..4) "" else "min antes",
                     color = TextSecondary,
                     fontSize = 12.sp,
                 )
@@ -244,6 +314,154 @@ private fun BoutCard(
             }
         }
     }
+}
+
+/**
+ * Card única por partido NBA: cabecera con equipos + hora, y dentro los avisos
+ * de los 4 cuartos agrupados. Q1 con selector de lead (5/10/15/30 min antes),
+ * Q2-Q4 solo "Cuando empieza". Solo presentación — los bouts/ids del backend
+ * no cambian.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun NbaGameCard(
+    bouts: List<BoutOut>,
+    subscribedBouts: Set<String>,
+    onSubscribe: (BoutOut, Int) -> Unit,
+) {
+    val q1 = bouts.firstOrNull { it.matchNumber == 1 } ?: bouts.first()
+    var selectedLead by remember { mutableStateOf(15) }
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = SurfaceDark),
+        border = BorderStroke(1.dp, NbaBlue.copy(alpha = 0.5f)),
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "NBA",
+                    color = NbaBlue,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.sp,
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = formatDate(q1.date),
+                    color = TextSecondary,
+                    fontSize = 12.sp,
+                )
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                AthleteColumn(q1.red?.name, q1.red?.headshotUrl, RedCorner)
+                Text(
+                    text = "VS",
+                    color = Color.White.copy(alpha = 0.7f),
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(horizontal = 12.dp),
+                )
+                AthleteColumn(q1.blue?.name, q1.blue?.headshotUrl, BlueCorner)
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                text = "AVISOS",
+                color = TextSecondary,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.sp,
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            bouts.forEach { bout ->
+                val quarterLabel = when (bout.matchNumber) {
+                    1 -> "Inicio del partido"
+                    2 -> "2º cuarto"
+                    3 -> "3º cuarto"
+                    4 -> "4º cuarto"
+                    else -> "Q${bout.matchNumber}"
+                }
+                val isQ1 = bout.matchNumber == 1
+                val subscribed = subscribedBouts.contains(bout.id)
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = quarterLabel,
+                            color = Color.White,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        if (isQ1 && !subscribed) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp),
+                            ) {
+                                LEAD_OPTIONS.forEach { mins ->
+                                    FilterChip(
+                                        selected = selectedLead == mins,
+                                        onClick = { selectedLead = mins },
+                                        label = { Text("$mins") },
+                                    )
+                                }
+                            }
+                            Text(
+                                text = "min antes",
+                                color = TextSecondary,
+                                fontSize = 11.sp,
+                            )
+                        } else if (!isQ1 && !subscribed) {
+                            Text(
+                                text = "Cuando empieza",
+                                color = TextSecondary,
+                                fontSize = 11.sp,
+                            )
+                        }
+                    }
+                    if (subscribed) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFF4ADE80)),
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Avisando ✓",
+                                color = Color(0xFF4ADE80),
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                        }
+                    } else {
+                        OutlinedButton(
+                            onClick = { onSubscribe(bout, if (isQ1) selectedLead else 0) },
+                        ) {
+                            Text(text = "Avisarme", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TennisCourtBadge(court: String) {
+    Text(
+        text = court.uppercase(),
+        color = AccentGreen,
+        fontSize = 11.sp,
+        fontWeight = FontWeight.SemiBold,
+        modifier = Modifier
+            .clip(RoundedCornerShape(4.dp))
+            .background(AccentGreen.copy(alpha = 0.18f))
+            .padding(horizontal = 6.dp, vertical = 2.dp),
+    )
 }
 
 @Composable

@@ -31,6 +31,9 @@ data class BoutOut(
     val red: BoutAthleteOut? = null,
     val blue: BoutAthleteOut? = null,
     @SerialName("previous_bout_id") val previousBoutId: String? = null,
+    val court: String? = null,
+    val sport: String = "mma",
+    @SerialName("round_description") val roundDescription: String? = null,
 )
 
 @Serializable
@@ -66,6 +69,7 @@ data class BoutSubscriptionCreate(
     @SerialName("bout_id") val boutId: String,
     @SerialName("target_match_number") val targetMatchNumber: Int,
     @SerialName("lead_minutes") val leadMinutes: Int,
+    val sport: String = "mma",
 )
 
 @Serializable
@@ -91,4 +95,5 @@ data class BoutSubscriptionOut(
     @SerialName("target_match_number") val targetMatchNumber: Int,
     @SerialName("lead_minutes") val leadMinutes: Int,
     val status: String,
+    val sport: String = "mma",
 )

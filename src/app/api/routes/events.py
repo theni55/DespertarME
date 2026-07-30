@@ -1,13 +1,14 @@
-"""Router de eventos (Fase 7a).
+"""Router de eventos (Fase 7a + Fase 8 multi-sport).
 
 Expone dos endpoints consumidos por las pantallas Home/Eventos/EventDetail de
 la app:
 
-- `GET /api/events` → lista de próximos UFC (filtro por fecha + caché Redis).
-- `GET /api/events/{id}` → tarjeta con bouts ordenados, fotos/nombres vía
-  `AthleteResolver`, y `previous_bout_id` calculado server-side (E4: el cliente
-  no lo manda; el backend lo deriva de la card fresca en cada request porque
-  UFC reordena la card el día del evento).
+- `GET /api/events?sport=mma|tennis&league=atp|wta` → lista de proximos eventos.
+- `GET /api/events/{id}?sport=mma|tennis&league=atp|wta` → tarjeta con bouts.
+
+Multi-sport (D47): `sport` enruta al deporte, `league` a la liga/subclase
+dentro del deporte (atp/wta para tenis, ignorado para mma). `previous_bout_id`
+se delega a `Card.previous_bout()`.
 """
 
 from __future__ import annotations
@@ -26,49 +27,74 @@ from app.api.schemas import (
     EventSummaryOut,
 )
 from app.db.session import get_session
+from app.domain.entities import Card
 from app.providers.athletes import AthleteResolver
+from app.providers.base import Provider
+from app.providers.espn_nba import EspnNbaProvider
+from app.providers.espn_tennis import EspnTennisProvider
 from app.providers.espn_ufc import EspnUfcProvider
+from app.providers.models import Bout as ProviderBout
 from app.providers.models import Competitor as ProviderCompetitor
+from app.providers.teams import TeamResolver
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/events", tags=["events"])
 
-# TTL corto para la caché de la lista de eventos: la lista apenas cambia día a
-# día, pero si se añade un evento nuevo queremos verlo en ~5 min.
 EVENTS_LIST_TTL_SECONDS = 300
-EVENTS_LIST_CACHE_KEY = "events:upcoming:ufc"
+EVENTS_LIST_CACHE_KEY = "events:upcoming:{sport}:{league}"
 
-# Provider + resolver singletons a nivel de módulo (perezoso) para no acoplar
-# la API a `scheduler.py`. El scheduler mantiene el suyo propio para el poller.
-_provider: EspnUfcProvider | None = None
+_providers: dict[tuple[str, str], Provider] = {}
 _resolver: AthleteResolver | None = None
-_redis: Any = None  # redis.asyncio.Redis | None
+_team_resolver: TeamResolver | None = None
+_redis: Any = None
 
 
-def _get_provider() -> EspnUfcProvider:
-    global _provider, _resolver, _redis
-    if _provider is None:
+def _get_provider(sport: str = "mma", league: str = "") -> Provider:
+    global _providers, _resolver, _team_resolver, _redis
+    key = (sport, league)
+    if key not in _providers:
         import redis.asyncio as aioredis
 
         from app.config import settings
 
-        _provider = EspnUfcProvider()
-        _redis = aioredis.from_url(settings.redis_url, decode_responses=True)
-        _resolver = AthleteResolver(_provider, redis_client=_redis)
-    return _provider
+        if sport == "mma":
+            _providers[key] = EspnUfcProvider()
+        elif sport == "tennis":
+            _providers[key] = EspnTennisProvider(league=league or settings.espn_tennis_league)
+        elif sport == "nba":
+            _providers[key] = EspnNbaProvider(league=league or settings.espn_nba_league)
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Deporte no soportado: {sport}",
+            )
+
+        if _redis is None:
+            _redis = aioredis.from_url(settings.redis_url, decode_responses=True)
+        if _resolver is None:
+            _resolver = AthleteResolver(_providers[key], redis_client=_redis)
+        if _team_resolver is None and sport == "nba":
+            _team_resolver = TeamResolver(
+                _providers[key],  # type: ignore[arg-type]
+                redis_client=_redis,
+            )
+    return _providers[key]
 
 
 async def close_events_resources() -> None:
-    """Cerrar httpx client + redis al apagar la app (lifespan)."""
-    global _provider, _resolver, _redis
-    if _provider is not None:
-        await _provider.aclose()
-        _provider = None
+    global _providers, _resolver, _team_resolver, _redis
+    for provider in _providers.values():
+        try:
+            await provider.aclose()
+        except Exception:
+            logger.exception("Error cerrando provider")
+    _providers = {}
     if _redis is not None:
         await _redis.aclose()
         _redis = None
     _resolver = None
+    _team_resolver = None
 
 
 def _parse_iso_z(raw: str) -> datetime:
@@ -78,29 +104,63 @@ def _parse_iso_z(raw: str) -> datetime:
     return datetime.fromisoformat(value)
 
 
+def _previous_bout_id_map(bouts: list[ProviderBout], sport: str = "mma") -> dict[str, str | None]:
+    """Map de bout_id -> previous_bout_id usando Card.previous_bout().
+
+    Delega la logica de "cual es el combate anterior" a la capa de dominio
+    en lugar de replicarla en la API (D47).
+    """
+    from app.domain.entities import Bout as DomainBout
+
+    domain_bouts: list[DomainBout] = []
+    for b in bouts:
+        comp_date = b.date
+        if comp_date.endswith("Z"):
+            comp_date = comp_date[:-1] + "+00:00"
+        domain_bouts.append(
+            DomainBout(
+                id=b.id,
+                match_number=b.match_number,
+                date=datetime.fromisoformat(comp_date),
+                card_segment=b.card_segment.name if b.card_segment else None,
+                weight_class=b.weight_class.text if b.weight_class else None,
+                sport=sport,
+                court=b.court.description if b.court else None,
+                round_description=b.round.description if b.round else None,
+            )
+        )
+
+    card = Card(event_id="", event_name="", bouts=domain_bouts, sport=sport)
+    result: dict[str, str | None] = {}
+    for dbout in domain_bouts:
+        prev = card.previous_bout(dbout)
+        result[dbout.id] = prev.id if prev else None
+    return result
+
+
 @router.get("", response_model=list[EventSummaryOut])
 async def list_events(
-    session: AsyncSession = Depends(get_session),  # noqa: ARG001 - no usado pero parte del contrato
+    session: AsyncSession = Depends(get_session),
     include_past_hours: int = 0,
+    sport: str = "mma",
+    league: str = "",
 ) -> list[EventSummaryOut]:
-    """Lista próximos eventos UFC (caché Redis 5 min).
+    """Lista proximos eventos del deporte/liga indicados.
 
-    `include_past_hours`: opcional (query), incluye eventos que terminaron hace
-    menos de N horas (útil para ver resultados recientes). Default 0 = solo futuros.
+    `sport`: "mma" (default) o "tennis".
+    `league`: "atp"|"wta" para tenis, ignorado para mma.
     """
-    provider = _get_provider()
+    provider = _get_provider(sport, league)
     cutoff = datetime.now(UTC) - timedelta(hours=include_past_hours)
-    # La caché solo aplica a la query default (include_past_hours=0, la que usa
-    # la app): la clave es única y cachear variantes con otros cutoffs serviría
-    # resultados de una query distinta durante el TTL.
     cacheable = include_past_hours == 0
-    # Intentamos caché
+    cache_key = EVENTS_LIST_CACHE_KEY.format(sport=sport, league=league)
+
     raw_cache: str | None = None
     if cacheable and _redis is not None:
         try:
-            raw_cache = await _redis.get(EVENTS_LIST_CACHE_KEY)
+            raw_cache = await _redis.get(cache_key)
         except Exception:
-            logger.debug("Redis caído en list_events; bypass caché")
+            logger.debug("Redis caido en list_events; bypass cache")
     if raw_cache:
         import json
 
@@ -108,21 +168,20 @@ async def list_events(
             cached = json.loads(raw_cache)
             return [EventSummaryOut(**item) for item in cached]
         except Exception:
-            logger.warning("Caché events corrupta; ignorando")
+            logger.warning("Cache events corrupta; ignorando")
 
     try:
         summaries = await provider.list_upcoming_events(min_date=cutoff)
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"Provider ESPN no disponible: {exc}",
+            detail=f"Provider no disponible: {exc}",
         ) from exc
 
     out = [
         EventSummaryOut(id=s.id, name=s.name, date=_parse_iso_z(s.date), image_url=None)
         for s in summaries
     ]
-    # Guardar en caché (best-effort, solo la query default)
     if cacheable and _redis is not None and out:
         import json
 
@@ -133,70 +192,112 @@ async def list_events(
                     for e in out
                 ]
             )
-            await _redis.set(EVENTS_LIST_CACHE_KEY, payload, ex=EVENTS_LIST_TTL_SECONDS)
+            await _redis.set(cache_key, payload, ex=EVENTS_LIST_TTL_SECONDS)
         except Exception:
-            logger.debug("No se pudo escribir caché events")
+            logger.debug("No se pudo escribir cache events")
     return out
 
 
 @router.get("/{event_id}", response_model=EventCardOut)
 async def get_event_detail(
     event_id: str,
-    session: AsyncSession = Depends(get_session),  # noqa: ARG001
+    session: AsyncSession = Depends(get_session),
+    sport: str = "mma",
+    league: str = "",
 ) -> EventCardOut:
     """Tarjeta de un evento con bouts ordenados y `previous_bout_id` calculado.
 
-    `previous_bout_id` se deriva del vecino de Mayor matchNumber (E4): el
-    cliente no lo manda porque UFC reordena la card el día del evento.
+    Multi-sport (D47): `previous_bout_id` se deriva via `Card.previous_bout()`
+    segun el deporte (court+date para tenis, matchNumber+1 para MMA).
     """
-    provider = _get_provider()
+    provider = _get_provider(sport, league)
     resolver = _resolver or AthleteResolver(provider)
     try:
         event = await provider.get_event_card(event_id)
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"Provider ESPN no disponible: {exc}",
+            detail=f"Provider no disponible: {exc}",
         ) from exc
 
-    athlete_ids = [
-        c.athlete.athlete_id
-        for b in event.bouts
-        for c in (b.red_corner, b.blue_corner)
-        if c and c.athlete and c.athlete.athlete_id
-    ]
-    resolved = await resolver.resolve_many(athlete_ids)
+    previous_map = _previous_bout_id_map(event.bouts, sport)
+
+    # D49: tenis tiene nombres inline en competitor.name — no hace falta
+    # resolver atletas via el endpoint /athletes/{id} (costoso: 126 llamadas
+    # para 63 partidos, ~16s). Para MMA seguimos usando AthleteResolver.
+    # D58: NBA usa TeamResolver (competitors llevan `team $ref`, no `athlete`).
+    resolved: dict[str, Any] = {}
+    resolved_teams: dict[str, Any] = {}
+    if sport == "tennis":
+        pass  # tenis: nombres inline, no resolver.
+    elif sport == "nba":
+        team_ids = [
+            c.team.team_id
+            for b in event.bouts
+            for c in (b.red_corner, b.blue_corner)
+            if c and c.team and c.team.team_id
+        ]
+        if _team_resolver is not None and team_ids:
+            resolved_teams = await _team_resolver.resolve_many(team_ids)
+    else:
+        athlete_ids = [
+            c.athlete.athlete_id
+            for b in event.bouts
+            for c in (b.red_corner, b.blue_corner)
+            if c and c.athlete and c.athlete.athlete_id
+        ]
+        resolved = await resolver.resolve_many(athlete_ids)
 
     def _to_athlete_out(corner: ProviderCompetitor | None) -> BoutAthleteOut | None:
-        if corner is None or corner.athlete is None:
+        if corner is None:
             return None
-        aid = corner.athlete.athlete_id
-        if not aid:
-            return None
-        found = resolved.get(aid)
-        return BoutAthleteOut(
-            id=aid,
-            name=found.name if found else None,
-            headshot_url=found.headshot_url if found else None,
-        )
-
-    # E4: mapear matchNumber → bout_id para derivar previous_bout_id.
-    match_to_id: dict[int, str] = {b.match_number: b.id for b in event.bouts}
+        # D49 tenis: nombre inline directo.
+        if corner.name:
+            return BoutAthleteOut(id=corner.id, name=corner.name)
+        # MMA: athlete $ref.
+        if corner.athlete is not None:
+            aid = corner.athlete.athlete_id
+            if not aid:
+                return None
+            found = resolved.get(aid)
+            return BoutAthleteOut(
+                id=aid,
+                name=found.name if found else None,
+                headshot_url=found.headshot_url if found else None,
+            )
+        # D58 NBA: team $ref → name + logo_url.
+        if corner.team is not None:
+            tid = corner.team.team_id
+            if not tid:
+                return None
+            found = resolved_teams.get(tid)
+            return BoutAthleteOut(
+                id=tid,
+                name=found.name if found else None,
+                headshot_url=found.logo_url if found else None,
+            )
+        return None
 
     bouts_out: list[BoutOut] = []
     for b in event.bouts:
-        prev_match = b.match_number + 1
         bouts_out.append(
             BoutOut(
                 id=b.id,
                 match_number=b.match_number,
                 date=_parse_iso_z(b.date),
                 card_segment=b.card_segment.name if b.card_segment else None,
-                weight_class=b.weight_class.text if b.weight_class else None,
+                weight_class=(
+                    b.weight_class.text
+                    if b.weight_class
+                    else (b.round.description if b.round else None)
+                ),
                 periods=b.format.regulation.periods if b.format else 3,
                 red=_to_athlete_out(b.red_corner),
                 blue=_to_athlete_out(b.blue_corner),
-                previous_bout_id=match_to_id.get(prev_match),
+                previous_bout_id=previous_map.get(b.id),
+                court=b.court.description if b.court else None,
+                sport=sport,
+                round_description=b.round.description if b.round else None,
             )
         )
 

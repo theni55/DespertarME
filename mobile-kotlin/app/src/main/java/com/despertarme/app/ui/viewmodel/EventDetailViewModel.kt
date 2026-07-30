@@ -8,6 +8,7 @@ import com.despertarme.app.alarm.PendingAlarm
 import com.despertarme.app.alarm.PendingAlarmStorage
 import com.despertarme.app.data.AppContainer
 import com.despertarme.app.ui.screens.EventDetailState
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -23,6 +24,11 @@ class EventDetailViewModel(
     private val _snack = MutableStateFlow<String?>(null)
     val snackMessage: StateFlow<String?> = _snack.asStateFlow()
 
+    var currentSport: String = "mma"
+    var currentLeague: String = ""
+
+    private var loadJob: Job? = null
+
     fun clearSnack() { _snack.value = null }
 
     fun load(eventId: String) {
@@ -31,12 +37,15 @@ class EventDetailViewModel(
             return
         }
         if (_state.value.event?.id == eventId && _state.value.error == null) return
+        loadJob?.cancel()
         _state.value = EventDetailState(isLoading = true)
-        viewModelScope.launch {
+        val sport = currentSport
+        val league = currentLeague
+        loadJob = viewModelScope.launch {
             try {
-                val card = container.api.getEvent(eventId)
+                val card = container.api.getEvent(eventId, sport, league)
                 _state.value = EventDetailState(isLoading = false, event = card)
-            } catch (t: Throwable) {
+            } catch (t: Exception) {
                 _state.value = EventDetailState(
                     isLoading = false,
                     error = "No se pudo cargar el evento: ${t.message ?: "desconocido"}",
@@ -49,17 +58,17 @@ class EventDetailViewModel(
         _state.value = EventDetailState(isLoading = true)
         viewModelScope.launch {
             try {
-                val next = container.api.listEvents().firstOrNull()
+                val next = container.api.listEvents(currentSport, currentLeague).firstOrNull()
                 if (next == null) {
                     _state.value = EventDetailState(
                         isLoading = false,
-                        error = "No hay eventos próximos ahora mismo.",
+                        error = "No hay eventos proximos ahora mismo.",
                     )
                     return@launch
                 }
-                val card = container.api.getEvent(next.id)
+                val card = container.api.getEvent(next.id, currentSport, currentLeague)
                 _state.value = EventDetailState(isLoading = false, event = card)
-            } catch (t: Throwable) {
+            } catch (t: Exception) {
                 _state.value = EventDetailState(
                     isLoading = false,
                     error = "No se pudo cargar el evento: ${t.message ?: "desconocido"}",
@@ -83,6 +92,7 @@ class EventDetailViewModel(
                         boutId = boutId,
                         targetMatchNumber = matchNumber,
                         leadMinutes = leadMinutes,
+                        sport = currentSport,
                     ),
                 )
                 _state.value = _state.value.copy(
@@ -90,10 +100,6 @@ class EventDetailViewModel(
                 )
                 _snack.value = "Te avisaremos $leadMinutes min antes cuando el backend detecte el inicio real"
 
-                // D45: NO programamos la alarma al suscribirse. Solo persistimos
-                // un PendingAlarm centinela con triggerAtMillis=0 y fired=false.
-                // El primer push FCM con datos del combate previo programará la
-                // alarma al momento adecuado (con cushion +1 min).
                 val card = _state.value.event ?: return@launch
                 val bout = card.bouts.firstOrNull { it.id == boutId } ?: return@launch
                 val app = DespertarMeApp.instance
@@ -111,7 +117,7 @@ class EventDetailViewModel(
                         fired = false,
                     ),
                 )
-            } catch (t: Throwable) {
+            } catch (t: Exception) {
                 _snack.value = "No se pudo crear la alerta: ${t.message ?: "error"}"
             }
         }

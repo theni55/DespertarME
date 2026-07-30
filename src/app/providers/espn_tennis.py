@@ -1,14 +1,17 @@
-"""Provider de ESPN Core API para UFC/MMA (D9, D13, D20).
+"""Provider de ESPN Core API para Tenis ATP/WTA (D46).
 
-Endpoints (verificados en vivo, Sesion 2):
-- `GET /sports/mma/leagues/{league}/events?seasontype=2` -> lista de eventos
-  (solo `$ref`; el id se parsea y se pide el detalle).
-- `GET /sports/mma/leagues/{league}/events/{id}` -> tarjeta completa (14 combates).
-- `GET /sports/mma/leagues/{league}/events/{id}/competitions/{cId}/status`
-  -> `{clock, period, type:{state:"pre"|"in"|"post", completed}}`.
+Endpoints (verificados en vivo, Sesion 23):
+- `GET /sports/tennis/leagues/{league}/events?seasontype=2` -> lista de torneos.
+- `GET /sports/tennis/leagues/{league}/events/{id}` -> torneo completo.
+- `GET /sports/tennis/leagues/{league}/events/{id}/competitions/{cId}/status`
+  -> `{period, type:{state:"pre"|"in"|"post", completed}}` (sin `clock`).
 
-Resiliencia (D20): heredada de `_EspnBaseProvider` — backoff exponencial con
-jitter + circuit breaker manual.
+Resiliencia (D20): heredada de `_EspnBaseProvider`.
+
+Diferencias clave con MMA (D49):
+- Nombres de jugadores inline en `competitors[].name` -> no requiere AthleteResolver.
+- Sin `matchNumber` -> orden por `date` dentro de cada `court`.
+- Sin `clock` en status -> solo `period` (numero de set).
 """
 
 from __future__ import annotations
@@ -17,7 +20,7 @@ import asyncio
 import logging
 import re
 from collections.abc import Callable, Sequence
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from urllib.parse import urlparse
 
 import httpx
@@ -28,14 +31,10 @@ from app.providers.models import AthleteDetail, CompetitionStatus, Event, EventS
 
 logger = logging.getLogger(__name__)
 
-_EVENT_ID_RE = re.compile(r"/events/(\d+)")
+_EVENT_ID_RE = re.compile(r"/events/(\d+-\d+|\d+)")
 
 
 def _event_id_from_ref(ref: str) -> str | None:
-    """Extrae el `eventId` de un `$ref` de ESPN (URL completa).
-
-    Ej: `http://.../events/600059148?lang=en&region=us` -> `600059148`.
-    """
     if not ref:
         return None
     path = urlparse(ref).path
@@ -44,15 +43,14 @@ def _event_id_from_ref(ref: str) -> str | None:
 
 
 def _parse_event_date(raw: str) -> datetime:
-    """Parsea una fecha ISO de ESPN (ej. `2026-07-11T21:00Z`) a datetime UTC."""
     value = raw
     if value.endswith("Z"):
         value = value[:-1] + "+00:00"
     return datetime.fromisoformat(value)
 
 
-class EspnUfcProvider(_EspnBaseProvider):
-    """Provider concreto para ESPN Core API (UFC)."""
+class EspnTennisProvider(_EspnBaseProvider):
+    """Provider concreto para ESPN Core API (Tenis ATP/WTA)."""
 
     def __init__(
         self,
@@ -68,7 +66,7 @@ class EspnUfcProvider(_EspnBaseProvider):
     ) -> None:
         super().__init__(
             base_url=base_url,
-            league=league or settings.espn_league,
+            league=league or settings.espn_tennis_league,
             timeout=timeout,
             max_retries=max_retries,
             cb_fails=cb_fails,
@@ -82,14 +80,7 @@ class EspnUfcProvider(_EspnBaseProvider):
     async def list_upcoming_events(
         self, *, min_date: datetime | None = None, max_concurrent: int = 4
     ) -> Sequence[EventSummary]:
-        """Lista los eventos proximos (no pasados) de la liga.
-
-        Fase 7a:
-        - `min_date` filtra eventos cuya fecha sea anterior (default: ahora UTC).
-        - Los N+1 fetches de detalle se paralelizan con `asyncio.gather` limitado
-          a `max_concurrent` (default 4).
-        """
-        list_url = self._url(f"/sports/mma/leagues/{self._league}/events?seasontype=2")
+        list_url = self._url(f"/sports/tennis/leagues/{self._league}/events?seasontype=2")
         data = await self._request(list_url)
         ids: list[str] = []
         for item in data.get("items", []):
@@ -101,12 +92,12 @@ class EspnUfcProvider(_EspnBaseProvider):
         sem = asyncio.Semaphore(max_concurrent)
 
         async def _fetch_summary(eid: str) -> EventSummary | None:
-            url = self._url(f"/sports/mma/leagues/{self._league}/events/{eid}")
+            url = self._url(f"/sports/tennis/leagues/{self._league}/events/{eid}")
             async with sem:
                 try:
                     ev_data = await self._request(url)
                 except Exception:
-                    logger.warning("No se pudo cargar resumen del evento %s", eid)
+                    logger.warning("No se pudo cargar resumen del torneo %s", eid)
                     return None
             return EventSummary(
                 id=ev_data["id"],
@@ -118,12 +109,15 @@ class EspnUfcProvider(_EspnBaseProvider):
         summaries = [s for s in raw_summaries if s is not None]
 
         cutoff = min_date or datetime.now(UTC)
+        min_cutoff = datetime.now(UTC) - timedelta(days=14)
+        if cutoff > min_cutoff:
+            cutoff = min_cutoff
         upcoming: list[EventSummary] = []
         for s in summaries:
             try:
                 ev_dt = _parse_event_date(s.date)
             except ValueError:
-                logger.warning("Fecha invalida en evento %s: %s", s.id, s.date)
+                logger.warning("Fecha invalida en torneo %s: %s", s.id, s.date)
                 continue
             if ev_dt >= cutoff:
                 upcoming.append(s)
@@ -131,19 +125,19 @@ class EspnUfcProvider(_EspnBaseProvider):
         return upcoming
 
     async def get_event_card(self, event_id: str) -> Event:
-        url = self._url(f"/sports/mma/leagues/{self._league}/events/{event_id}")
+        url = self._url(f"/sports/tennis/leagues/{self._league}/events/{event_id}")
         data = await self._request(url)
         return Event.model_validate(data)
 
     async def get_competition_status(self, event_id: str, competition_id: str) -> CompetitionStatus:
         url = self._url(
-            f"/sports/mma/leagues/{self._league}/events/{event_id}"
+            f"/sports/tennis/leagues/{self._league}/events/{event_id}"
             f"/competitions/{competition_id}/status"
         )
         data = await self._request(url)
         return CompetitionStatus.model_validate(data)
 
     async def get_athlete(self, athlete_id: str) -> AthleteDetail:
-        url = self._url(f"/sports/mma/athletes/{athlete_id}")
+        url = self._url(f"/sports/tennis/athletes/{athlete_id}")
         data = await self._request(url)
         return AthleteDetail.model_validate(data)

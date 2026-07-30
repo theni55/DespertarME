@@ -22,7 +22,8 @@ freezegun + provider fake (sin Redis, sin BD).
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Callable
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
 from app.domain.entities import (
@@ -36,13 +37,21 @@ from app.domain.entities import (
 
 @dataclass(frozen=True)
 class EstimatorConfig:
-    """Configuración del estimador (valores por defecto D18)."""
+    """Configuracion del estimador (valores por defecto D18, D57 NBA).
+
+    `buffer_for` (D57): callback opcional que recibe el `Bout` objetivo y
+    devuelve el buffer a aplicar cuando el previo termina (`in->post`). Si es
+    None, se usa `buffer_intercombate_seconds` fijo (comportamiento pre-NBA).
+    Permite buffer asimetrico NBA: 2 min comerciales Q1->Q2/Q3->Q4, 15 min
+    halftime Q2->Q3.
+    """
 
     buffer_intercombate_seconds: int = 300
     default_lead_minutes: int = 15
     poll_default_seconds: int = 60
     poll_prev_in_advanced_seconds: int = 10
     poll_prev_post_seconds: int = 5
+    buffer_for: Callable[[Bout], timedelta | None] | None = field(default=None)
 
 
 class EstimatorEngine:
@@ -92,7 +101,17 @@ class EstimatorEngine:
                 reason="sin datos del combate previo; uso fecha programada",
             )
 
-        buffer = timedelta(seconds=self.config.buffer_intercombate_seconds)
+        default_buffer = timedelta(seconds=self.config.buffer_intercombate_seconds)
+        # D57: buffer asimetrico NBA via `buffer_for(target)`. El callback puede
+        # devolver None para otros deportes (MMA/Tenis) — en ese caso se cae
+        # al buffer fijo `default_buffer` (comportamiento pre-NBA). El callback
+        # se aplica tanto en `in` como en `post` (el break Q1->Q2 y Q3->Q4 es
+        # ~2 min comerciales sin importar si Q1 acaba o sigue en curso).
+        if self.config.buffer_for is not None:
+            cb_result = self.config.buffer_for(target)
+            effective_buffer = cb_result if cb_result is not None else default_buffer
+        else:
+            effective_buffer = default_buffer
 
         if prev_status.state == "pre":
             return EstimatedStart(
@@ -106,14 +125,15 @@ class EstimatorEngine:
             remaining = prev.estimated_duration_seconds - prev_status.elapsed_seconds
             if remaining < 0:
                 remaining = 0
-            start_at = now + timedelta(seconds=remaining) + buffer
+            start_at = now + timedelta(seconds=remaining) + effective_buffer
             return EstimatedStart(
                 bout_id=target.id,
                 start_at=start_at,
                 confidence="medium",
                 reason=(
                     f"previo en curso (round {prev_status.period}, "
-                    f"restan ~{int(remaining)}s + buffer {int(buffer.total_seconds())}s)"
+                    f"restan ~{int(remaining)}s + buffer "
+                    f"{int(effective_buffer.total_seconds())}s)"
                 ),
             )
 
@@ -123,7 +143,7 @@ class EstimatorEngine:
             # cada poll → delta constante = 300 s → `should_fire` nunca se cumple
             # con lead < 5 min, y con D40 la alarma local se reprograma al infinito.
             anchor = observed_at if observed_at is not None else now
-            start_at = anchor + buffer
+            start_at = anchor + effective_buffer
             anchor_note = "observed_at (E2)" if observed_at is not None else "now (sin ancla)"
             return EstimatedStart(
                 bout_id=target.id,
@@ -131,7 +151,7 @@ class EstimatorEngine:
                 confidence="high",
                 reason=(
                     f"previo terminado; {anchor_note} + buffer "
-                    f"{int(buffer.total_seconds())}s (D18)"
+                    f"{int(effective_buffer.total_seconds())}s (D18/D57)"
                 ),
             )
 

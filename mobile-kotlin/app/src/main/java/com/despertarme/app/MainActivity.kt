@@ -23,6 +23,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -34,6 +37,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.despertarme.app.alarm.AlarmService
 import com.despertarme.app.data.AppContainer
+import com.despertarme.app.ui.screens.CompetitionsScreen
 import com.despertarme.app.ui.screens.EventDetailScreen
 import com.despertarme.app.ui.screens.EventListScreen
 import com.despertarme.app.ui.screens.HomeScreen
@@ -43,10 +47,10 @@ import com.despertarme.app.ui.theme.BackgroundDark
 import com.despertarme.app.ui.theme.DespertarTheme
 import com.despertarme.app.ui.theme.TextSecondary
 import com.despertarme.app.ui.theme.UfcRed
+import com.despertarme.app.ui.viewmodel.CompetitionsViewModel
+import com.despertarme.app.ui.viewmodel.CompetitionsViewModelFactory
 import com.despertarme.app.ui.viewmodel.EventDetailViewModel
 import com.despertarme.app.ui.viewmodel.EventDetailViewModelFactory
-import com.despertarme.app.ui.viewmodel.EventListViewModel
-import com.despertarme.app.ui.viewmodel.EventListViewModelFactory
 import com.despertarme.app.ui.viewmodel.HomeViewModel
 import com.despertarme.app.ui.viewmodel.HomeViewModelFactory
 import com.despertarme.app.ui.viewmodel.SubscriptionsViewModel
@@ -116,9 +120,9 @@ private fun AppGraph(
 ) {
     val navController = rememberNavController()
     val detailVm: EventDetailViewModel = viewModel(factory = EventDetailViewModelFactory(container))
-    val eventsVm: EventListViewModel = viewModel(factory = EventListViewModelFactory(container))
     val subsVm: SubscriptionsViewModel = viewModel(factory = SubscriptionsViewModelFactory(container))
     val homeVm: HomeViewModel = viewModel(factory = HomeViewModelFactory(container))
+    val competitionsVm: CompetitionsViewModel = viewModel(factory = CompetitionsViewModelFactory(container))
 
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
@@ -154,22 +158,34 @@ private fun AppGraph(
                 LaunchedEffect(Unit) { homeVm.load() }
                 HomeScreen(
                     state = state,
-                    onEventClick = { eventId ->
+                    onEventClick = { eventId, sport, league ->
                         detailVm.clearSnack()
+                        detailVm.currentSport = sport
+                        detailVm.currentLeague = league
                         navController.navigate("event/$eventId")
                     },
                     onRetry = { homeVm.load(force = true) },
                 )
             }
             composable("events") {
-                val state by eventsVm.state.collectAsState()
-                LaunchedEffect(Unit) { eventsVm.load() }
                 EventListScreen(
+                    onSportClick = { sport -> navController.navigate("events/$sport") },
+                )
+            }
+            composable("events/{sport}") { entry ->
+                val sport = entry.arguments?.getString("sport") ?: "mma"
+                LaunchedEffect(sport) { competitionsVm.load(sport) }
+                val state by competitionsVm.state.collectAsState()
+                CompetitionsScreen(
                     state = state,
-                    onEventClick = { event ->
+                    sport = sport,
+                    onEventClick = { eventId, s, league ->
                         detailVm.clearSnack()
-                        navController.navigate("event/${event.id}")
+                        detailVm.currentSport = s
+                        detailVm.currentLeague = league
+                        navController.navigate("event/$eventId")
                     },
+                    onBack = { navController.popBackStack() },
                 )
             }
             composable("subscriptions") {

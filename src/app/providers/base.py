@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
+from datetime import datetime
 
 from app.providers.models import AthleteDetail, CompetitionStatus, Event, EventSummary
 
@@ -22,33 +23,26 @@ class Provider(ABC):
     """
 
     @abstractmethod
-    async def list_upcoming_events(self) -> Sequence[EventSummary]:
-        """Lista los eventos próximos (no pasados) de la liga/ deporte.
+    async def list_upcoming_events(
+        self, *, min_date: datetime | None = None, max_concurrent: int = 4
+    ) -> Sequence[EventSummary]:
+        """Lista los eventos proximos (no pasados) de la liga/deporte.
 
-        Devuelve resumenes ligeros (id + nombre + fecha) suficientes para que
-        el usuario seleccione a cuál suscribirse.
+        `min_date`: opcional, filtra eventos cuya fecha sea anterior a esta
+        (default: ahora UTC). `max_concurrent`: limite de fetches paralelos.
         """
 
     @abstractmethod
     async def get_event_card(self, event_id: str) -> Event:
-        """Devuelve la tarjeta completa de un evento con todos sus combates.
-
-        Los combates vienen ordenados por `matchNumber` (1 = main event).
-        """
+        """Devuelve la tarjeta completa de un evento con todos sus combates."""
 
     @abstractmethod
     async def get_competition_status(self, event_id: str, competition_id: str) -> CompetitionStatus:
-        """Devuelve el estado en vivo de un combate concreto.
-
-        Usado por el Poller para detectar transiciones `pre -> in -> post` del
-        combate inmediatamente anterior al combate objetivo (D15).
-        """
+        """Devuelve el estado en vivo de un combate concreto."""
 
     @abstractmethod
     async def get_athlete(self, athlete_id: str) -> AthleteDetail:
-        """Devuelve el detalle de un atleta (nombre + foto).
+        """Devuelve el detalle de un atleta (nombre + foto)."""
 
-        Usado para enriquecer la tarjeta (nombres/headshots en la web) y el
-        mensaje de la llamada. Las implementaciones deberían cachear el
-        resultado (los atletas cambian rara vez).
-        """
+    async def aclose(self) -> None:  # noqa: B027
+        """Cierra recursos (httpx client, etc.). Implementacion por defecto nop."""

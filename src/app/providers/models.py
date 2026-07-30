@@ -19,6 +19,7 @@ from pydantic import BaseModel, ConfigDict, Field
 BoutState = Literal["pre", "in", "post"]
 
 _ATHLETE_ID_RE = re.compile(r"/athletes/(\d+)")
+_TEAM_ID_RE = re.compile(r"/teams/(\d+)")
 
 
 class _ESPNBase(BaseModel):
@@ -34,6 +35,21 @@ class AthleteRef(_ESPNBase):
     def athlete_id(self) -> str | None:
         """Extrae el id del atleta del `$ref` (ej. `.../athletes/4686725?lang=en`)."""
         m = _ATHLETE_ID_RE.search(self.ref)
+        return m.group(1) if m else None
+
+
+class TeamRef(_ESPNBase):
+    """Referencia (URL) a un equipo NBA (D56); el nombre se resuelve bajo demanda.
+
+    NBA competitors no traen `athlete $ref` (son equipos, no atletas). El
+    `team $ref` apunta a `.../seasons/{year}/teams/{id}` desde donde se obtiene
+    `displayName` + `logos[]`."""
+
+    ref: str = Field(alias="$ref")
+
+    @property
+    def team_id(self) -> str | None:
+        m = _TEAM_ID_RE.search(self.ref)
         return m.group(1) if m else None
 
 
@@ -60,13 +76,41 @@ class AthleteDetail(_ESPNBase):
         return None
 
 
+class TeamLogo(_ESPNBase):
+    href: str
+    alt: str | None = None
+
+
+class TeamDetail(_ESPNBase):
+    """Detalle de un equipo NBA (`/sports/basketball/leagues/nba/seasons/{year}/teams/{id}`)."""
+
+    id: str
+    display_name: str = Field(default="", alias="displayName")
+    abbreviation: str | None = None
+    logos: list[TeamLogo] = Field(default_factory=list)
+
+    @property
+    def logo_url(self) -> str | None:
+        """Primera logo disponible (ESPN devuelve multiples tamanos)."""
+        if self.logos:
+            return self.logos[0].href
+        return None
+
+
 class Competitor(_ESPNBase):
-    """Un lado de un combate (red corner=order 1, blue=order 2)."""
+    """Un lado de un combate (red corner=order 1, blue=order 2).
+
+    En tenis, el nombre viene inline (D49): el campo `name` se rellena
+    directamente desde el JSON de ESPN sin necesidad de seguir el `$ref`.
+    En NBA (D56), el nombre se resuelve via `TeamResolver` siguiendo el
+    `$ref` del campo `team` (no `athlete`)."""
 
     id: str
     order: int
     winner: bool = False
     athlete: AthleteRef | None = None
+    team: TeamRef | None = None
+    name: str | None = None
 
 
 class CardSegment(_ESPNBase):
@@ -76,7 +120,7 @@ class CardSegment(_ESPNBase):
 
 class BoutRegulation(_ESPNBase):
     periods: int
-    clock: float
+    clock: float = 0.0
 
 
 class BoutFormat(_ESPNBase):
@@ -84,23 +128,49 @@ class BoutFormat(_ESPNBase):
 
 
 class WeightClass(_ESPNBase):
-    """Categoria de peso del combate (ESPN `competition.type`)."""
+    """Categoria de peso del combate (ESPN `competition.type`).
+
+    En tenis, `type.text` contiene el tipo de partido (e.g. "Men's Singles").
+    `extra="ignore"` descarta campos extra como `slug`/`type` de tenis."""
 
     text: str | None = None
     abbreviation: str | None = None
 
 
+class TennisCourt(_ESPNBase):
+    """Pista de un partido de tenis (D46)."""
+
+    description: str
+
+
+class TennisRound(_ESPNBase):
+    """Ronda de un partido de tenis (D46)."""
+
+    round_type: int = Field(alias="roundType")
+    description: str | None = None
+    abbreviation: str | None = None
+
+
 class Bout(_ESPNBase):
-    """Un combate individual dentro de una tarjeta (competition en ESPN)."""
+    """Un combate individual dentro de una tarjeta (competition en ESPN).
+
+    Campos compartidos MMA y tenis (D46/D47). En tenis:
+    - No hay `matchNumber` → default 0 (orden por `date` dentro de cada `court`).
+    - `court` informa la pista (Center Court, etc.).
+    - `round` informa la ronda (QF, SF, Final...).
+    - Los nombres de jugadores vienen inline en `competitors[].name` (D49).
+    """
 
     id: str
-    match_number: int = Field(alias="matchNumber")
+    match_number: int = Field(default=0, alias="matchNumber")
     date: str
     end_date: str | None = Field(default=None, alias="endDate")
     weight_class: WeightClass | None = Field(default=None, alias="type")
     card_segment: CardSegment | None = Field(default=None, alias="cardSegment")
     format: BoutFormat | None = None
     competitors: list[Competitor] = Field(default_factory=list)
+    court: TennisCourt | None = None
+    round: TennisRound | None = None
 
     @property
     def red_corner(self) -> Competitor | None:

@@ -1,0 +1,1 @@
+{"$meta":{"parameters":{"season":["2027"],"seasontypes":["1"],"dates":["20261005"]}},"count":2,"pageIndex":1,"pageSize":25,"pageCount":1,"items":[{"$ref":"http://sports.core.api.espn.com/v2/sports/basketball/leagues/nba/events/401898716?lang=en&region=us"},{"$ref":"http://sports.core.api.espn.com/v2/sports/basketball/leagues/nba/events/401898388?lang=en&region=us"}]}

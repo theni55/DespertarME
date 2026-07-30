@@ -18,7 +18,11 @@ from app.db.models.base import Base
 
 
 class BoutSubscription(Base):
-    """Suscripción de alerta a un combate concreto (la que dispara el Poller)."""
+    """Suscripcion de alerta a un combate concreto (la que dispara el Poller).
+
+    Multi-sport (D47): `sport` indica el deporte ("mma"|"tennis") para que el
+    Poller use el Provider correcto al procesar la suscripcion.
+    """
 
     __tablename__ = "bout_subscriptions"
     __table_args__ = (
@@ -33,6 +37,7 @@ class BoutSubscription(Base):
     bout_id: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     target_match_number: Mapped[int] = mapped_column(Integer, nullable=False)
     lead_minutes: Mapped[int] = mapped_column(Integer, default=15, nullable=False)
+    sport: Mapped[str] = mapped_column(String(20), default="mma", nullable=False, index=True)
     status: Mapped[str] = mapped_column(
         Enum("active", "fired", "cancelled", name="subscription_status"),
         default="active",

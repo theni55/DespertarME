@@ -2,6 +2,90 @@
 
 > Registro cronológico de cada sesión de trabajo: qué se hizo y qué quedó pendiente.
 
+## Sesión NBA (cont.) — Refactor + Fase N6 Android + fix baseUrl (2026-07-27)
+
+**Rama:** `feature/nba` · **4 commits** (backend `a386c09`, refactor `28a5075`, Android N6 `45c62b0`, baseUrl fix `f930320`)
+
+**Contexto:** la app mostraba datos de MMA para Tenis y NBA. Tras diagnóstico exhaustivo se descubrió que `AppContainer.baseUrl` apuntaba a Railway (sin código NBA desplegado, posiblemente con bug pre-fix de tenis Sesión 24). Cambiado a `http://10.0.2.2:8000/`. Además se ejecutó refactor de ~400 líneas duplicadas entre providers y resolvers.
+
+**Hecho:**
+1. **Refactor `_EspnBaseProvider`** — unifica CB + tenacity + HTTP copiado 3 veces en UFC/Tenis/NBA (~100 líneas c/u). Cada provider ahora hereda y baja a ~100 líneas.
+2. **Refactor `CacheResolver[T]`** — genérico Redis + memoria L1. AthleteResolver y TeamResolver pasan de ~120 líneas a ~20. **−134 líneas netas**.
+3. **Fix race condition tenis**: `loadJob?.cancel()` en CompetitionsViewModel y EventDetailViewModel.
+4. **Fase N6 Android NBA**: 11 archivos, +108 líneas — NbaBlue, Home+Buscar+EventDetail+Alertas NBA, LEAD_OPTIONS dinámico, lead==0 en handleUpdate.
+5. **Root cause baseUrl**: Railway → `10.0.2.2:8000` para dev local. Backend local verificado con curl: 3 providers correctos.
+
+**Errores:** E1 (display_clock alias), E2 (previous_bout mn-1), E3 (effective_buffer None), E4 (feature/tenis/nba ref inválido), E5 (catch Throwable atrapa CancellationException — pendiente), E6 (baseUrl Railway sin NBA).
+
+**Pendiente:** catch(Exception), merge feature/nba→feature/tenis, deploy Railway, validación partido real.
+
+## Sesión NBA — Backend NBA completado (Fases N1-N5)
+
+**Fecha:** 2026-07-27 · **Rama:** `feature/nba` (desde `feature/tenis`; `feature/tenis/nba` no era válido en git por jerarquía de refs).
+
+**Contexto:** el owner pidió añadir NBA al MVP: "avisar tanto del inicio del partido como del inicio de cada cuarto, misma dinámica que el resto de deportes". Tras investigación de la API ESPN NBA en vivo (vía webfetch) se detectó la limitación crítica: ESPN solo expone status global del juego (`state` + `period` + `clock`), NO pre/in/post por cuartos. Eso obligó a sintetizar el estado por cuarto detectando transiciones de `period` entre polls.
+
+**Decisiones de diseño registradas:** D56 (NBA MVP: ESPN Core API, modelo "Bout = Cuarto", OT ignorado, Q1 = "Inicio del partido" con selector 5/10/15/30, Q2-Q4 chip "Cuando empieza"→lead=0→Android `handleUpdate` branch `trigger = max(now+60s, est-60s)`), D57 (buffers asimétricos NBA: 120s Q1→Q2/Q3→Q4 comerciales, 900s halftime Q2→Q3 — callback `EstimatorConfig.buffer_for`), D58 (`TeamResolver` mirror `AthleteResolver` para resolver `team $ref` → name + logo con caché Redis TTL 30d).
+
+**Hecho en esta sesión:**
+
+1. **Investigación ESPN NBA** con `webfetch`: verificación en vivo de `/v2/sports/basketball/leagues/nba/events` (preseason 2 partidos), `events/{id}` ( Lakers@Kings single competition, competitor con `team $ref` sin `athlete $ref`), `status` (state pre con period=0; capturado status post period=4 de un partido real 2026-04-15), `teams/{id}` (displayName + logos[]). Hallazgo crítico: no hay per-quarter status — solo global con `period` indicando el cuarto en curso.
+
+2. **Fase N1 ESPN NBA Provider** (3 ficheros nuevos ~480 líneas):
+   - `src/app/providers/espn_nba.py` (`EspnNbaProvider`):
+     - Reutiliza `CircuitBreakerOpenError`/`_is_retryable` de `espn_ufc` (mismo patrón que tennis).
+     - `get_event_card` sintetiza una `Event` con **4 `Bout` Q1-Q4** a partir del único `competition[0]` NBA. Cada bout: `id="{eventId}_q{N}"`, `matchNumber=N`, `cardSegment="Regulation"`, `format.regulation={periods:1, clock:720}`. Remapeo `order 0/1 (home/away) → 1/2 (red/blue corner)` para encajar con `Bout.red_corner`/`blue_corner` (hardcoded order==1/2).
+     - `get_competition_status(event_id, competition_id)` extrae `qN` del bout_id sintético via regex `_q(\d+)$`, fetch-el status global con cache en memoria de 3 s (TTL corto para evitar servir data stalada entre polls pero dedupar target+prev dentro del mismo poll), deriva estado per-quarter comparando `period`: `N < period` → post, `N > period` → pre, `N == period` → usa `state` global.
+     - `get_team(team_id)`: endpoint NBA teams cuelga de `/seasons/{year}/teams/{id}` — probing de `[current, current+1, current-1]` para cubrir cualquier season activa.
+   - `src/app/providers/teams.py` (`TeamResolver`): clon de `AthleteResolver` con key `team:{id}`, TTL 30 días (`team_cache_ttl_seconds=2592000`), degradación a "TBD" sin cachear fallos. Método `TeamResolver.resolve_many` con `asyncio.Semaphore(4)` concurrente.
+   - `src/app/providers/models.py`: añadido `TeamRef` (regex `/teams/(\d+)`), `TeamLogo`, `TeamDetail` (con `logo_url` property), y `Competitor.team: TeamRef | None` junto al `athlete` existente. `Competitor.name` sigue para tenis inline.
+   - `src/app/providers/__init__.py`: exports `EspnNbaProvider`, `TeamResolver`, `ResolvedTeam`, `TeamRef`, `TeamDetail`.
+
+3. **Fase N2 entidades + buffer asimétrico en estimator**:
+   - `domain/entities.py`:
+     - `Bout.estimated_duration_seconds` branch NBA: `periods * round_seconds` (1 quarter sintético = 720s sin descanso intercuarto; el descanso lo mete el estimador via `buffer_for`).
+     - `BoutStatus.elapsed_seconds` branch NBA: `(period-1)*720 + (720-clock)` cuando state=="in" (clock = segundos restantes countdown, period = número del cuarto global 1..4+).
+     - `Card.previous_bout` branch NBA: `bout_by_match_number(target.match_number - 1)` (NBA mn asciende con tiempo, opuesto a MMA donde mn desciende).
+   - `engine/estimator.py`: nuevo campo `EstimatorConfig.buffer_for: Callable[[Bout], timedelta | None] | None`. En `estimate()`, se calcula `effective_buffer`: si callback se setea y devuelve None para un sport concreto → cae al `default_buffer` fijo (regresión MMA/Tenis confirmada por test). `effective_buffer` aplica tanto al branch `in` como al `post` (D45).
+   - `scheduler.py`: `_nba_buffer_for(target)` — NBA Q3 (mn==3) usa `buffer_nba_halftime_seconds=900`, otros NBA `buffer_nba_quarter_seconds=120`. Para no-NBA devuelve None → fallback al `default_buffer`. Scheduler ahora construye `athlete_resolver` y `team_resolver` en paralelo, ambos pasados al Poller. `EstimatorConfig.buffer_for` wired con el callback NBA.
+   - `config.py`: nuevo `espn_nba_league="nba"`, `buffer_nba_quarter_seconds=120`, `buffer_nba_halftime_seconds=900`, `team_cache_ttl_seconds=2592000`.
+
+4. **Fase N3 Poller multi-sport NBA**:
+   - `engine/poller.py`: añadido `team_resolver: TeamResolver | None = None` al constructor (lazy-init con el provider NBA la primera vez). `_load_card` ahora recolecta `athlete_ids` (MMA) Y `team_ids` (NBA competitors tienen `team $ref`, no `athlete $ref`). `_to_athlete` extendido con branch NBA: si `corner.athlete` es None pero `corner.team` tiene `team_id`, resuelve via `team_resolver` y devuelve `Athlete(id=team_id, name=team_display_name)`.
+   - `Any` importado para type del resolved dict.
+   - **Sin tocar la orquestación del poller** — el flujo D45 (push update on `in→post`, MIN_DELTA_SECONDS=60, idempotencia E6, OBSERVED_AT anchor E2) funciona idéntico para NBA. El provider ya cachea el status global 3 s, así que `provider.get_competition_status(event_id, target.id)` y `provider.get_competition_status(event_id, prev.id)` hacen solo 1 fetch ESPN por ciclo (no 2), verificado por test `test_get_competition_status_caches_global_status_within_poll` (assert route.call_count == 1).
+
+5. **Fase N4 API + schemas multi-sport NBA**:
+   - `api/schemas.py`: validator básico relajado a `lead_minutes >= 0` (era `>=5`). Añadido método `BoutSubscriptionCreate.validate_for_sport()`: NBA Q2-Q4 requiere `lead_minutes == 0`; resto (MMA/Tenis/NBA Q1) requiere `>= MIN_LEAD_MINUTES=5`. Constants `MIN_LEAD_MINUTES=5` + `NBA_QUARTER_LEAD_MINUTES=0`.
+   - `api/routes/subscriptions.py`: `create_subscription` llama `body.validate_for_sport()` antes de persistir; raises 422 si viola. Regresión positiva: `test_create_subscription_lead_minutes_minimum` (MMA con lead=2) sigue recibiendo 422 via el validator contextual.
+   - `api/routes/events.py`: NBA branch en `_get_provider` (`EspnNbaProvider(league=league or settings.espn_nba_league)`); `_team_resolver` module-level inicializado lazy en paralelo a `_resolver`; `_to_athlete_out` extendido con branch NBA: si `corner.athlete` es None y `corner.team` está set, resuelve via `team_resolver`, con `logo_url` mapeado a `headshot_url`.
+   - `_previous_bout_id_map` ya funciona para NBA porque delega en `Card.previous_bout` que tiene el branch mn-1.
+   - **DB: sin migración Alembic necesaria** — la columna `sport` ya es `String(20)` indexada (Fase 8d migración `8df6f9297a34`).
+
+6. **Fase N5 Tests + smoke en vivo**:
+   - `tests/test_espn_nba.py`: 26 tests:
+     - `test_list_upcoming_events_returns_non_empty_list` (mocks event_list + event_detail).
+     - `test_get_event_card_synthesizes_four_quarters` (assert 4 bouts, mn=[1,2,3,4], id=`{eventId}_q{N}`, cardSegment "Regulation", format periods=1 clock=720).
+     - `test_get_event_card_remaps_nba_competitor_order_to_red_blue` (red.order==1, blue.order==2, red.athlete is None, red.team.team_id==23, blue.team.team_id==13).
+     - Per-quarter status derivation: 6 tests cubren todas las combinaciones de `period` global vs target Q (pre_when_game_not_started, in_q1_marks_q1_in_others_pre_post, in_q2/in_q3/in_q4 variations, post_marks_all_quarters_post).
+     - Cache status test: `test_get_competition_status_caches_global_status_within_poll` asserts `route.call_count == 1` despite 4 calls.
+     - Circuit breaker: 2 tests (5xx abre, 404 no abre — E5).
+     - Team tests: `test_get_team_returns_display_name_and_logo`, `test_team_resolver_caches_after_first_fetch`, `test_team_resolver_degrades_to_tbd_on_failure`.
+     - Estimator: 3 tests (Q2 short buffer + Q3 halftime buffer when prev post, Q2 when prev in uses quarter buffer, MMA regression with `buffer_for` returning None).
+     - Schemas: 4 tests (lead=0 NBA Q2-Q4 aceptado, lead=0 MMA rechazado via `validate_for_sport`, lead<0 pydantic rechazado, NBA Q2 con lead>0 rechazado).
+     - Domain: 4 tests (Bout.estimated_duration, BoutStatus.elapsed in Q1, Q2, y not-in).
+   - Fixtures `tests/fixtures/espn_nba/` grabados en vivo: `event_list.json` (2 preseason events), `event_401898716.json` (Lakers@Kings), 6 statuses (`pre` real, 4 `in_q*` sintetizados con period/clock realistas, `post` real de un partido completado), `team_13.json` (Lakers), `team_23.json` (Kings). Limpieza BOM PowerShell (PS `Set-Content -Encoding utf8` añade BOM que rompe `json.loads`).
+   - **Verificación final backend**: `pytest 106/106` (80 preexistentes + 26 nuevos), `ruff check`/`black --check`/`mypy src/app` limpios.
+   - **Smoke API local end-to-end** contra Railway-ESPN: `GET /api/events?sport=nba&league=nba` → 2 partidos preseason; `GET /api/events/401898716?sport=nba` → 4 bouts con `previous_bout_id` encadenado Q4→Q3→Q2→Q1 (ruta NBA mn-1) y `red.name="Sacramento Kings"` (TeamResolver working en vivo); `/health` 200.
+
+**Errores solucionados Documentados:**
+- **E1 - `display_clock` kwarg ignored silently**: al construir `CompetitionStatus(display_clock="0.0", short_detail="TBD")`, pydantic v2 con `Field(alias="displayClock")` ignora los kwargs del field name (sin `populate_by_name=True`). Fix: refactor a `CompetitionStatus.model_validate({...})` con alias keys (`displayClock`, `shortDetail`). Mypy complied.
+- **E2 - NBA Q prev lookup returned None**: card `[Q1,Q2,Q3]` con target=Q3 y `previous_bout = mn+1` buscaba mn=4 → None → "no hay combate previo; fecha programada". Root cause: NBA mn asciende con tiempo; UFC mn desciende. Fix: branch NBA en `Card.previous_bout` usando `mn - 1`.
+- **E3 - `effective_buffer = None` crash**: al setear `buffer_for` callback que devuelve None para MMA, `anchor + None` explotaba con TypeError. Fix: tipo del callback corregido a `timedelta | None`, y fallback al `default_buffer` cuando callback devuelve None.
+- **E4 - `feature/tenis/nba` ref inválido**: git no permite refs jerárquicos cuando el padre ya existe. Cambiado a `feature/nba`.
+
+**Pendiente para próxima sesión:** Fase N6 Android nativo (todos los cambios documentados en `memoria/fases.md` sección "Fase NBA"). Incluye `NbaBlue` token, NBA fetch en `HomeViewModel`, NBA branch en `CompetitionsScreen`/`SubscriptionsScreen`, NBA render con etiquetas "Inicio del partido"/"2º cuarto"/"3º cuarto"/"4º cuarto" en `EventDetailScreen`, `LEAD_OPTIONS` dinámico (NBA Q2-Q4 → chip "Cuando empieza"=lead 0), branch universal `if (lead == 0) trigger = max(now+60s, est-60s)` en `DespertarMeFirebaseService.handleUpdate()`, y smoke en emulador.
+
 ## Sesión 1 — Inicio del proyecto
 
 - Recogida de requisitos con el usuario vía preguntas estructuradas.
@@ -954,6 +1038,77 @@ plataforma (Vercel/CF Pages descartados: serverless no soporta el scheduler
 
 - **Memorias actualizadas:** `handoff.md` (Sesión 22 como punto de entrada), `bitacora.md` (esta entrada), `AGENTS.md` (índice regenerado), `memoria/plan-mvp-ios.md` (nuevo).
 
+---
+
+## Sesión 23 — Plan SDD Tenis + rama feature/tenis (2026-07-24)
+
+- **Contexto:** el owner quiere expandir el MVP a tenis (ATP/WTA) y F1, replicando el modelo de tarjeta escalonada. Se prioriza tenis por ser más cercano al modelo existente (partido anterior en la misma pista en vez de combate anterior en la tarjeta). F1 queda para después (requiere fuente de datos de pago, OpenF1 9.90 EUR/mes).
+
+- **Investigación de fuentes Tenis** (`webfetch` a ESPN Core API):
+  - **ATP** (`/v2/sports/tennis/leagues/atp/`): activo. Evento Generali Open Kitzbuhel (304-2026) con 54 partidos, 3 pistas (Center Court, Grandstand, Küchenmeister). Status de competición: `{type: {state: "post", completed: true}, period: 2}` — mismo patrón que MMA pero sin `clock`.
+  - **WTA** (`/v2/sports/tennis/leagues/wta/`): activo. 3 torneos hoy (401-2026, 525-2026, 1002-2026). 63 partidos, pistas "Court 1", "Court 2", "Livesport Arena".
+  - **Estructura confirmada**: `court.description` por partido, `competitors[].name` inline (a diferencia de MMA que solo da `$ref` y requiere `AthleteResolver`), `round` (QF/SF/Final), `type.text` ("Men's Singles", "Men's Doubles"), `format.regulation.periods` (3 para best-of-3, 5 para best-of-5). **Sin `matchNumber`** — el orden es cronológico por `date` dentro de cada pista.
+
+- **Investigación F1** (diferida):
+  - ESPN Core API tiene F1 (`/v2/sports/racing/leagues/f1/`): Hungarian GP 600057440 con sesiones (FP1/FP2/FP3/Qualy/Race). Status endpoint sí funciona, pero **no tiene datos de vueltas** (solo state pre/in/post).
+  - **OpenF1** (`api.openf1.org`): API gratuita open-source. Endpoint `/v1/laps` con vueltas en vivo. **Datos en vivo requieren plan sponsor 9.90 EUR/mes** (histórico gratis). Es la única opción viable para "quedan X vueltas".
+  - **Jolpica F1** (`api.jolpi.ca`): Ergast-compatible. Endpoint `/laps` solo es histórico (post-carrera), no sirve para datos en vivo.
+  - **Conclusión**: F1 viable solo con OpenF1 de pago → diferido. Tenis primero.
+
+- **Plan SDD documentado** en `memoria/plan-tenis.md` (nuevo fichero):
+  1. **T1 — ESPN Tennis Provider**: nuevo `EspnTennisProvider` en `providers/espn_tennis.py`, reutiliza circuit breaker + tenacity de `EspnUfcProvider`. DTOs tenis en `models.py` (`TennisCourt`, `TennisRound`, `Competitor.name`, `Bout.match_number` optional, `Bout.court`/`round`).
+  2. **T2 — Generalización del dominio**: `Bout.court`/`Bout.sport`, `Card.sport`, `Card.previous_bout()` por court+date cuando `court is not None` (MMA sigue con matchNumber+1), `BoutStatus.sport`, `estimated_duration_seconds`/`elapsed_seconds` sport-aware.
+  3. **T3 — DB + migración**: columna `sport VARCHAR(20) DEFAULT 'mma'` en `BoutSubscription` + índice.
+  4. **T4 — API multi-sport**: provider registry (`dict[str, Provider]`), `?sport=mma|tennis` query param (default "mma", backward compatible), refactor `previous_bout_id` para delegar a `Card.previous_bout()`.
+  5. **T5 — Poller + Scheduler multi-sport**: providers dict, agrupar subs por `(sport, event_id)`, mapeo sport-aware en `_load_card`.
+  6. **T6 — App Android**: `@Query("sport")` en Retrofit, DTOs con `sport`/`court`/`roundDescription`, Home con selector de deporte, EventDetail tennis agrupado por court, Subscriptions con badge de deporte.
+  7. **T7 — Tests + smoke**: `test_espn_tennis.py` con respx, tests actualizados de poller/API/events, `probe_tennis.py`, lint + typecheck.
+
+- **Decisiones registradas** en `decisiones.md`:
+  - D51: ESPN Core API como fuente de Tenis (ATP+WTA), mismo patrón que UFC.
+  - D52: Modelo multi-sport: `sport` field en `BoutSubscription` + `Card`, `previous_bout()` generalizado por pista.
+  - D53: Buffer inter-partidos tenis: 15 min (`BUFFER_INTERMATCH_TENNIS_SECONDS=900`).
+  - D54: Nombres inline de `Competitor.name` en tenis (sin `AthleteResolver`).
+
+- **Rama `feature/tenis`** creada desde `dev` (commit `18095f3`). `git diff dev --stat` → sin diferencias (punto de partida idéntico).
+
+- **Memorias actualizadas:** `plan-tenis.md` (nuevo), `decisiones.md` (D51-D54), `fuentes-datos.md` (tabla + sección tenis), `fases.md` (Fase 8 con checkboxes), `handoff.md` (Sesión 23 como punto de entrada), `bitacora.md` (esta entrada), `AGENTS.md` (índice regenerado).
+
+---
+
+## Sesión 23 (cont.) — Implementación backend tenis + verificación en vivo (2026-07-24)
+
+- **T1-T5 completados**: provider, dominio generalizado, DB, API multi-sport (`?sport=tennis&league=atp|wta`), poller/scheduler. Código en `feature/tenis`.
+
+- **Fixes aplicados durante la sesión:**
+  1. **`league` parameter (ca99026)**: `?sport=tennis&league=atp|wta`. La key del provider registry pasó de `str` a `tuple(sport, league)` para cachear providers por separado. Sin este fix, los eventos WTA devolvían `bouts: []` porque el provider usaba `league=atp` (default).
+  2. **Skip AthleteResolver para tenis (38dd439)**: D54 — los nombres vienen inline en `competitor.name`, no hace falta resolver 126 atletas via `/athletes/{id}`. Las peticiones pasan de ~20s a ~5s.
+  3. **FakeRedis en dev (pendiente commit)**: `scheduler.py` usa `fakeredis.FakeRedis` cuando `APP_ENV=development`. Redis Windows 3.0.504 (winget) es incompatible con redis-py moderno (no soporta comando `HELLO` de Redis 6+).
+  4. **Fix `_log_alert` MissingGreenlet (pendiente commit)**: capturar `sub_id`, `device_id`, `bout_id` como primitivos en vez de pasar el ORM `BoutSubscription` a `_log_alert`. Tras un commit/rollback previo, los atributos lazy del ORM lanzaban `MissingGreenlet`.
+
+- **Verificación en vivo — ATP Generali Open (304-2026), Center Court:**
+  - Suscripción: **Alexander Bublik vs Tomas Martin Etcheverry** (178887), `sport=tennis`, `lead_minutes=15`
+  - Previo en Center Court: Hanfmann vs Halys (178886) — detectado `in` (2º set) → `post` a las 14:32
+  - Estimador: `previo terminado → observed_at + buffer 600s = 14:39 CEST`, `confidence=high`
+  - **Push `update` enviado a las 14:32** (DummyNotifier, logueado en alert_log)
+  - **Partido empezó a las 14:41** (1st Set) — el estimador acertó con 2 min de margen
+  - Push `started` falló por bug MissingGreenlet (ya arreglado)
+
+- **Infraestructura:**
+  - Redis Windows 3.0.504 instalado via `winget install Redis.Redis` y arrancado (`redis-server`). Responde `PONG` pero no soporta `HELLO` → fakeredis en dev.
+  - `truststore` instalado para bypass del proxy corporativo TLS (sitecustomize.py en venv).
+
+- **Tests:** 80/80 verdes, ruff + black + mypy limpios.
+
+- **Pendiente (próxima sesión):**
+  1. Verificar push `started` con el fix de `_log_alert` aplicado.
+  2. App Android: cuando el compañero suba sus cambios, endpoints listos.
+  3. F1: investigación de fuentes diferida (OpenF1 9.90 EUR/mes).
+
+- **Memorias actualizadas:** `handoff.md`, `bitacora.md` (esta entrada), `decisiones.md` (D55), `fases.md` (checkboxes T1-T5), `plan-tenis.md` (nota verificación vivo), `AGENTS.md` (índice).
+
+---
+
 ## Sesión 23 — Piloto rediseño Home estilo Winamax (D46/D47) + nav 3 destinos (2026-07-22)
 
 - Sesión ejecutada según `validacion-sesion-fable5-home-winamax.md` (resultado del grilling con el owner). Alcance: solo `HomeScreen` + cambios de navegación dependientes; `EventDetailScreen`/`BoutCard` explícitamente fuera.
@@ -965,3 +1120,37 @@ plataforma (Vercel/CF Pages descartados: serverless no soporta el scheduler
 - **Decisiones registradas**: D46 (Home lista de cards, nav 3 destinos, supersede Sesión 15) y D47 (headshots reales en vez de póster genérico, desviación del paso 4 de la validación).
 - **Quirk de sesión**: un `Get-Content -Raw` + `Set-Content -Encoding UTF8` en PowerShell corrompió las tildes de `HomeScreen.kt` (mojibake CP-1252→UTF-8); reparado con `[System.IO.File]::ReadAllText/WriteAllText` + roundtrip de encoding. Confirma la regla global de no usar cmdlets de PowerShell para ficheros UTF-8.
 - **Pendiente**: replicar estilo en EventDetail/BoutCard (sesión posterior si el piloto valida); confirmar con el owner la decisión #12 (fusión Buscar/EventList); NO mergear a main sin confirmación.
+
+---
+
+## Sesión 24 — Fase 8f Android tenis completada (2026-07-24)
+
+- **Merge dev → feature/tenis**: 4 conflictos en memorias resueltos. D numbers tenis renumerados a D51-D55.
+- **Fase 8f** (~325 lineas en 11 ficheros Kotlin):
+  - Capa datos: sport/league en API + tennis fields en DTOs
+  - CompetitionsScreen + VM nuevos (secciones ATP/WTA)
+  - EventListScreen → sport cards (MMA, Tenis)
+  - MainActivity: ruta `events/{sport}`, sport/league en EventDetailVM
+  - HomeViewModel: fetch paralelo 3 fuentes, merge por fecha
+  - HomeScreen: labels dinamicos, onEventClick con sport/league
+  - EventDetailScreen: BoutCard condicional (court badge, sets vs rounds)
+  - SubscriptionsScreen: badge deporte
+- **Fix backend**: `espn_tennis.py` cutoff 14 dias para torneos en curso (E2)
+- **Fix Android**: keys compuestas en LazyColumn (E1)
+- **Errores**: E1 (key collision), E2 (tenis cutoff), E3 (baseUrl Railway sin tenis)
+- **Pendiente**: cuestionario diseño visual para proxima sesion, headshots ausentes, restaurar baseUrl Railway
+- **Memorias actualizadas**: handoff.md, bitacora.md (esta entrada), fases.md (Fase 8f checkboxes), AGENTS.md (indice)
+
+
+---
+
+## Sesión 26 — UI fixes tenis/NBA (Fases 1-5 parcial) (2026-07-30)
+
+- Ejecutado `memoria/plan-ui-fixes-tenis-nba.md` desde la VPS Linux (portátil Windows offline → sin build/emulador).
+- **Fase 1 (E5)**: `catch (Throwable)` → `catch (Exception)` en los 5 ViewModels.
+- **Fase 2**: acordeones ATP/WTA colapsados por defecto en CompetitionsScreen (chevron animado, contador de torneos).
+- **Fase 3**: `selectHomeEvents()` en HomeViewModel — 1 destacado por deporte + relleno cronológico dedup, orden final por fecha, MAX_FEATURED=6.
+- **Fase 4**: `NbaGameCard` — una card por partido NBA con los 4 avisos de cuarto dentro (Q1 selector lead, Q2-Q4 "Cuando empieza"). Agrupación por prefijo del bout id, solo presentación.
+- **Fase 5 parcial**: baseUrl Railway restaurado; backend en VPS: pytest 106/106, ruff/black/mypy limpios (venv python3.12 nuevo — el pyproject exige >=3.12).
+- **Fase 6 parcial**: doc huérfano `validacion-sesion-fable5-home-winamax.md` movido a `memoria/`; checkboxes del plan marcados.
+- **Pendiente**: assembleDebug + smokes en emulador, merge a dev, deploy Railway y smoke post-deploy — bloqueado por portátil offline.

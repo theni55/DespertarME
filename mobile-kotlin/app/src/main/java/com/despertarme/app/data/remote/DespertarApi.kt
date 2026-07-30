@@ -10,10 +10,17 @@ import retrofit2.http.Query
 interface DespertarApi {
 
     @GET("/api/events")
-    suspend fun listEvents(): List<EventSummaryOut>
+    suspend fun listEvents(
+        @Query("sport") sport: String = "mma",
+        @Query("league") league: String = "",
+    ): List<EventSummaryOut>
 
     @GET("/api/events/{id}")
-    suspend fun getEvent(@Path("id") id: String): EventCardOut
+    suspend fun getEvent(
+        @Path("id") id: String,
+        @Query("sport") sport: String = "mma",
+        @Query("league") league: String = "",
+    ): EventCardOut
 
     @POST("/api/devices")
     suspend fun registerDevice(@Body body: DeviceCreate): DeviceOut
