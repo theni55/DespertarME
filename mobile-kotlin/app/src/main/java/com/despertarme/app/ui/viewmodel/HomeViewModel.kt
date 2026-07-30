@@ -66,9 +66,9 @@ class HomeViewModel(
                             .getOrDefault(emptyList())
                             .map { Triple(it, "nba", "") }
                     }
-                    (mmaDeferred.await() + atpDeferred.await() + wtaDeferred.await() + nbaDeferred.await())
-                        .sortedBy { (event, _, _) -> parseDateEpoch(event.date) }
-                        .take(MAX_FEATURED)
+                    selectHomeEvents(
+                        mmaDeferred.await() + atpDeferred.await() + wtaDeferred.await() + nbaDeferred.await(),
+                    )
                 }
             } catch (t: Exception) {
                 _state.value = HomeState(
@@ -111,7 +111,31 @@ class HomeViewModel(
     }
 
     companion object {
-        const val MAX_FEATURED = 4
+        const val MAX_FEATURED = 6
+
+        /**
+         * Selecciona los eventos de Home garantizando 1 destacado por deporte
+         * (MMA, Tenis [atp+wta], NBA) + relleno cronológico deduplicado.
+         * Orden final por fecha (sin bloques por deporte).
+         */
+        internal fun selectHomeEvents(
+            all: List<Triple<EventSummaryOut, String, String>>,
+        ): List<Triple<EventSummaryOut, String, String>> {
+            val sorted = all.sortedBy { (event, _, _) -> parseDateEpoch(event.date) }
+            // 1 destacado (el más próximo) por deporte; atp+wta cuentan como "tennis".
+            val featured = sorted
+                .groupBy { (_, sport, _) -> sport }
+                .mapNotNull { (_, events) -> events.firstOrNull() }
+            val featuredKeys = featured
+                .map { (event, sport, league) -> "$sport-$league-${event.id}" }
+                .toSet()
+            // Relleno por cronología pura, deduplicando los ya destacados.
+            val fill = sorted
+                .filter { (event, sport, league) -> "$sport-$league-${event.id}" !in featuredKeys }
+                .take((MAX_FEATURED - featured.size).coerceAtLeast(0))
+            return (featured + fill)
+                .sortedBy { (event, _, _) -> parseDateEpoch(event.date) }
+        }
 
         private fun parseDateEpoch(iso: String): Long = runCatching {
             OffsetDateTime.parse(iso).toEpochSecond()
