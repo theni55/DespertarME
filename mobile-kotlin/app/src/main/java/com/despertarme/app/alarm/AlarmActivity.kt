@@ -1,7 +1,7 @@
 package com.despertarme.app.alarm
 
-import android.content.Intent
 import android.app.ActivityManager
+import android.content.Intent
 import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
@@ -10,12 +10,12 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
@@ -45,7 +45,6 @@ import com.despertarme.app.ui.theme.BlueCorner
 import com.despertarme.app.ui.theme.FootballGreen
 import com.despertarme.app.ui.theme.NbaBlue
 import com.despertarme.app.ui.theme.RedCorner
-import com.despertarme.app.ui.theme.TextSecondary
 import com.despertarme.app.ui.theme.UfcRed
 
 class AlarmActivity : ComponentActivity() {
@@ -61,9 +60,6 @@ class AlarmActivity : ComponentActivity() {
                 WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON,
         )
 
-        // Safety net: si el AlarmReceiver no pudo arrancar el servicio
-        // (ej. restricción de background en Android 14+), lo arrancamos
-        // aquí directamente para que el sonido suene.
         if (!isAlarmServiceRunning()) {
             val serviceIntent = Intent(this, AlarmService::class.java).apply {
                 action = AlarmService.ACTION_START
@@ -106,6 +102,12 @@ class AlarmActivity : ComponentActivity() {
                 },
             )
         }
+    }
+
+    private fun isAlarmServiceRunning(): Boolean {
+        val manager = getSystemService(ACTIVITY_SERVICE) as ActivityManager
+        return manager.getRunningServices(Int.MAX_VALUE)
+            .any { it.service.className == AlarmService::class.java.name }
     }
 }
 
@@ -239,16 +241,10 @@ private fun AthleteColumn(name: String, headshotUrl: String?, cornerColor: Color
                         contentDescription = null,
                         tint = Color.White.copy(alpha = 0.7f),
                         modifier = Modifier.size(32.dp),
-            )
+                    )
+                }
+            }
         }
-    }
-
-    private fun isAlarmServiceRunning(): Boolean {
-        val manager = getSystemService(ACTIVITY_SERVICE) as ActivityManager
-        return manager.getRunningServices(Int.MAX_VALUE)
-            .any { it.service.className == AlarmService::class.java.name }
-    }
-}
         Spacer(modifier = Modifier.height(6.dp))
         Text(
             text = name,
