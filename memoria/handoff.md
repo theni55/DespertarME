@@ -6,6 +6,59 @@
 
 ## Última sesión
 
+**Fecha:** 2026-07-31 · **Sesión 27 — Deploy Railway desbloqueado (fix migración) + filtrado de combates acabados/TBD + mapping torneos tenis (179 IDs) + separación singles/dobles + horas en zona local + BootReceiver fix. Rama `feature/tenis-nba`, mergeada a `dev`, todo desplegado en Railway. APK funcional contra Railway en emulador.**
+
+**Hecho en esta sesión (máquina `pacor`, toolchain Android completo):**
+
+### Deploy y fixes de infraestructura
+
+1. **Fix migración `8df6f9297a34`**: la columna `sport NOT NULL` sin `server_default` rompía el deploy en Railway porque había filas existentes en `bout_subscriptions`. Fix: `server_default='mma'`. Commit: `7c435a7`.
+2. **Git config corregido**: `user.name` estaba como `romeriiK` en vez de `theni55` a nivel repo (`.git/config`). Cambiado a `theni55`/`thenitrex1@gmail.com`. Los commits anteriores seguían como `romeriiK`, los nuevos ya salen con la identidad correcta.
+3. **Railway apuntado a `feature/tenis-nba`** (workaround temporal — `dev` en GitHub no lo detectaba Railway). Después del fix de migración, deploy OK con healthcheck verde.
+4. **BootReceiver fix**: al reiniciar el emulador, reprogramaba alarmas de DataStore con triggers en el pasado → la alarma sonaba al abrir la app. Fix: ignorar alarmas donde `triggerAtMillis <= now` o `fired == true`, y limpiarlas del DataStore.
+
+### Filtrado de combates y torneos
+
+5. **Filtrar torneos de tenis terminados**: en `EspnTennisProvider._fetch_summary`, extraer `ev_data["status"]["type"]["state"]`. Si `"post"` → descartar. Mantener ventana de 14 días para torneos en curso (start date pasado, status "in").
+6. **Filtrar eventos MMA por estado, no por fecha**: en `EspnUfcProvider._fetch_summary`, mismo patrón: skip si `status.type.state == "post"` en vez de filtrar solo por `date >= now`. El evento sigue visible mientras está en progreso (`pre`/`in`).
+7. **Filtrar combates acabados (winner=true) del detalle**: en `events.py`, loop de `bouts_out` — skip bouts donde `red_corner.winner` o `blue_corner.winner == True`. Aplica a MMA y Tenis. Señal inline, 0 llamadas extra a ESPN.
+8. **Filtrar partidos TBD de tenis**: mismo loop — para tenis, skip bouts donde `red_corner is None or blue_corner is None or name == "TBD"`. Los torneos pasaron de 54 a 8 bouts visibles (quarterfinals con jugadores reales).
+
+### Mapping de torneos de tenis + separación singles/dobles
+
+9. **Script `scripts/gen_tennis_names.py`**: fetch de todos los eventos ATP (60) y WTA (119) de la temporada 2026 via ESPN `seasons/2026/types/2/events`, extrae `tournament_id + location.city`, y genera un dict de 179 entradas `{(league, id): "{city}"}`. Grand Slams y Masters 1000 reciben nombres "hairstyle" (Australian Open, Roland Garros, Wimbledon, US Open, Indian Wells, Montecarlo, Madrid, Roma, etc.).
+10. **Dict pegado en `espn_tennis.py`** como `_TOURNAMENT_DISPLAY_NAMES`. `_fetch_summary` lo consulta con clave `(self._league, tournament_id)`:
+    - Antes: `"Mifel Tennis Open by Telcel Oppo"` → Ahora: `"Los Cabos"`
+    - Antes: `"Mubadala DC Open"` → Ahora: `"Washington"`
+    - Sin "ATP"/"WTA" redundante (el acordeón de la app ya indica el circuito).
+11. **Separación singles/dobles**: `_fetch_summary` revisa si el evento tiene bouts de "Singles" y "Doubles" (vía `competitions[].type.text`). Si hay ambos → devuelve 2 `EventSummary`: uno normal (singles) y uno con `id="{eid}_doubles"` / `name="{name} Dobles"`.
+12. **Filtro por modalidad en `get_event_detail`** (`events.py`): si `event_id` trae sufijo `_doubles` → strip para el fetch de ESPN, filtrar bouts solo de "Doubles". Si no trae sufijo → filtrar solo "Singles". Mismo mapping aplicado al nombre del `EventCardOut`.
+13. **Nombre del mapping en el detalle**: `get_event_detail` importa `_TOURNAMENT_DISPLAY_NAMES` y lo aplica al nombre del `EventCardOut` para tenis.
+
+### UI Android
+
+14. **"VS" → hora prevista solo en tenis**: en `BoutCard` (EventDetailScreen.kt), si `bout.sport == "tennis"` muestra la hora (`formatBoutTime`) en vez de "VS". Nuevo helper `formatBoutTime` usando `OffsetDateTime.parse(iso).atZoneSameInstant(ZoneId.systemDefault())`. MMA y NBA sin cambios.
+15. **Fechas en zona horaria local**: `formatDate` reescrito para convertir a la zona del dispositivo (antes mostraba `"2026-08-01 14:00 UTC"` estático). Ahora muestra `"1 ago · 16:00"` (CEST) o equivalente según la zona. Usa `OffsetDateTime.parse + atZoneSameInstant + DateTimeFormatter("d MMM · HH:mm", locale)`.
+16. **Emulador**: zona horaria cambiada a `Europe/Madrid` vía `adb root + setprop`.
+
+### Verificación final
+
+17. **Backend**: `ruff check` ✅ · `black --check` ✅ · `pytest 106/106` ✅ · `mypy src/app` ✅.
+18. **Deploy Railway**: `GET /api/events?sport=tennis&league=atp` → "Los Cabos" + "Los Cabos Dobles" · `?sport=nba` → "Miami Heat at Toronto Raptors" · `/api/events` → "UFC Fight Night: Medić vs. Rodriguez".
+19. **APK**: `assembleDebug` BUILD SUCCESSFUL, instalada en emulador contra Railway.
+
+**Commits:** fix migración, git config, BootReceiver, filtrar acabados/TBD, mapping torneos, singles/dobles, zona horaria local.
+
+**Pendiente:**
+1. Revisar en el emulador que el filtro de singles/dobles funciona visualmente en los acordeones tenis.
+2. Probar suscripciones a bouts de dobles (verificar que el backend acepta `bout_id` real del JSON ESPN, no el sintético `_doubles`).
+3. Merge `dev` → `main` en GitHub y apuntar Railway a `dev` permanentemente (ahora mismo apunta a `feature/tenis-nba`).
+4. Validación con evento real de UFC (Medić vs. Rodriguez, 1 ago 2026) — la app debería recibir pushes FCM y disparar alarmas locales.
+
+---
+
+## Sesión 26 (anterior)
+
 **Fecha:** 2026-07-30 · **Sesión UI fixes tenis/NBA — Fases 1-4 del plan `memoria/plan-ui-fixes-tenis-nba.md` completadas + baseUrl Railway restaurado + checks backend verdes. Rama `feature/tenis-nba`. PENDIENTE: assembleDebug/emulador, merge a dev y deploy (portátil Windows offline).**
 
 **Hecho en esta sesión (VPS Linux, sin toolchain Android):**

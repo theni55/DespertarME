@@ -317,7 +317,7 @@ Sin Android Studio aún → el continuador instala Android Studio + emulador API
 - [x] **`AlarmScheduler`** (nuevo, D40): `AlarmManager.setAlarmClock()` a `estimated_start_at − lead_minutes`. Requiere permiso `USE_EXACT_ALARM` (auto-concedido en Play por ser alarm app, ya en manifest). Persistencia de alarmas programadas en DataStore (para re-programar tras reboot).
 - [x] **`AlarmReceiver`** (BroadcastReceiver): al disparar la alarma → arranca `AlarmService` + abre `AlarmActivity` (full-screen intent). Marca `fired=true` para ring-once D45. Sin verify-then-ring (ya no necesario: la alarma solo se programa con estimación real del backend, no con fecha oficial de ESPN).
 - [x] **`AlarmActivity`** (full-screen): "X vs Y — UFC {event} empieza en ~N min" + botón "Descartar" (stop service). `setShowWhenLocked` + `setTurnScreenOn`. Compose.
-- [x] **BootReceiver** (`RECEIVE_BOOT_COMPLETED`): re-programa alarmas tras reinicio del dispositivo.
+- [x] **BootReceiver** (`RECEIVE_BOOT_COMPLETED`): re-programa alarmas tras reinicio del dispositivo. *(Sesión 27: fix — ignora alarmas con trigger pasado o `fired=true`, las limpia de DataStore para evitar que suenen al abrir la app.)*
 - [ ] **Doze validation**: `adb shell dumpsys deviceidle force-idle` → verify `setAlarmClock` despierta puntualmente. (Pendiente — el smoke E2E con evento real del 18 jul validará este punto también).
 - [x] **Cushion +1 min siempre** (D45): aplicado en `handleUpdate()` sobre `est-lead+60s` con floor `now+60s`. Verificado en smoke del 17/18 jul: push con `est=now+10min` + lead=5 → trigger=now+6min → alarma sonó a los 6:02 min exactos.
 - [x] **Ring-once flag** (D45): `PendingAlarm.fired` marcado por `AlarmReceiver` al disparar; pushes `update` posteriores se ignoran. Verificado en smoke: logcat "Alarma disparada y fired=true marcado para bout=401889642".
@@ -433,6 +433,16 @@ Plan detallado en `memoria/plan-tenis.md`. Decisiones D51-D54.
 - [x] CompetitionsScreen: secciones ATP/WTA, cards torneo con fecha y liga
 - [x] SubscriptionsScreen: badge de deporte (MMA/Tenis)
 
+### Fase 8g — Pulido UI + filtrado + mapping (Sesión 27, rama `feature/tenis-nba`)
+
+- [x] **Filtrar torneos de tenis terminados**: `_fetch_summary` salta eventos con `status.type.state == "post"`. Mantiene ventana 14 días para torneos en curso.
+- [x] **Filtrar partidos TBD de tenis**: `get_event_detail` salta bouts donde `red_corner is None or blue_corner is None or name == "TBD"`.
+- [x] **Filtrar combates acabados (winner=true)**: mismo loop de `bouts_out` — skip bouts con `winner == true`. Aplica a MMA y Tenis. 0 llamadas extra a ESPN.
+- [x] **Mapping de torneos tenis**: script `gen_tennis_names.py` genera dict de 179 entradas `{(league, id): city}` desde calendario ATP/WTA 2026 ESPN. Grand Slams y Masters 1000 con nombres "hairstyle". Sin sufijo "ATP"/"WTA" redundante.
+- [x] **Separación singles/dobles**: `_fetch_summary` genera 2 entradas si el evento tiene ambas modalidades. IDs sintéticos `_doubles`. Filtro por modalidad en `get_event_detail`.
+- [x] **"VS" → hora prevista en tenis**: `BoutCard` muestra la hora (`formatBoutTime`) en vez de "VS" cuando `sport == "tennis"`.
+- [x] **Fechas en zona horaria local**: `formatDate` reescrito con `OffsetDateTime.parse().atZoneSameInstant()`.
+
 ---
 
 ## Fase NBA — MVP básico multi-cuarto 🔶 en curso (rama `feature/nba` desde `feature/tenis`)
@@ -493,6 +503,10 @@ Plan detallado en el handoff de la sesión NBA. Decisiones **D56-D58**. Modelo "
 - [x] Fix race condition tenis: `loadJob?.cancel()` en CompetitionsViewModel y EventDetailViewModel.
 - [x] Fix `baseUrl`: Railway → `10.0.2.2:8000` (backend local con 3 providers).
 - [x] Build `gradlew assembleDebug` + smoke en emulador: SUCCESSFUL, sin FATAL.
+- [x] **Filtrar combates acabados (winner=true)**: skip en `get_event_detail` — bouts con `winner == true` desaparecen del detalle conforme acaban. 0 llamadas extra.
+- [x] **Filtrar eventos MMA por estado**: `list_upcoming_events` usa `status.type.state != "post"` en vez de `date >= now`. Evento sigue visible mientras `pre`/`in`.
+- [x] **Fechas en zona horaria local**: `formatDate` reescrito con `OffsetDateTime.parse().atZoneSameInstant()`.
+- [x] **BootReceiver fix**: ignora alarmas pasadas/fired al reiniciar.
 
 ### N7 — Refactor ✅ (commit `28a5075`)
 
