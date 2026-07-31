@@ -20,6 +20,9 @@ object AlarmScheduler {
             putExtra("fighter_blue", alarm.fighterBlue ?: "TBD")
             putExtra("lead_minutes", alarm.leadMinutes)
             putExtra("event_name", alarm.eventName ?: "")
+            alarm.headshotRed?.let { putExtra("headshot_red", it) }
+            alarm.headshotBlue?.let { putExtra("headshot_blue", it) }
+            alarm.sport?.let { putExtra("sport", it) }
         }
         val flags = if (Build.VERSION.SDK_INT >= 31) {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT

@@ -35,6 +35,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.despertarme.app.alarm.AlarmActivity
 import com.despertarme.app.alarm.AlarmService
 import com.despertarme.app.data.AppContainer
 import com.despertarme.app.ui.screens.CompetitionsScreen
@@ -90,6 +91,16 @@ class MainActivity : ComponentActivity() {
     private fun startTestAlarm() {
         val intent = Intent(this, AlarmService::class.java).apply { action = AlarmService.ACTION_START }
         startForegroundService(intent)
+        val activityIntent = Intent(this, AlarmActivity::class.java).apply {
+            putExtra("bout_id", "test")
+            putExtra("event_id", "test")
+            putExtra("fighter_red", "Test")
+            putExtra("fighter_blue", "Alarma")
+            putExtra("lead_minutes", 0)
+            putExtra("event_name", "DespertarME — Alarma de prueba")
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        }
+        startActivity(activityIntent)
     }
 
     private fun stopTestAlarm() {

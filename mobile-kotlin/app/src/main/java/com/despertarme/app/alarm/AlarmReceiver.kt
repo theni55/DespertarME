@@ -19,6 +19,9 @@ class AlarmReceiver : BroadcastReceiver() {
         val fighterBlue = intent.getStringExtra("fighter_blue") ?: "TBD"
         val leadMinutes = intent.getIntExtra("lead_minutes", 15)
         val eventName = intent.getStringExtra("event_name") ?: ""
+        val headshotRed = intent.getStringExtra("headshot_red")
+        val headshotBlue = intent.getStringExtra("headshot_blue")
+        val sport = intent.getStringExtra("sport") ?: "mma"
 
         val ctx = rawContext.applicationContext
 
@@ -35,7 +38,16 @@ class AlarmReceiver : BroadcastReceiver() {
         val serviceIntent = Intent(ctx, AlarmService::class.java).apply {
             action = AlarmService.ACTION_START
         }
-        ctx.startForegroundService(serviceIntent)
+        try {
+            ctx.startForegroundService(serviceIntent)
+        } catch (e: Exception) {
+            Log.w("AlarmReceiver", "No se pudo arrancar AlarmService como foreground: ${e.message}")
+            try {
+                ctx.startService(serviceIntent)
+            } catch (e2: Exception) {
+                Log.e("AlarmReceiver", "No se pudo arrancar AlarmService: ${e2.message}")
+            }
+        }
 
         // Abrir pantalla a pantalla completa sobre lockscreen.
         val activityIntent = Intent(ctx, AlarmActivity::class.java).apply {
@@ -45,6 +57,9 @@ class AlarmReceiver : BroadcastReceiver() {
             putExtra("fighter_blue", fighterBlue)
             putExtra("lead_minutes", leadMinutes)
             putExtra("event_name", eventName)
+            headshotRed?.let { putExtra("headshot_red", it) }
+            headshotBlue?.let { putExtra("headshot_blue", it) }
+            putExtra("sport", sport)
             addFlags(
                 Intent.FLAG_ACTIVITY_NEW_TASK or
                     Intent.FLAG_ACTIVITY_CLEAR_TOP or
