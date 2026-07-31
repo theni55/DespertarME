@@ -2,6 +2,55 @@
 
 > Registro cronológico de cada sesión de trabajo: qué se hizo y qué quedó pendiente.
 
+## Sesión 28 — Fútbol MVP completo: backend (provider + DB + API + poller) + Android (11 archivos) (2026-07-31)
+
+**Rama:** `feature/football` desde `dev` · **1 commit** (`1bd6141`, 32 files, +856/-72) · **Máquina:** `pacor` (Windows, toolchain Android completo)
+
+**Contexto:** el owner pidió añadir fútbol "misma estructura que tenis: ligas en vez de ATP/WTA, tap liga → partidos, hora en medio, avisar normal". Investigación de ESPN Core API soccer (220 ligas, 1 competition/event, team $ref como NBA). Limpieza previa de ramas: borradas `feature/tenis-nba` y `feature/newsport` (mergeadas en dev).
+
+**Hecho:**
+
+### Investigación
+1. **ESPN soccer** verificado en vivo: estructura 1 competition/event (mismo patrón que NBA). Competitors con `team $ref`. Status: clock count-up, period 0/1/2, state pre/in/post. Score requiere 2 calls extra. `displayClock` ("67'") disponible en status (gratis para futuro).
+
+### Backend
+2. Provider `espn_football.py` (190 líneas): reutiliza `_EspnBaseProvider`, remapea order 0/1→1/2, `get_team` con year probing.
+3. Config: `football_leagues` (7 ligas), `buffer_football_halftime_seconds`.
+4. Entities: 3 branches football (duration 5400s, prev=None, elapsed count-up).
+5. Schemas: `league` en `BoutSubscriptionCreate`/`Out`.
+6. `get_team` añadido al ABC `Provider`. `TeamResolver` typing → `Provider` (generalizado).
+7. `_get_provider` con `elif sport == "football"`. `_team_resolvers` dict (una por liga).
+8. Scheduler: providers keyed `(sport, league)`, `_football_buffer_for`, `team_resolvers` dict.
+9. Poller: `providers` dict keyed `(sport, league)`. `team_resolvers` dict. Provider lookup usa `sub.league`.
+10. DB: columna `league` en `bout_subscriptions` + migración `d7f45061518c` (`server_default=""`).
+11. Tests: `test_espn_football.py` (12 tests) + 5 fixtures ESPN reales. pytest **118/118** verdes.
+
+### Android
+12. `Color.kt`: `FootballGreen`. `Models.kt`: `league` en DTOs.
+13. `EventListScreen.kt`: tile Fútbol con `SportsSoccer`.
+14. `CompetitionsViewModel.kt`: branch `"football"` con 7 fetches paralelos por liga.
+15. `CompetitionsScreen.kt`: acordeones por liga (7), `countLabel="partidos"`. `AccordionHeader` acepta `countLabel` param.
+16. `HomeViewModel.kt`: 7 async por liga en `load()`.
+17. `HomeScreen.kt`: labels por liga, `FootballGreen` strip gradient, "Próximo" label.
+18. `EventDetailScreen.kt`: BoutCard branch "Partido · 90 min".
+19. `EventDetailViewModel.kt`: `league` en `subscribe()`.
+20. `SubscriptionsScreen.kt`: badge Fútbol con `FootballGreen`.
+21. `SubscriptionsViewModel.kt`: fallback "Partido #N".
+22. **APK compilada**: `assembleDebug BUILD SUCCESSFUL` (54s).
+
+### Git y errores
+23. **Limpieza de ramas**: borradas `feature/tenis-nba` y `feature/newsport` (local + remote). Creada `feature/football`.
+24. **Pérdida de datos por checkout**: el owner cambió a `dev` y volvió a `feature/football` mientras se editaba → las ediciones a archivos tracked se perdieron. Archivos nuevos (untracked) sobrevivieron. Todo se reaplicó y commiteó en `1bd6141`.
+25. **Emulador**: no arrancó al final. Locks stale (`hardware-qemu.ini.lock` directorio, `multiinstance.lock`) de intentos previos. El timeout de bash mató el proceso emulador dejando los locks. `opengl32sw` falta (warning benign). **Pendiente: reiniciar PC y reintentar.**
+
+**Pendiente próxima sesión:**
+1. Arrancar emulador (limpiar locks + reiniciar PC si es necesario).
+2. Smoke visual: fútbol tile → acordeón LaLiga → 2 partidos → EventDetail → Avisarme.
+3. Merge `dev` → `main` (60+ commits de diferencia, pendiente de S27).
+4. Documentar plan futuro: tiempo en directo, marcador, alertas de gol, síntesis H1/H2.
+
+---
+
 ## Sesión 27 — Deploy Railway + filtrado combates/TBD + mapping torneos tenis + singles/dobles + zona horaria + BootReceiver fix (2026-07-31)
 
 **Rama:** `feature/tenis-nba` → `dev` · **7 commits** · **Máquina:** `pacor` (Windows, toolchain Android completo)

@@ -513,3 +513,60 @@ Plan detallado en el handoff de la sesión NBA. Decisiones **D56-D58**. Modelo "
 - [x] `_EspnBaseProvider` unifica CB + tenacity + HTTP de UFC/Tenis/NBA.
 - [x] `CacheResolver[T]` genérico para AthleteResolver y TeamResolver.
 - [x] −134 líneas netas, 106/106 tests verdes.
+
+---
+
+## Fase Fútbol — MVP lista de partidos + alerta antes del inicio 🔶 en curso (Sesión 28, rama `feature/football`)
+
+Plan y decisión en `memoria/decisiones.md` D65. Modelo: 1 partido = 1 bout (MVP, sin síntesis de mitades).
+
+### F1 — ESPN Football Provider ✅ (Sesión 28)
+
+- [x] `src/app/providers/espn_football.py` (190 líneas): `EspnFootballProvider(Provider)` — reutiliza `_EspnBaseProvider`
+- [x] MVP: 1 partido = 1 bout, remapeo `order` 0/1 (home/away ESPN) → 1/2 (red/blue corner)
+- [x] `list_upcoming_events`: raíz `/sports/soccer/leagues/{league}/events`, filtro `post`, max_concurrent=4
+- [x] `get_event_card`, `get_competition_status`, `get_team` (year probing), `get_athlete` (NotImplementedError)
+
+### F2 — Generalización del dominio + config ✅ (Sesión 28)
+
+- [x] `entities.py`: branches `football` en duration (5400s), previous_bout (None), elapsed_seconds
+- [x] `base.py`: `get_team` añadido al ABC `Provider` (no abstracto)
+- [x] `teams.py`: `TeamResolver` typing generalizado `EspnNbaProvider` → `Provider`
+- [x] `config.py`: `espn_football_league`, `football_leagues` (7 ligas), `buffer_football_halftime_seconds`
+
+### F3 — DB + Schemas + API ✅ (Sesión 28)
+
+- [x] Columna `league: String(50)` en `bout_subscriptions` + migración `d7f45061518c`
+- [x] `schemas.py`: `league` en `BoutSubscriptionCreate`/`Out`
+- [x] `events.py`: `elif sport == "football"` + `_team_resolvers` dict por liga
+- [x] `subscriptions.py`: persiste `league=body.league` en create
+
+### F4 — Poller + Scheduler multi-sport ✅ (Sesión 28)
+
+- [x] Providers keyed `(sport, league)`, `team_resolvers` dict en poller
+- [x] `_football_buffer_for` (MVP devuelve None, cae al buffer fijo)
+- [x] Provider lookup usa `sub.league` en `poll_once`
+
+### F5 — Tests + smoke ✅ (Sesión 28)
+
+- [x] 12 tests (`test_espn_football.py`) + 5 fixtures ESPN reales
+- [x] **pytest 118/118**, ruff/black/mypy limpios
+- [x] Smoke en vivo: LaLiga 2 partidos, Premier 1, Serie A 4
+
+### F6 — App Android ✅ (Sesión 28)
+
+- [x] `Color.kt`: `FootballGreen`, `Models.kt`: `league`
+- [x] `EventListScreen.kt`: tile Fútbol con `SportsSoccer`
+- [x] `CompetitionsScreen/ViewModel`: 7 acordeones de liga, fetches paralelos
+- [x] `HomeScreen/ViewModel`: cards fútbol, fetches paralelos por liga
+- [x] `EventDetailScreen`: BoutCard branch "Partido · 90 min"
+- [x] `EventDetailViewModel.kt`: `league` en subscribe
+- [x] `SubscriptionsScreen/ViewModel`: badge Fútbol, fallback "Partido #N"
+- [x] **assembleDebug BUILD SUCCESSFUL**
+
+### F7 — Smoke visual emulador (pendiente)
+
+- [ ] Abrir emulador + instalar APK
+- [ ] Navegar: Buscar → Fútbol → acordeón LaLiga → 2 partidos → EventDetail
+- [ ] Verificar: "Partido · 90 min", nombres de equipos con logos, botón Avisarme
+- [ ] Suscribir a un partido y verificar badge "Fútbol" en Mis Alertas
