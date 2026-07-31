@@ -6,24 +6,43 @@
 
 ## Última sesión
 
-**Fecha:** 2026-07-31 · **Sesión 28 (cont.) — Fix acordeones fútbol + deploy Railway feature/football. Rama `feature/football` desde `dev`. Commit `08b86ea` (push) + fix `mutableStateMapOf`.**
+**Fecha:** 2026-07-31 · **Sesión 29 — Rediseño AlarmActivity + fixes alarma (full-screen intent + WTA provider) + merge dev→main. Rama `dev`. Commits `3ea78c3` + `15b4d02`.**
 
 **Hecho en esta sesión (máquina `pacor`):**
 
-1. **Emulador arrancado**: locks stale (`hardware-qemu.ini.lock`, `multiinstance.lock`) limpiados. Emulador `pixel_6_api34` operativo con WHPX + Vulkan RTX 3050. Sin FATAL en app.
-2. **Push `feature/football`** (`08b86ea`): Railway detectó el push y desplegó el backend de fútbol. Verificado: `GET /api/events?sport=football&league=esp.1` → 2 partidos (Getafe at Alavés, Rayo Vallecano at Sevilla). Los otros 3 deportes (MMA, NBA, Tenis) siguen funcionando.
-3. **Fix acordeones fútbol** (`CompetitionsScreen.kt:128`): `mutableMapOf` → `mutableStateMapOf`. Root cause: `mutableMapOf` es un HashMap estándar de Kotlin, no observable por Compose. Al tocar el header del acordeón, el mapa se actualizaba internamente pero Compose no se enteraba → no recompone → el acordeón nunca se expandía. `mutableStateMapOf` crea un `SnapshotStateMap` que sí dispara recomposición.
-4. **APK recompilada** (BUILD SUCCESSFUL 32s, 4 tareas ejecutadas) e instalada en emulador. App funcional contra Railway.
+1. **Rediseño `AlarmActivity`**: pantalla de alarma con `AthleteColumn` (headshot circular + nombre, fallback iniciales) × 2 con "VS" en medio, nombre del evento, botón grande "DETENER" (color por deporte: rojo UFC, verde fútbol, azul NBA, verde tenis) + "Abrir app" secundario. Safety net: arranca `AlarmService` desde `onCreate()` si no está corriendo.
+2. **Pipeline de headshots**: `PendingAlarm` +3 campos (`headshotRed`, `headshotBlue`, `sport`) → `AlarmScheduler` los pasa en el intent → `AlarmReceiver` los lee → `AlarmActivity` los muestra con Coil.
+3. **Fix `startTestAlarm`** (`MainActivity.kt`): ahora también lanza `AlarmActivity` (antes solo sonido, la pantalla nunca aparecía).
+4. **Fix full-screen intent (Bug 1)**: `AlarmReceiver` reescrito para usar `NotificationCompat.setFullScreenIntent` en vez de `ctx.startActivity()` directo. Android 14+ bloquea `startActivity` desde `BroadcastReceiver` en background — el patrón oficial es notificación high-priority con `setFullScreenIntent` + `CATEGORY_ALARM`.
+5. **Fix WTA provider (Bug 2)**: `scheduler.py` solo creaba `("tennis", "atp")` — WTA no existía. Añadido `("tennis", "wta")`. El poller saltaba todas las suscripciones WTA → sin push → alarma nunca sonaba. Football y NBA ya estaban bien.
+6. **Merge `feature/football` → `dev`** (fast-forward) + **Merge `dev` → `main`** (93 commits, `-X theirs`, 215 archivos). `feature/football` borrada. Push `dev` → Railway redeploy.
+7. **Pruebas en móvil físico**: APK instalada vía Drive, suscripción WTA creada, `POST /api/devices/me/test-alarm` → push FCM entregado + sonido. Bug 1 confirmado (pantalla no apareció sobre lockscreen) y fixeado.
+8. **Backend**: pytest **118/118**, ruff/black limpios. APK BUILD SUCCESSFUL.
 
-**Commits:** `08b86ea` (push de feature/football a origin, Railway deploy) · fix acordeón pendiente de commitear.
+**Commits:** `3ea78c3` feat(android): rediseno AlarmActivity + fix startTestAlarm · `15b4d02` fix: WTA provider + full-screen intent
 
-**Verificación:** `ruff check` ✅ · `black --check` ✅ · `mypy src/app` ✅ · `pytest` **118/118** ✅ · `assembleDebug` **BUILD SUCCESSFUL** (32s) · Railway fútbol OK (curl) · Emulador OK.
+**Verificación:** pytest 118/118 ✅ · ruff ✅ · black ✅ · assembleDebug BUILD SUCCESSFUL ✅ · Railway fútbol+WTA OK · Push FCM entregado a móvil físico ✅
 
 **Pendiente:**
-1. **Commitear el fix del acordeón** (`CompetitionsScreen.kt`) y pushear.
-2. **Smoke visual fútbol** en emulador: Buscar → Fútbol → acordeón LaLiga → 2 partidos (Getafe vs Alavés, Rayo vs Sevilla) → EventDetail → "Partido · 90 min" → Avisarme.
-3. **Merge `dev` → `main`** pendiente de Sesión 27 (Railway apunta a `feature/football` temporalmente; main está 60+ commits atrás).
-4. **Futuro fútbol**: tiempo de partido en directo (`displayClock` gratis), marcador en directo (2 calls `score` con caché Redis 30s), alertas de gol (diff de score en poller), síntesis H1/H2 (como NBA Q1-Q4).
+1. **Reinstalar APK** con fix full-screen intent en el móvil físico y validar que la pantalla aparece sobre el lockscreen + botón DETENER funciona.
+2. **Validar alarma natural** con evento WTA real (poller detecta transición → push update → alarma suena sola).
+3. **Validar alarma natural** con evento de fútbol (sin previo → fallback a hora programada → alarma suena a la hora oficial − lead).
+4. **Doze validation** — `adb shell dumpsys deviceidle force-idle` + verificar `setAlarmClock` despierta.
+5. **D65** sin registrar en `decisiones.md` (modelo fútbol: 1 partido = 1 bout).
+6. **Sonido custom** `alarm.ogg` en vez de `RingtoneManager.TYPE_ALARM` genérico.
+7. **Play Store**: release keystore + ProGuard + cuenta ($25).
+
+---
+
+## Sesión 28 (cont.) — Fix acordeones fútbol + deploy Railway (2026-07-31)
+
+**Fecha:** 2026-07-31 · **Sesión 28 (cont.) — Fix acordeones fútbol + deploy Railway feature/football.**
+
+1. **Emulador arrancado**: locks stale limpiados. `pixel_6_api34` operativo.
+2. **Push `feature/football`** → Railway desplegó fútbol. Verificado con curl.
+3. **Fix acordeones fútbol**: `mutableMapOf` → `mutableStateMapOf` en `CompetitionsScreen.kt`.
+4. **APK recompilada** e instalada en emulador. App funcional contra Railway.
+5. **Merge `feature/football` → `dev`** + **Merge `dev` → `main`** (93 commits). `feature/football` borrada.
 
 ---
 

@@ -2,6 +2,53 @@
 
 > Registro cronológico de cada sesión de trabajo: qué se hizo y qué quedó pendiente.
 
+## Sesión 29 — Rediseño AlarmActivity + fixes alarma (full-screen intent + WTA provider) + merge dev→main (2026-07-31)
+
+**Rama:** `dev` · **3 commits** (`3ea78c3`, `76f931a` ya en Sesión 28 cont., `15b4d02`) · **Máquina:** `pacor` (Windows, toolchain Android completo)
+
+**Contexto:** el owner quiso probar la app en móvil físico. Al disparar la alarma vía `POST /api/devices/me/test-alarm`, el sonido sonó pero la pantalla de `AlarmActivity` no apareció sobre el lockscreen (Bug 1). Además, las suscripciones a WTA nunca recibían pushes porque el scheduler no creaba el provider WTA (Bug 2). También se rediseñó `AlarmActivity` con headshots estilo BoutCard y se fixeó el botón "Probar alarma" de Ajustes.
+
+**Hecho:**
+
+### Android — Rediseño AlarmActivity + pipeline de headshots
+1. **`PendingAlarm.kt`**: +3 campos (`headshotRed`, `headshotBlue`, `sport`) con defaults para compatibilidad.
+2. **`EventDetailViewModel.kt`**: al suscribir, guarda `bout.red?.headshotUrl`, `bout.blue?.headshotUrl` y `bout.sport` en el `PendingAlarm`.
+3. **`AlarmScheduler.kt`**: pasa los headshots y sport en los extras del broadcast intent.
+4. **`AlarmReceiver.kt`**: lee los nuevos extras y los pasa a `AlarmActivity`.
+5. **`AlarmActivity.kt`**: rediseño completo — `AthleteColumn` (headshot circular + nombre, fallback a iniciales) × 2 con "VS" en medio, nombre del evento arriba, botón grande "DETENER" (color por deporte) + "Abrir app" secundario. Safety net: si el `AlarmService` no está corriendo, lo arranca desde `onCreate()`.
+6. **`MainActivity.kt`**: fix `startTestAlarm()` — ahora también lanza `AlarmActivity` (antes solo arrancaba el sonido, la pantalla nunca aparecía).
+
+### Android — Fix full-screen intent (Bug 1)
+7. **`AlarmReceiver.kt`**: reescrito para usar `NotificationCompat.Builder` + `setFullScreenIntent(pendingIntent, true)` en vez de `ctx.startActivity()` directo. En Android 14+, `startActivity` desde un `BroadcastReceiver` en background no abre la Activity sobre el lockscreen. El patrón oficial de Android para alarmas es una notificación high-priority con `setFullScreenIntent` + `setCategory(CATEGORY_ALARM)` — el sistema decide si mostrarla como full-screen (pantalla bloqueada) o heads-up (desbloqueada). El `PendingIntent` apunta a `AlarmActivity` que ya tiene `showWhenLocked` + `turnScreenOn`.
+8. **Try-catch en `startForegroundService`**: si Android 14 bloquea el FGS desde background, cae a `startService()` como fallback.
+
+### Backend — Fix WTA provider (Bug 2)
+9. **`scheduler.py`**: el `_build()` solo creaba `("tennis", "atp")` — **WTA no existía**. Añadido `("tennis", "wta") = EspnTennisProvider(league="wta")`. El poller no encontraba provider para suscripciones WTA → las saltaba todas → sin push → alarma nunca sonaba. Football y NBA ya estaban bien (sus providers se creaban correctamente).
+
+### Git
+10. **Merge `feature/football` → `dev`** (fast-forward, 36 archivos).
+11. **Merge `dev` → `main`** (93 commits de diferencia, `-X theirs`, 215 archivos, +21K/-1.2K líneas). `main` sincronizado con `dev`.
+12. **Borrada `feature/football`** (local + remote).
+13. **Push `dev`** a origin (Railway redeploy automático).
+
+### Pruebas
+14. **Emulador**: APK instalada, app funcional contra Railway. Acordeones fútbol expandibles. AlarmActivity con headshots visibles.
+15. **Móvil físico**: APK instalada vía Google Drive. Suscripción a WTA (Liutova vs McNally, Memphis QF). `POST /api/devices/me/test-alarm` → push FCM entregado (message_id real), sonido sonó. Bug 1: pantalla no apareció sobre lockscreen (fixeado en commit `15b4d02`, pendiente de reinstalar APK).
+16. **Backend**: pytest **118/118** verdes, ruff/black limpios.
+
+**Commits:** `3ea78c3` feat(android): rediseno AlarmActivity + fix startTestAlarm · `15b4d02` fix: WTA provider + full-screen intent
+
+**Pendiente:**
+1. Reinstalar APK con fix full-screen intent en el móvil físico y validar que la pantalla aparece sobre el lockscreen.
+2. Validar alarma natural con evento WTA real (poller detecta transición → push update → alarma suena).
+3. Validar alarma natural con evento de fútbol (sin previo → fallback a hora programada).
+4. Doze validation (`adb shell dumpsys deviceidle force-idle`).
+5. Sonido custom `alarm.ogg` en vez de `RingtoneManager.TYPE_ALARM`.
+6. D65 sin registrar en `decisiones.md`.
+7. Play Store: release keystore + ProGuard + cuenta ($25).
+
+---
+
 ## Sesión 28 — Fútbol MVP completo: backend (provider + DB + API + poller) + Android (11 archivos) (2026-07-31)
 
 **Rama:** `feature/football` desde `dev` · **1 commit** (`1bd6141`, 32 files, +856/-72) · **Máquina:** `pacor` (Windows, toolchain Android completo)
