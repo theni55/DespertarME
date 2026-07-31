@@ -73,7 +73,8 @@ class PollerScheduler:
 
     def _build(self) -> Poller:
         self._providers[("mma", "")] = EspnUfcProvider()
-        self._providers[("tennis", "atp")] = EspnTennisProvider(league=settings.espn_tennis_league)
+        self._providers[("tennis", "atp")] = EspnTennisProvider(league="atp")
+        self._providers[("tennis", "wta")] = EspnTennisProvider(league="wta")
         self._providers[("nba", "")] = EspnNbaProvider(league=settings.espn_nba_league)
         for league in settings.football_leagues:
             self._providers[("football", league)] = EspnFootballProvider(league=league)
