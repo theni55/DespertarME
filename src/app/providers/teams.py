@@ -20,7 +20,7 @@ import redis.asyncio as redis
 
 from app.config import settings
 from app.providers._cache_resolver import CacheResolver
-from app.providers.espn_nba import EspnNbaProvider
+from app.providers.base import Provider
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +43,7 @@ class TeamResolver(CacheResolver[ResolvedTeam]):
 
     def __init__(
         self,
-        provider: EspnNbaProvider,
+        provider: Provider,
         *,
         redis_client: redis.Redis | None = None,
         ttl_seconds: int | None = None,

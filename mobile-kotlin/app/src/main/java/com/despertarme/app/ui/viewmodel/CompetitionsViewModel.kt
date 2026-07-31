@@ -58,6 +58,22 @@ class CompetitionsViewModel(
                         val events = container.api.listEvents("nba", "")
                         events.map { CompetitionUi(it, "nba", "") }
                     }
+                    "football" -> {
+                        val leagues = listOf(
+                            "esp.1", "eng.1", "ita.1", "ger.1", "fra.1",
+                            "uefa.champions", "uefa.europa",
+                        )
+                        val results = coroutineScope {
+                            leagues.map { slug ->
+                                async {
+                                    runCatching { container.api.listEvents("football", slug) }
+                                        .getOrDefault(emptyList())
+                                        .map { CompetitionUi(it, "football", slug) }
+                                }
+                            }.awaitAll()
+                        }
+                        results.flatten()
+                    }
                     else -> {
                         val events = container.api.listEvents("mma", "")
                         events.map { CompetitionUi(it, "mma", "") }

@@ -294,32 +294,36 @@ class EspnTennisProvider(_EspnBaseProvider):
             # Detectar singles vs doubles y devolver entradas separadas.
             competitions = ev_data.get("competitions") or []
             has_singles = any(
-                "Singles" in ((c.get("type") or {}).get("text") or "")
-                for c in competitions
+                "Singles" in ((c.get("type") or {}).get("text") or "") for c in competitions
             )
             has_doubles = any(
-                "Doubles" in ((c.get("type") or {}).get("text") or "")
-                for c in competitions
+                "Doubles" in ((c.get("type") or {}).get("text") or "") for c in competitions
             )
             result: list[EventSummary] = []
             if has_singles:
-                result.append(EventSummary(
-                    id=ev_data["id"],
-                    name=name,
-                    date=ev_data.get("date", ""),
-                ))
+                result.append(
+                    EventSummary(
+                        id=ev_data["id"],
+                        name=name,
+                        date=ev_data.get("date", ""),
+                    )
+                )
             if has_doubles:
-                result.append(EventSummary(
-                    id=ev_data["id"] + "_doubles",
-                    name=f"{name} Dobles",
-                    date=ev_data.get("date", ""),
-                ))
+                result.append(
+                    EventSummary(
+                        id=ev_data["id"] + "_doubles",
+                        name=f"{name} Dobles",
+                        date=ev_data.get("date", ""),
+                    )
+                )
             if not result:
-                result.append(EventSummary(
-                    id=ev_data["id"],
-                    name=name,
-                    date=ev_data.get("date", ""),
-                ))
+                result.append(
+                    EventSummary(
+                        id=ev_data["id"],
+                        name=name,
+                        date=ev_data.get("date", ""),
+                    )
+                )
             return result
 
         raw_summaries = await asyncio.gather(*(_fetch_summary(eid) for eid in ids))

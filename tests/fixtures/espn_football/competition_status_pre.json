@@ -1,0 +1,1 @@
+{"$ref":"http://sports.core.api.espn.com/v2/sports/soccer/leagues/esp.1/events/401882926/competitions/401882926/status?lang=en&region=us","clock":0.0,"addedClock":0.0,"displayClock":"0'","period":0,"type":{"id":"1","name":"STATUS_SCHEDULED","state":"pre","completed":false,"description":"Scheduled","detail":"Sat, August 15th at 1:30 PM EDT","shortDetail":"8/15 - 1:30 PM EDT"}}

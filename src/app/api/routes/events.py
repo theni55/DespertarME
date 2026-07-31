@@ -30,6 +30,7 @@ from app.db.session import get_session
 from app.domain.entities import Card
 from app.providers.athletes import AthleteResolver
 from app.providers.base import Provider
+from app.providers.espn_football import EspnFootballProvider
 from app.providers.espn_nba import EspnNbaProvider
 from app.providers.espn_tennis import _TOURNAMENT_DISPLAY_NAMES, EspnTennisProvider
 from app.providers.espn_ufc import EspnUfcProvider
@@ -46,12 +47,12 @@ EVENTS_LIST_CACHE_KEY = "events:upcoming:{sport}:{league}"
 
 _providers: dict[tuple[str, str], Provider] = {}
 _resolver: AthleteResolver | None = None
-_team_resolver: TeamResolver | None = None
+_team_resolvers: dict[str, TeamResolver] = {}
 _redis: Any = None
 
 
 def _get_provider(sport: str = "mma", league: str = "") -> Provider:
-    global _providers, _resolver, _team_resolver, _redis
+    global _providers, _resolver, _team_resolvers, _redis
     key = (sport, league)
     if key not in _providers:
         import redis.asyncio as aioredis
@@ -64,6 +65,8 @@ def _get_provider(sport: str = "mma", league: str = "") -> Provider:
             _providers[key] = EspnTennisProvider(league=league or settings.espn_tennis_league)
         elif sport == "nba":
             _providers[key] = EspnNbaProvider(league=league or settings.espn_nba_league)
+        elif sport == "football":
+            _providers[key] = EspnFootballProvider(league=league or settings.espn_football_league)
         else:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -74,16 +77,21 @@ def _get_provider(sport: str = "mma", league: str = "") -> Provider:
             _redis = aioredis.from_url(settings.redis_url, decode_responses=True)
         if _resolver is None:
             _resolver = AthleteResolver(_providers[key], redis_client=_redis)
-        if _team_resolver is None and sport == "nba":
-            _team_resolver = TeamResolver(
-                _providers[key],  # type: ignore[arg-type]
+        if sport == "nba" and "nba" not in _team_resolvers:
+            _team_resolvers["nba"] = TeamResolver(
+                _providers[key],
+                redis_client=_redis,
+            )
+        if sport == "football" and league not in _team_resolvers:
+            _team_resolvers[league] = TeamResolver(
+                _providers[key],
                 redis_client=_redis,
             )
     return _providers[key]
 
 
 async def close_events_resources() -> None:
-    global _providers, _resolver, _team_resolver, _redis
+    global _providers, _resolver, _team_resolvers, _redis
     for provider in _providers.values():
         try:
             await provider.aclose()
@@ -94,7 +102,7 @@ async def close_events_resources() -> None:
         await _redis.aclose()
         _redis = None
     _resolver = None
-    _team_resolver = None
+    _team_resolvers = {}
 
 
 def _parse_iso_z(raw: str) -> datetime:
@@ -247,8 +255,19 @@ async def get_event_detail(
             for c in (b.red_corner, b.blue_corner)
             if c and c.team and c.team.team_id
         ]
-        if _team_resolver is not None and team_ids:
-            resolved_teams = await _team_resolver.resolve_many(team_ids)
+        nba_tr = _team_resolvers.get("nba")
+        if nba_tr is not None and team_ids:
+            resolved_teams = await nba_tr.resolve_many(team_ids)
+    elif sport == "football":
+        team_ids = [
+            c.team.team_id
+            for b in event.bouts
+            for c in (b.red_corner, b.blue_corner)
+            if c and c.team and c.team.team_id
+        ]
+        foot_tr = _team_resolvers.get(league or "")
+        if foot_tr is not None and team_ids:
+            resolved_teams = await foot_tr.resolve_many(team_ids)
     else:
         athlete_ids = [
             c.athlete.athlete_id

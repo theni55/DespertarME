@@ -64,6 +64,7 @@ async def create_subscription(
         target_match_number=body.target_match_number,
         lead_minutes=body.lead_minutes,
         sport=body.sport,
+        league=body.league,
         status="active",
     )
     session.add(sub)

@@ -45,6 +45,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.despertarme.app.ui.theme.AccentGreen
 import com.despertarme.app.ui.theme.BackgroundDark
+import com.despertarme.app.ui.theme.FootballGreen
 import com.despertarme.app.ui.theme.NbaBlue
 import com.despertarme.app.ui.theme.SurfaceDark
 import com.despertarme.app.ui.theme.TextSecondary
@@ -63,6 +64,7 @@ fun CompetitionsScreen(
         val sportLabel = when (sport) {
             "tennis" -> "Tenis"
             "nba" -> "NBA"
+            "football" -> "Futbol"
             else -> "MMA"
         }
         Row(
@@ -109,10 +111,21 @@ fun CompetitionsScreen(
                     val wtaList = state.tournaments.filter { it.league == "wta" }
                     val mmaList = state.tournaments.filter { it.sport == "mma" }
                     val nbaList = state.tournaments.filter { it.sport == "nba" }
-                    // Acordeones ATP/WTA colapsados por defecto (decisión del owner):
-                    // la lista plana mezclaba demasiados torneos.
+                    val footballLeagues = listOf(
+                        "esp.1", "eng.1", "ita.1", "ger.1", "fra.1",
+                        "uefa.champions", "uefa.europa",
+                    )
+                    val footLabels = mapOf(
+                        "esp.1" to "LaLiga", "eng.1" to "Premier", "ita.1" to "Serie A",
+                        "ger.1" to "Bundesliga", "fra.1" to "Ligue 1",
+                        "uefa.champions" to "Champions", "uefa.europa" to "Europa League",
+                    )
+                    val footballByLeague = state.tournaments
+                        .filter { it.sport == "football" }
+                        .groupBy { it.league }
                     var atpExpanded by remember { mutableStateOf(false) }
                     var wtaExpanded by remember { mutableStateOf(false) }
+                    val footExpanded = remember { mutableMapOf<String, Boolean>() }
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
@@ -123,6 +136,7 @@ fun CompetitionsScreen(
                                 AccordionHeader(
                                     title = "ATP",
                                     count = atpList.size,
+                                    countLabel = "torneos",
                                     expanded = atpExpanded,
                                     onToggle = { atpExpanded = !atpExpanded },
                                 )
@@ -143,6 +157,7 @@ fun CompetitionsScreen(
                                 AccordionHeader(
                                     title = "WTA",
                                     count = wtaList.size,
+                                    countLabel = "torneos",
                                     expanded = wtaExpanded,
                                     onToggle = { wtaExpanded = !wtaExpanded },
                                 )
@@ -178,6 +193,33 @@ fun CompetitionsScreen(
                                 )
                             }
                         }
+                        // Football: acordeon por liga, mismo patron que ATP/WTA.
+                        footballLeagues.forEach { slug ->
+                            val label = footLabels[slug] ?: slug
+                            val matches = footballByLeague[slug]
+                            if (!matches.isNullOrEmpty()) {
+                                val expanded = footExpanded[slug] ?: false
+                                item {
+                                    AccordionHeader(
+                                        title = label,
+                                        count = matches.size,
+                                        countLabel = "partidos",
+                                        expanded = expanded,
+                                        onToggle = { footExpanded[slug] = !expanded },
+                                    )
+                                }
+                                if (expanded) {
+                                    items(matches, key = { "football-${slug}-${it.event.id}" }) { comp ->
+                                        CompetitionCard(
+                                            comp = comp,
+                                            onClick = {
+                                                onEventClick(comp.event.id, comp.sport, comp.league)
+                                            },
+                                        )
+                                    }
+                                }
+                            }
+                        }
                         item { Spacer(modifier = Modifier.height(24.dp)) }
                     }
                 }
@@ -190,6 +232,7 @@ fun CompetitionsScreen(
 private fun AccordionHeader(
     title: String,
     count: Int,
+    countLabel: String = "torneos",
     expanded: Boolean,
     onToggle: () -> Unit,
 ) {
@@ -215,7 +258,7 @@ private fun AccordionHeader(
                 modifier = Modifier.weight(1f),
             )
             Text(
-                text = "$count torneos",
+                text = "$count $countLabel",
                 color = TextSecondary,
                 fontSize = 13.sp,
             )
@@ -238,11 +281,19 @@ private fun CompetitionCard(
     val leagueLabel = when (comp.league) {
         "atp" -> "ATP"
         "wta" -> "WTA"
+        "esp.1" -> "LaLiga"
+        "eng.1" -> "Premier"
+        "ita.1" -> "Serie A"
+        "ger.1" -> "Bundesliga"
+        "fra.1" -> "Ligue 1"
+        "uefa.champions" -> "Champions"
+        "uefa.europa" -> "Europa League"
         else -> null
     }
     val stripColor = when (comp.sport) {
         "tennis" -> AccentGreen
         "nba" -> NbaBlue
+        "football" -> FootballGreen
         else -> UfcRed
     }
     Card(

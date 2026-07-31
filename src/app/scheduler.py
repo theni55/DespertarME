@@ -30,6 +30,7 @@ from app.engine.state import AlertState
 from app.notifiers import get_notifier
 from app.providers.athletes import AthleteResolver
 from app.providers.base import Provider
+from app.providers.espn_football import EspnFootballProvider
 from app.providers.espn_nba import EspnNbaProvider
 from app.providers.espn_tennis import EspnTennisProvider
 from app.providers.espn_ufc import EspnUfcProvider
@@ -50,6 +51,12 @@ def _nba_buffer_for(target: Bout) -> timedelta | None:
     return timedelta(seconds=settings.buffer_nba_quarter_seconds)
 
 
+def _football_buffer_for(target: Bout) -> timedelta | None:
+    if target.sport != "football":
+        return None
+    return None
+
+
 class PollerScheduler:
     """Ciclo de vida del scheduler + singletons del pipeline de alertas.
 
@@ -60,14 +67,16 @@ class PollerScheduler:
 
     def __init__(self) -> None:
         self._scheduler: AsyncIOScheduler | None = None
-        self._providers: dict[str, Provider] = {}
+        self._providers: dict[tuple[str, str], Provider] = {}
         self._state: AlertState | None = None
         self._poller: Poller | None = None
 
     def _build(self) -> Poller:
-        self._providers["mma"] = EspnUfcProvider()
-        self._providers["tennis"] = EspnTennisProvider(league=settings.espn_tennis_league)
-        self._providers["nba"] = EspnNbaProvider(league=settings.espn_nba_league)
+        self._providers[("mma", "")] = EspnUfcProvider()
+        self._providers[("tennis", "atp")] = EspnTennisProvider(league=settings.espn_tennis_league)
+        self._providers[("nba", "")] = EspnNbaProvider(league=settings.espn_nba_league)
+        for league in settings.football_leagues:
+            self._providers[("football", league)] = EspnFootballProvider(league=league)
         if settings.app_env == "development":
             import fakeredis.aioredis as fakeredis_aio
 
@@ -76,18 +85,23 @@ class PollerScheduler:
         else:
             redis_client = aioredis.from_url(settings.redis_url, decode_responses=True)
         self._state = AlertState(client=redis_client)
-        athlete_resolver = AthleteResolver(self._providers["mma"], redis_client=redis_client)
-        team_resolver = TeamResolver(
-            self._providers["nba"],  # type: ignore[arg-type]
+        athlete_resolver = AthleteResolver(self._providers[("mma", "")], redis_client=redis_client)
+        team_resolvers: dict[str, TeamResolver] = {}
+        team_resolvers["nba"] = TeamResolver(
+            self._providers[("nba", "")],
             redis_client=redis_client,
         )
+        for league in settings.football_leagues:
+            team_resolvers[league] = TeamResolver(
+                self._providers[("football", league)],
+                redis_client=redis_client,
+            )
 
-        # D57: buffer_for aplica a ambos branches (in y post) cuando el previo
-        # esta en juego. Para NBA usa halftime vs comercial; para MMA/Tenis
-        # devuelve None y el estimator cae al buffer fijo (comportamiento
-        # pre-NBA).
         def buffer_for(target: Bout) -> timedelta | None:
-            return _nba_buffer_for(target)
+            nba_result = _nba_buffer_for(target)
+            if nba_result is not None:
+                return nba_result
+            return _football_buffer_for(target)
 
         estimator = EstimatorEngine(
             EstimatorConfig(
@@ -101,7 +115,7 @@ class PollerScheduler:
             state=self._state,
             estimator=estimator,
             athlete_resolver=athlete_resolver,
-            team_resolver=team_resolver,
+            team_resolvers=team_resolvers,
         )
 
     async def _poll_job(self) -> None:

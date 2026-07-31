@@ -66,8 +66,27 @@ class HomeViewModel(
                             .getOrDefault(emptyList())
                             .map { Triple(it, "nba", "") }
                     }
+                    val footballDeferred = async {
+                        val footballLeagues = listOf(
+                            "esp.1", "eng.1", "ita.1", "ger.1", "fra.1",
+                            "uefa.champions", "uefa.europa",
+                        )
+                        val results: MutableList<Triple<EventSummaryOut, String, String>> = mutableListOf()
+                        coroutineScope {
+                            footballLeagues.map { slug ->
+                                async {
+                                    val events = runCatching {
+                                        container.api.listEvents("football", slug)
+                                    }.getOrDefault(emptyList())
+                                    events.map { Triple(it, "football", slug) }
+                                }
+                            }.awaitAll().forEach { results.addAll(it) }
+                        }
+                        results
+                    }
                     selectHomeEvents(
-                        mmaDeferred.await() + atpDeferred.await() + wtaDeferred.await() + nbaDeferred.await(),
+                        mmaDeferred.await() + atpDeferred.await() + wtaDeferred.await() +
+                            nbaDeferred.await() + footballDeferred.await(),
                     )
                 }
             } catch (t: Exception) {

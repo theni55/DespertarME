@@ -70,6 +70,7 @@ data class BoutSubscriptionCreate(
     @SerialName("target_match_number") val targetMatchNumber: Int,
     @SerialName("lead_minutes") val leadMinutes: Int,
     val sport: String = "mma",
+    val league: String = "",
 )
 
 @Serializable
@@ -96,4 +97,5 @@ data class BoutSubscriptionOut(
     @SerialName("lead_minutes") val leadMinutes: Int,
     val status: String,
     val sport: String = "mma",
+    val league: String = "",
 )

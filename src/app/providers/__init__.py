@@ -1,6 +1,7 @@
 from app.providers._base_provider import CircuitBreakerOpenError
 from app.providers.athletes import AthleteResolver, ResolvedAthlete
 from app.providers.base import Provider
+from app.providers.espn_football import EspnFootballProvider
 from app.providers.espn_nba import EspnNbaProvider
 from app.providers.espn_tennis import EspnTennisProvider
 from app.providers.espn_ufc import EspnUfcProvider
@@ -23,6 +24,7 @@ __all__ = [
     "Bout",
     "CircuitBreakerOpenError",
     "CompetitionStatus",
+    "EspnFootballProvider",
     "EspnNbaProvider",
     "EspnTennisProvider",
     "EspnUfcProvider",

@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     espn_league: str = "ufc"
     espn_tennis_league: str = "atp"  # D46
     espn_nba_league: str = "nba"  # D56
+    espn_football_league: str = "esp.1"  # D65: default para fútbol
     espn_timeout_seconds: float = 10.0
     espn_max_retries: int = 5
     espn_circuit_breaker_fails: int = 5
@@ -45,6 +46,18 @@ class Settings(BaseSettings):
     buffer_intermatch_tennis_seconds: int = 900  # 15 min tenis (D48)
     buffer_nba_quarter_seconds: int = 120  # 2 min break Q1->Q2 y Q3->Q4 (D57)
     buffer_nba_halftime_seconds: int = 900  # 15 min halftime Q2->Q3 (D57)
+    buffer_football_halftime_seconds: int = 900  # 15 min halftime (D65, futuro H2)
+
+    # Ligas de fútbol soportadas en el Poller (D65).
+    football_leagues: list[str] = [
+        "esp.1",
+        "eng.1",
+        "ita.1",
+        "ger.1",
+        "fra.1",
+        "uefa.champions",
+        "uefa.europa",
+    ]
     alert_idempotency_ttl_seconds: int = 7200
     poll_default_seconds: int = 60
     poll_prev_in_advanced_seconds: int = 10

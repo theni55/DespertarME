@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.sp
 import com.despertarme.app.data.remote.AlertLogOut
 import com.despertarme.app.ui.theme.AccentGreen
 import com.despertarme.app.ui.theme.BackgroundDark
+import com.despertarme.app.ui.theme.FootballGreen
 import com.despertarme.app.ui.theme.NbaBlue
 import com.despertarme.app.ui.theme.SurfaceDark
 import com.despertarme.app.ui.theme.TextSecondary
@@ -202,6 +203,7 @@ private fun SubscriptionCard(
                     val (badgeText, badgeColor) = when (ui.sport) {
                         "tennis" -> "Tenis" to AccentGreen
                         "nba" -> "NBA" to NbaBlue
+                        "football" -> "Futbol" to FootballGreen
                         else -> "MMA" to UfcRed
                     }
                     Text(

@@ -38,6 +38,7 @@ class BoutSubscription(Base):
     target_match_number: Mapped[int] = mapped_column(Integer, nullable=False)
     lead_minutes: Mapped[int] = mapped_column(Integer, default=15, nullable=False)
     sport: Mapped[str] = mapped_column(String(20), default="mma", nullable=False, index=True)
+    league: Mapped[str] = mapped_column(String(50), default="", nullable=False, index=True)
     status: Mapped[str] = mapped_column(
         Enum("active", "fired", "cancelled", name="subscription_status"),
         default="active",

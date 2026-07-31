@@ -71,6 +71,7 @@ class BoutSubscriptionCreate(BaseModel):
     target_match_number: int = 0
     lead_minutes: int = 15
     sport: str = "mma"
+    league: str = ""
 
     @field_validator("lead_minutes")
     @classmethod
@@ -104,6 +105,7 @@ class BoutSubscriptionOut(BaseModel):
     lead_minutes: int
     status: str
     sport: str = "mma"
+    league: str = ""
 
     model_config = {"from_attributes": True}
 

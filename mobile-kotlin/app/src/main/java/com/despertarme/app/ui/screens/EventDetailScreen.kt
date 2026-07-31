@@ -60,7 +60,9 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import com.despertarme.app.ui.theme.AccentGreen
+import com.despertarme.app.ui.theme.BackgroundDark
 import com.despertarme.app.ui.theme.BlueCorner
+import com.despertarme.app.ui.theme.FootballGreen
 import com.despertarme.app.ui.theme.NbaBlue
 import com.despertarme.app.ui.theme.RedCorner
 import com.despertarme.app.ui.theme.SurfaceDark
@@ -238,6 +240,19 @@ private fun BoutCard(
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = "12 min",
+                        color = TextSecondary,
+                        fontSize = 12.sp,
+                    )
+                } else if (bout.sport == "football") {
+                    Text(
+                        text = "Partido",
+                        color = FootballGreen,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "90 min",
                         color = TextSecondary,
                         fontSize = 12.sp,
                     )

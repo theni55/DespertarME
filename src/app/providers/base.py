@@ -11,7 +11,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from datetime import datetime
 
-from app.providers.models import AthleteDetail, CompetitionStatus, Event, EventSummary
+from app.providers.models import AthleteDetail, CompetitionStatus, Event, EventSummary, TeamDetail
 
 
 class Provider(ABC):
@@ -43,6 +43,11 @@ class Provider(ABC):
     @abstractmethod
     async def get_athlete(self, athlete_id: str) -> AthleteDetail:
         """Devuelve el detalle de un atleta (nombre + foto)."""
+
+    async def get_team(self, team_id: str) -> TeamDetail:
+        """Devuelve el detalle de un equipo (nombre + logo). D65.
+        Solo los deportes de equipo (NBA, football) lo implementan."""
+        raise NotImplementedError(f"{type(self).__name__} no soporta get_team")
 
     async def aclose(self) -> None:  # noqa: B027
         """Cierra recursos (httpx client, etc.). Implementacion por defecto nop."""

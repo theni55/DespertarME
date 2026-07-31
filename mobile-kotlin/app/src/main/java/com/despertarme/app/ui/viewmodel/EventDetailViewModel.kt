@@ -93,6 +93,7 @@ class EventDetailViewModel(
                         targetMatchNumber = matchNumber,
                         leadMinutes = leadMinutes,
                         sport = currentSport,
+                        league = currentLeague,
                     ),
                 )
                 _state.value = _state.value.copy(

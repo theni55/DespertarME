@@ -81,19 +81,20 @@ class Poller:
         self,
         *,
         provider: Provider | None = None,
-        providers: dict[str, Provider] | None = None,
+        providers: dict[tuple[str, str], Provider] | None = None,
         notifier: PushNotifier,
         state: AlertState,
         estimator: EstimatorEngine | None = None,
         retry_delays: tuple[float, ...] = RETRY_DELAYS,
         athlete_resolver: AthleteResolver | None = None,
         team_resolver: TeamResolver | None = None,
+        team_resolvers: dict[str, TeamResolver] | None = None,
     ) -> None:
         # Backward-compat: single provider (MMA) sigue funcionando.
         if providers is not None:
             self._providers = providers
         elif provider is not None:
-            self._providers = {"mma": provider}
+            self._providers = {("mma", ""): provider}
         else:
             raise ValueError("provider o providers es obligatorio")
         self._notifier = notifier
@@ -102,9 +103,9 @@ class Poller:
         self._retry_delays = retry_delays
         # Resolver se puede inicializar lazy con el primer provider.
         self._resolver = athlete_resolver
-        # D58: NBA usa TeamResolver (no AthleteResolver). Se inicializa lazy
-        # con el provider de NBA si no se inyecto explicitamente.
-        self._team_resolver = team_resolver
+        self._team_resolvers = team_resolvers or {}
+        if team_resolver is not None and "nba" not in self._team_resolvers:
+            self._team_resolvers["nba"] = team_resolver
 
     async def poll_once(self, session: AsyncSession, now: datetime | None = None) -> int:
         """Procesa todas las suscripciones activas. Devuelve nº de pushes enviados."""
@@ -124,15 +125,22 @@ class Poller:
         card_cache: dict[str, Card] = {}
 
         for (sport, event_id), event_subs in subs_by_key.items():
-            provider = self._providers.get(sport)
+            league = (event_subs[0].league or "") if event_subs else ""
+            provider_key = (sport, league)
+            provider = self._providers.get(provider_key)
+            if provider is None and league:
+                provider = self._providers.get((sport, ""))
             if provider is None:
                 logger.warning(
-                    "Provider no encontrado para sport=%s, saltando %d subs", sport, len(event_subs)
+                    "Provider no encontrado para sport=%s league=%s, saltando %d subs",
+                    sport,
+                    league,
+                    len(event_subs),
                 )
                 continue
 
             try:
-                card = await self._load_card(provider, event_id, sport)
+                card = await self._load_card(provider, event_id, sport, league)
                 card_cache[event_id] = card
             except Exception:
                 logger.exception(
@@ -340,22 +348,22 @@ class Poller:
             return red or blue
         return None
 
-    async def _load_card(self, provider: Provider, event_id: str, sport: str = "mma") -> Card:
+    async def _load_card(
+        self, provider: Provider, event_id: str, sport: str = "mma", league: str = ""
+    ) -> Card:
         """Carga la tarjeta del evento via Provider y mapea a dominio.
 
-        Multi-sport (D47/D56): resuelve nombres de atletas con AthleteResolver
+        Multi-sport (D47/D56/D65): resuelve nombres de atletas con AthleteResolver
         para MMA, con `competitor.name` inline para tenis (D49), y con
-        `TeamResolver` siguiendo el `team $ref` para NBA (D58). Mapea `court`
-        y `round` de tennis al dominio.
+        `TeamResolver` siguiendo el `team $ref` para NBA y football (D58/D65).
+        Mapea `court` y `round` de tennis al dominio.
         """
         # Lazy-init del resolver con el primer provider (backward-compat)
         if self._resolver is None:
             self._resolver = AthleteResolver(provider)
-        # D58: NBA lazy-init del team resolver; solo aplica si hay provider NBA.
-        if self._team_resolver is None and sport == "nba":
-            nba_provider = self._providers.get("nba")
-            if nba_provider is not None:
-                self._team_resolver = TeamResolver(nba_provider)  # type: ignore[arg-type]
+        team_resolver = self._team_resolvers.get(sport) or self._team_resolvers.get(league or "")
+        if team_resolver is None and sport == "nba":
+            team_resolver = self._team_resolvers.get("nba")
 
         event = await provider.get_event_card(event_id)
 
@@ -374,8 +382,8 @@ class Poller:
         ]
         resolved_athletes = await self._resolver.resolve_many(athlete_ids)
         resolved_teams: dict[str, Any] = {}
-        if team_ids and self._team_resolver is not None:
-            resolved_teams = await self._team_resolver.resolve_many(team_ids)
+        if team_ids and team_resolver is not None:
+            resolved_teams = await team_resolver.resolve_many(team_ids)
 
         def _to_athlete(corner: ProviderCompetitor | None) -> Athlete | None:
             if corner is None:

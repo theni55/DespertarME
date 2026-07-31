@@ -15,6 +15,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.SportsMma
+import androidx.compose.material.icons.filled.SportsSoccer
 import androidx.compose.material.icons.filled.SportsTennis
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -30,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.despertarme.app.ui.theme.AccentGreen
 import com.despertarme.app.ui.theme.BackgroundDark
+import com.despertarme.app.ui.theme.FootballGreen
 import com.despertarme.app.ui.theme.NbaBlue
 import com.despertarme.app.ui.theme.SurfaceDark
 import com.despertarme.app.ui.theme.TextSecondary
@@ -79,6 +81,14 @@ fun EventListScreen(
             subtitle = "National Basketball Association",
             stripColor = NbaBlue,
             onClick = { onSportClick("nba") },
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        SportCard(
+            icon = Icons.Filled.SportsSoccer,
+            title = "Futbol",
+            subtitle = "LaLiga + Premier + Serie A...",
+            stripColor = FootballGreen,
+            onClick = { onSportClick("football") },
         )
     }
 }
