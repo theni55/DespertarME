@@ -31,6 +31,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -125,7 +126,7 @@ fun CompetitionsScreen(
                         .groupBy { it.league }
                     var atpExpanded by remember { mutableStateOf(false) }
                     var wtaExpanded by remember { mutableStateOf(false) }
-                    val footExpanded = remember { mutableMapOf<String, Boolean>() }
+                    val footExpanded = remember { mutableStateMapOf<String, Boolean>() }
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),

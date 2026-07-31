@@ -6,59 +6,23 @@
 
 ## Última sesión
 
-**Fecha:** 2026-07-31 · **Sesión 28 — Fútbol MVP completo (backend + Android). Rama `feature/football` desde `dev`. Commit `1bd6141`. Emulador no arrancó al final (locks stale + timeout de bash).**
+**Fecha:** 2026-07-31 · **Sesión 28 (cont.) — Fix acordeones fútbol + deploy Railway feature/football. Rama `feature/football` desde `dev`. Commit `08b86ea` (push) + fix `mutableStateMapOf`.**
 
 **Hecho en esta sesión (máquina `pacor`):**
 
-### Investigación ESPN Fútbol
+1. **Emulador arrancado**: locks stale (`hardware-qemu.ini.lock`, `multiinstance.lock`) limpiados. Emulador `pixel_6_api34` operativo con WHPX + Vulkan RTX 3050. Sin FATAL en app.
+2. **Push `feature/football`** (`08b86ea`): Railway detectó el push y desplegó el backend de fútbol. Verificado: `GET /api/events?sport=football&league=esp.1` → 2 partidos (Getafe at Alavés, Rayo Vallecano at Sevilla). Los otros 3 deportes (MMA, NBA, Tenis) siguen funcionando.
+3. **Fix acordeones fútbol** (`CompetitionsScreen.kt:128`): `mutableMapOf` → `mutableStateMapOf`. Root cause: `mutableMapOf` es un HashMap estándar de Kotlin, no observable por Compose. Al tocar el header del acordeón, el mapa se actualizaba internamente pero Compose no se enteraba → no recompone → el acordeón nunca se expandía. `mutableStateMapOf` crea un `SnapshotStateMap` que sí dispara recomposición.
+4. **APK recompilada** (BUILD SUCCESSFUL 32s, 4 tareas ejecutadas) e instalada en emulador. App funcional contra Railway.
 
-1. **ESPN Core API soccer** verificada en vivo: 220 ligas disponibles. Event structure: 1 competition/event (como NBA), 2 competitors (home order=0, away order=1) con `team $ref`, `format.regulation` periods=2 clock=2700 (45 min). Status: `clock` (segundos transcurridos count-up), `period` (0=pre, 1=1st half, 2=2nd half), `state` (pre/in/post), `addedClock` (descuento), `displayClock` ("67'"). Score requiere 2 calls extra (`/competitors/{id}/score`).
+**Commits:** `08b86ea` (push de feature/football a origin, Railway deploy) · fix acordeón pendiente de commitear.
 
-### Backend (14 archivos)
-
-2. **`src/app/providers/espn_football.py`** (nuevo, 190 líneas): Provider ESPN fútbol. 1 partido = 1 bout (MVP, sin síntesis de mitades). Remapea order 0/1→1/2 (home→red, away→blue) como NBA. `get_team` con year probing. Filtra eventos `post` en `list_upcoming_events`. Verificado en vivo: LaLiga 2 partidos, Premier 1, Serie A 4.
-3. **`src/app/config.py`**: `espn_football_league="esp.1"`, `football_leagues` (7 ligas), `buffer_football_halftime_seconds=900`.
-4. **`src/app/domain/entities.py`**: 3 branches `football` — `estimated_duration_seconds` (5400s), `previous_bout` (None, MVP sin previo), `elapsed_seconds` (`(period-1)*2700 + clock`).
-5. **`src/app/api/schemas.py`**: `league: str = ""` en `BoutSubscriptionCreate` y `BoutSubscriptionOut`.
-6. **`src/app/providers/base.py`**: `get_team` añadido al ABC `Provider` (no abstracto).
-7. **`src/app/providers/teams.py`**: Typing generalizado `EspnNbaProvider` → `Provider`.
-8. **`src/app/api/routes/events.py`**: `elif sport == "football"` en `_get_provider` + `_team_resolvers` dict (una por liga).
-9. **`src/app/scheduler.py`**: Providers keyed `(sport, league)`. Football: un provider por liga. `_football_buffer_for`. `team_resolvers` dict.
-10. **`src/app/engine/poller.py`**: `providers: dict[tuple[str, str], Provider]`, `team_resolvers: dict[str, TeamResolver]`. Provider lookup usa `sub.league`.
-11. **`src/app/db/models/subscriptions.py`**: Columna `league: String(50), default=""`.
-12. **Migración `d7f45061518c`**: `add_league_to_bout_subscriptions` con `server_default=""`.
-13. **`src/app/api/routes/subscriptions.py`**: Persiste `league=body.league`.
-14. **Tests**: `tests/test_espn_football.py` (12 tests) + 5 fixtures ESPN reales. pytest **118/118** verdes.
-
-### Android (11 archivos)
-
-15. **`Color.kt`**: `FootballGreen = Color(0xFF1B5E20)`.
-16. **`Models.kt`**: `league` en `BoutSubscriptionCreate`/`Out`.
-17. **`EventListScreen.kt`**: Tile "Fútbol" con `SportsSoccer`, `FootballGreen` strip.
-18. **`CompetitionsViewModel.kt`**: Branch `"football"` con 7 fetches paralelos por liga.
-19. **`CompetitionsScreen.kt`**: Acordeones por liga (LaLiga, Premier, etc.), `countLabel="partidos"`. `AccordionHeader` con `countLabel` param.
-20. **`HomeViewModel.kt`**: 7 async por liga de fútbol en `load()`.
-21. **`HomeScreen.kt`**: Labels por liga, `FootballGreen` strip gradient, "Próximo" label para football.
-22. **`EventDetailScreen.kt`**: Branch `football` en BoutCard ("Partido · 90 min", `FootballGreen`).
-23. **`EventDetailViewModel.kt`**: `league = currentLeague` en `subscribe()`.
-24. **`SubscriptionsScreen.kt`**: Badge "Fútbol" con `FootballGreen`.
-25. **`SubscriptionsViewModel.kt`**: Fallback label "Partido #N" para football.
-
-### Git y limpieza
-
-26. **Limpieza de ramas**: borradas `feature/tenis-nba` y `feature/newsport` (local + remote, ambas ya mergeadas en `dev`).
-27. **`feature/football`** creada desde `dev`, commit `1bd6141` (32 files, +856/-72).
-28. **Pérdida de datos por checkout**: el owner cambió a `dev` y volvió a `feature/football` mientras se editaba → las ediciones a archivos tracked se perdieron (git descarta cambios sin commit al checkout). Archivos nuevos sobrevivieron. Todo se reaplicó y commiteó.
-29. **Emulador**: no arrancó al final. Causa: locks stale (`hardware-qemu.ini.lock` directorio, `multiinstance.lock`) acumulados por intentos donde el timeout de bash mató el proceso emulador. `opengl32sw` falta (warning benign). El emulador pasa todos los checks (WHPX, Vulkan, GPU) pero la ventana no aparece. **Pendiente: reiniciar PC y reintentar**.
-
-**Commits:** `1bd6141` feat(football): provider ESPN + integracion backend multi-sport (D65) + Android
-
-**Verificación:** `ruff check` ✅ · `black --check` ✅ · `mypy src/app` ✅ · `pytest` **118/118** ✅ · `assembleDebug` **BUILD SUCCESSFUL** (54s).
+**Verificación:** `ruff check` ✅ · `black --check` ✅ · `mypy src/app` ✅ · `pytest` **118/118** ✅ · `assembleDebug` **BUILD SUCCESSFUL** (32s) · Railway fútbol OK (curl) · Emulador OK.
 
 **Pendiente:**
-1. **Reiniciar PC** y reintentar abrir el emulador. Limpiar locks stale antes de arrancar.
-2. Instalar APK + smoke visual: fútbol tile en Buscar → acordeones de 7 ligas → tap LaLiga → 2 partidos (Getafe vs Alavés, Rayo vs Sevilla) → EventDetail → "Partido · 90 min" → Avisarme.
-3. **Merge `dev` → `main`** pendiente de Sesión 27 (Railway apunta a `dev`, main está 60+ commits atrás).
+1. **Commitear el fix del acordeón** (`CompetitionsScreen.kt`) y pushear.
+2. **Smoke visual fútbol** en emulador: Buscar → Fútbol → acordeón LaLiga → 2 partidos (Getafe vs Alavés, Rayo vs Sevilla) → EventDetail → "Partido · 90 min" → Avisarme.
+3. **Merge `dev` → `main`** pendiente de Sesión 27 (Railway apunta a `feature/football` temporalmente; main está 60+ commits atrás).
 4. **Futuro fútbol**: tiempo de partido en directo (`displayClock` gratis), marcador en directo (2 calls `score` con caché Redis 30s), alertas de gol (diff de score en poller), síntesis H1/H2 (como NBA Q1-Q4).
 
 ---

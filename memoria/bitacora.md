@@ -51,6 +51,24 @@
 
 ---
 
+## Sesión 28 (cont.) — Fix acordeones fútbol + deploy Railway feature/football (2026-07-31)
+
+**Rama:** `feature/football` · **2 commits** · **Máquina:** `pacor` (Windows, toolchain Android completo)
+
+**Contexto:** el emulador no había arrancado en la sesión anterior por locks stale. Railway no tenía el código de fútbol porque `feature/football` nunca se había pusheado. Los acordeones de fútbol en la app no se expandían.
+
+**Hecho:**
+1. **Limpiar locks stale** (`hardware-qemu.ini.lock` directorio, `multiinstance.lock`) y arrancar emulador OK.
+2. **Push `feature/football` a origin** → Railway detectó el push y desplegó el código de fútbol. Verificado con curl: `GET /api/events?sport=football&league=esp.1` → 2 partidos (Getafe at Alavés, Rayo Vallecano at Sevilla).
+3. **Fix acordeones fútbol**: `CompetitionsScreen.kt:128` usaba `remember { mutableMapOf() }` que no es observable por Compose → el toggle no disparaba recomposición. Cambiado a `remember { mutableStateMapOf() }` + import añadido.
+4. **APK recompilada** (BUILD SUCCESSFUL 32s) e instalada en emulador.
+
+**Verificación:** emulador arrancado (WHPX, Vulkan RTX 3050, sin FATAL en app) · Railway devuelve fútbol · APK con fix instalada.
+
+**Pendiente:** smoke visual fútbol en emulador (acordeón LaLiga → 2 partidos → EventDetail). Merge `dev` → `main`.
+
+---
+
 ## Sesión 27 — Deploy Railway + filtrado combates/TBD + mapping torneos tenis + singles/dobles + zona horaria + BootReceiver fix (2026-07-31)
 
 **Rama:** `feature/tenis-nba` → `dev` · **7 commits** · **Máquina:** `pacor` (Windows, toolchain Android completo)
