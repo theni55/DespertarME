@@ -1,7 +1,12 @@
-"""Modelo de log de alertas (Fase 2b).
+"""Modelo de log de alertas (Fase 2b + Fase 7a).
 
 Audita cada alerta disparada. UNIQUE constraint `(subscription_id, bout_id,
-fired_at_hour)` para idempotencia en BD (D16).
+fired_at_epoch_hour)` para idempotencia en BD (D16 / E6).
+
+`fired_at_epoch_hour` es `int(timestamp) // 3600` (E6): la versión anterior
+`now.hour` colisionaba entre días distintos a la misma hora local y permitía
+duplicados si un retry cruzaba el cambio de hora. Hora absoluta UTC elimina
+ambas clases de colisión.
 """
 
 from __future__ import annotations
@@ -18,7 +23,7 @@ class AlertLog(Base):
     __tablename__ = "alert_log"
     __table_args__ = (
         UniqueConstraint(
-            "subscription_id", "bout_id", "fired_at_hour", name="uq_alert_idempotency"
+            "subscription_id", "bout_id", "fired_at_epoch_hour", name="uq_alert_idempotency"
         ),
     )
 
@@ -29,12 +34,12 @@ class AlertLog(Base):
         nullable=False,
         index=True,
     )
-    user_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    device_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("devices.id", ondelete="CASCADE"), nullable=False, index=True
     )
     bout_id: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     fired_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
-    fired_at_hour: Mapped[int] = mapped_column(Integer, nullable=False)
+    fired_at_epoch_hour: Mapped[int] = mapped_column(Integer, nullable=False)
     payload: Mapped[str | None] = mapped_column(String(2000), nullable=True)
     notifier_response: Mapped[str | None] = mapped_column(String(500), nullable=True)
     status: Mapped[str] = mapped_column(
@@ -47,4 +52,3 @@ class AlertLog(Base):
     subscription: Mapped[BoutSubscription] = relationship(  # type: ignore[name-defined]  # noqa: F821
         back_populates="alerts"
     )
-    user: Mapped[User] = relationship(back_populates="alerts")  # type: ignore[name-defined]  # noqa: F821

@@ -1,0 +1,7 @@
+{
+  "$ref": "http://sports.core.api.espn.com/v2/sports/basketball/leagues/nba/events/401898716/competitions/401898716/status?lang=en&region=us",
+  "clock": 600.0,
+  "displayClock": "10:00",
+  "period": 1,
+  "type": {"id": "2", "name": "STATUS_IN_PROGRESS", "state": "in", "completed": false, "description": "In Progress", "detail": "Q1 - 10:00", "shortDetail": "Q1 - 10:00"}
+}

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="ufc_red">#FFD50914</color>
+    <color name="background_dark">#FF0A0A0A</color>
+    <color name="surface_dark">#FF1A1A1A</color>
+    <color name="text_primary">#FFFFFFFF</color>
+    <color name="text_secondary">#FFB8B8B8</color>
+    <color name="red_corner">#FFD50914</color>
+    <color name="blue_corner">#FF3B82F6</color>
+    <color name="error">#FFCF6679</color>
+</resources>

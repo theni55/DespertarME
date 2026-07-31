@@ -62,6 +62,10 @@ dmypy.json
 .env.*
 !.env.example
 
+# Firebase service account keys (NUNCA committear)
+.firebase-service-account.json
+*.firebase-adminsdk-*.json
+
 # Docker
 docker-compose.override.yml
 
@@ -77,14 +81,13 @@ logs/
 # OS
 Thumbs.db
 
-# Mobile (Expo/React Native) — cubre ramas sin mobile/.gitignore (fix main)
-mobile/node_modules/
-mobile/.expo/
-mobile/dist/
-mobile/web-build/
-mobile/expo-env.d.ts
-mobile/.kotlin/
-mobile/android/.gradle/
-mobile/android/build/
-mobile/android/app/build/
-mobile/android/app/debug.keystore
+# Temporales de instaladores (p.ej. Android Studio deja inst_user_settings.tmp)
+*.tmp
+# Estado local del plugin /goal de OpenCode (workflow checkpoint, no sincronizar)
+.opencode/goals/
+# Runtime del uvicorn lanzado en background durante smokes locales
+uvicorn.out
+uvicorn.err
+uvicorn.pid
+uvicorn_diag.*
+

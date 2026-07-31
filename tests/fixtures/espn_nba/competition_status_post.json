@@ -1,0 +1,1 @@
+{"$ref":"http://sports.core.api.espn.com/v2/sports/basketball/leagues/nba/events/401866757/competitions/401866757/status?lang=en&region=us","clock":0.0,"displayClock":"0.0","period":4,"type":{"id":"3","name":"STATUS_FINAL","state":"post","completed":true,"description":"Final","detail":"Final","shortDetail":"Final"}}

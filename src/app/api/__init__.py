@@ -1,3 +1,3 @@
-from app.api.routes import alert_log, auth, subscriptions, users
+from app.api.routes import alert_log, devices, events, subscriptions
 
-__all__ = ["alert_log", "auth", "subscriptions", "users"]
+__all__ = ["alert_log", "devices", "events", "subscriptions"]

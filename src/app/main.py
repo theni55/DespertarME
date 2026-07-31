@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app.api.routes import alert_log, auth, subscriptions, users
+from app.api.routes import alert_log, devices, events, subscriptions
 from app.config import settings
 from app.scheduler import poller_scheduler
 
@@ -17,12 +17,16 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    """Arranca/para el scheduler del Poller junto con la app (D31)."""
+    """Arranca/para el scheduler del Poller y los recursos del router de events."""
     poller_scheduler.start()
     try:
         yield
     finally:
         await poller_scheduler.stop()
+        # Cerrar los singletons del router events (httpx client + redis).
+        from app.api.routes.events import close_events_resources
+
+        await close_events_resources()
 
 
 app = FastAPI(
@@ -32,9 +36,9 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# API REST
-app.include_router(auth.router)
-app.include_router(users.router)
+# API REST (Fase 7a — device model, sin User/Twilio).
+app.include_router(devices.router)
+app.include_router(events.router)
 app.include_router(subscriptions.router)
 app.include_router(alert_log.router)
 

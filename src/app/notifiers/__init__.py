@@ -1,40 +1,58 @@
-"""Notifiers de llamadas + factory gated por configuración (D30).
+"""Notifiers push + factory gated por configuración (D30 patrón, D40 para FCM).
 
 `build_notifier()` decide en runtime qué notifier usar:
-- Si `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` y `TWILIO_FROM_NUMBER` están
-  configurados → `TwilioNotifier` (llamadas reales).
-- Si falta cualquiera → `DummyNotifier` (log-only). Así el MVP puede desplegarse
-  sin cuenta Twilio y activarse después solo con variables de entorno.
+- Si `FCM_CREDENTIALS_PATH` o `FCM_CREDENTIALS_JSON` están configurados y
+  `firebase-admin` se inicializa correctamente → `FcmNotifier` (push real).
+- Si no → `DummyNotifier` (log-only). Así el MVP backend puede desplegarse sin
+  Firebase y activarse después solo con variables de entorno.
 """
 
 import logging
 
 from app.config import settings
-from app.notifiers.base import AlertPayload, CallResult, VoiceNotifier
+from app.notifiers.base import AlertPayload, PushNotifier, PushResult
 from app.notifiers.dummy import DummyNotifier
 
 logger = logging.getLogger(__name__)
 
 __all__ = [
     "AlertPayload",
-    "CallResult",
     "DummyNotifier",
-    "VoiceNotifier",
+    "PushNotifier",
+    "PushResult",
     "build_notifier",
 ]
 
 
-def build_notifier() -> VoiceNotifier:
-    """Factory: TwilioNotifier si hay credenciales completas, si no Dummy."""
-    if settings.twilio_account_sid and settings.twilio_auth_token and settings.twilio_from_number:
-        # Import diferido: no cargar el SDK de Twilio si no se usa.
-        from app.notifiers.twilio import TwilioNotifier
+def build_notifier() -> PushNotifier:
+    """Factory: FcmNotifier si hay credenciales, si no Dummy."""
+    if not (settings.fcm_credentials_path or settings.fcm_credentials_json):
+        logger.warning(
+            "Notifier activo: DummyNotifier (log-only). "
+            "Configura FCM_CREDENTIALS_PATH o FCM_CREDENTIALS_JSON para activar push reales."
+        )
+        return DummyNotifier()
+    try:
+        from app.notifiers.fcm import FcmNotifier
 
-        logger.info("Notifier activo: TwilioNotifier (llamadas reales)")
-        return TwilioNotifier()
-    logger.warning(
-        "Notifier activo: DummyNotifier (log-only). "
-        "Configura TWILIO_ACCOUNT_SID/TWILIO_AUTH_TOKEN/TWILIO_FROM_NUMBER "
-        "para activar llamadas reales."
-    )
-    return DummyNotifier()
+        notifier = FcmNotifier()
+        logger.info("Notifier activo: FcmNotifier (push reales)")
+        return notifier
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "FcmNotifier no se pudo inicializar (%s). Usando DummyNotifier fallback.", exc
+        )
+        return DummyNotifier()
+
+
+# Singleton del notifier construido lazy (compartido por scheduler y endpoints
+# que necesiten enviar un push puntual, como test-alarm).
+_notifier_singleton: PushNotifier | None = None
+
+
+def get_notifier() -> PushNotifier:
+    """Devuelve el notifier singleton (lo crea en la primera llamada)."""
+    global _notifier_singleton
+    if _notifier_singleton is None:
+        _notifier_singleton = build_notifier()
+    return _notifier_singleton

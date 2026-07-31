@@ -1,0 +1,19 @@
+{
+  "cli": {
+    "version": ">= 5.10.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": false,
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk",
+        "gradleCommand": ":app:assembleRelease"
+      }
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}
