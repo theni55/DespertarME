@@ -116,6 +116,9 @@ class EventDetailViewModel(
                         eventName = card.name,
                         boutMatchNumber = bout.matchNumber,
                         fired = false,
+                        headshotRed = bout.red?.headshotUrl,
+                        headshotBlue = bout.blue?.headshotUrl,
+                        sport = bout.sport,
                     ),
                 )
             } catch (t: Exception) {

@@ -24,6 +24,9 @@ data class PendingAlarm(
     val eventName: String?,
     val boutMatchNumber: Int,
     val fired: Boolean = false,
+    val headshotRed: String? = null,
+    val headshotBlue: String? = null,
+    val sport: String? = null,
 )
 
 @Serializable
