@@ -6,31 +6,43 @@
 
 ## Última sesión
 
-**Fecha:** 2026-07-31 · **Sesión 29 — Rediseño AlarmActivity + fixes alarma (full-screen intent + WTA provider) + merge dev→main. Rama `dev`. Commits `3ea78c3` + `15b4d02`.**
+**Fecha:** 2026-08-02 · **Sesión 30 — 16 bugfixes multi-sport (backend + Android): FCM token, spam loop, MMA in-progress, UI fixes, alarma fantasma, tenis dobles, logos fútbol. Rama `dev`. Commits `c97de5d`, `d38e226`, `10b5a15`, `40da8fc`, `bffb3fa`.**
 
 **Hecho en esta sesión (máquina `pacor`):**
 
-1. **Rediseño `AlarmActivity`**: pantalla de alarma con `AthleteColumn` (headshot circular + nombre, fallback iniciales) × 2 con "VS" en medio, nombre del evento, botón grande "DETENER" (color por deporte: rojo UFC, verde fútbol, azul NBA, verde tenis) + "Abrir app" secundario. Safety net: arranca `AlarmService` desde `onCreate()` si no está corriendo.
-2. **Pipeline de headshots**: `PendingAlarm` +3 campos (`headshotRed`, `headshotBlue`, `sport`) → `AlarmScheduler` los pasa en el intent → `AlarmReceiver` los lee → `AlarmActivity` los muestra con Coil.
-3. **Fix `startTestAlarm`** (`MainActivity.kt`): ahora también lanza `AlarmActivity` (antes solo sonido, la pantalla nunca aparecía).
-4. **Fix full-screen intent (Bug 1)**: `AlarmReceiver` reescrito para usar `NotificationCompat.setFullScreenIntent` en vez de `ctx.startActivity()` directo. Android 14+ bloquea `startActivity` desde `BroadcastReceiver` en background — el patrón oficial es notificación high-priority con `setFullScreenIntent` + `CATEGORY_ALARM`.
-5. **Fix WTA provider (Bug 2)**: `scheduler.py` solo creaba `("tennis", "atp")` — WTA no existía. Añadido `("tennis", "wta")`. El poller saltaba todas las suscripciones WTA → sin push → alarma nunca sonaba. Football y NBA ya estaban bien.
-6. **Merge `feature/football` → `dev`** (fast-forward) + **Merge `dev` → `main`** (93 commits, `-X theirs`, 215 archivos). `feature/football` borrada. Push `dev` → Railway redeploy.
-7. **Pruebas en móvil físico**: APK instalada vía Drive, suscripción WTA creada, `POST /api/devices/me/test-alarm` → push FCM entregado + sonido. Bug 1 confirmado (pantalla no apareció sobre lockscreen) y fixeado.
-8. **Backend**: pytest **118/118**, ruff/black limpios. APK BUILD SUCCESSFUL.
+### Fixes de backend
 
-**Commits:** `3ea78c3` feat(android): rediseno AlarmActivity + fix startTestAlarm · `15b4d02` fix: WTA provider + full-screen intent
+1. **FIX 1 — Spam loop de cancelled**: `poller.py` ahora detecta errores FCM permanentes (`NotRegistered`, `InvalidArgument`, `SenderIdMismatch`) vía `PushResult.is_permanent` y marca la suscripción como `fired` aunque el push falle → elimina el spam loop de 46 alertas/hora. `fcm.py` clasifica los errores, `base.py` añade el campo `is_permanent: bool`.
+2. **FIX 3 — Eventos MMA en progreso visibles**: `espn_ufc.py` `list_upcoming_events` ya no filtra por fecha eventos que no son `post`. Los eventos en `in` (empezados pero no acabados) aparecen en Buscar/Home.
+3. **FIX 4 — "Próximo" real**: `events.py` fetch paralelo del `competition_status` de cada bout sin winner solo para MMA. Filtra bouts `in` + `post` → el primer bout que queda es el verdadero "próximo" (pre).
+4. **FIX 4b — Guard tenis**: `events.py` solo aplica FIX 4 a MMA (`sport != "tennis"`). Tennis ya filtra vía winner=true inline.
+5. **Fix config.py**: eliminado validador `_check_production_secrets` (JWT_SECRET) resucitado por merge `main→dev`. Rompía el deploy Railway.
+6. **FIX tenis — Washington Dobles vacío**: `espn_tennis.py` `_fetch_summary` verifica con 1 llamada ESPN si la 1ª competición de dobles está `post` antes de crear la entrada de dobles. Si acabaron → no crea entrada → no aparece en lista vacía.
 
-**Verificación:** pytest 118/118 ✅ · ruff ✅ · black ✅ · assembleDebug BUILD SUCCESSFUL ✅ · Railway fútbol+WTA OK · Push FCM entregado a móvil físico ✅
+### Fixes de Android
+
+7. **FIX 2 — FCM token fresco**: `AppContainer.kt` `ensureRegistered()` usa `FirebaseMessaging.getInstance().token` directo (3s timeout) en vez de DataStore stale. `registerFcmToken` también persiste en DataStore como fallback.
+8. **FIX 5 — Suscripciones persisten al reabrir**: `EventDetailViewModel.load()` fetch de `listSubscriptions()` y puebla `subscribedBouts` con los ya existentes → tick verde al reabrir.
+9. **FIX 6a — Badge deporte no se rompe**: `SubscriptionsScreen.kt` `fightLabel` con `maxLines=1 + TextOverflow.Ellipsis`, badge `maxLines=1`.
+10. **FIX 6b — Scroll en deportes**: `EventListScreen.kt` columna root con `.verticalScroll(rememberScrollState())`.
+11. **FIX 6c — Fecha local en lista**: `CompetitionsScreen.kt` `formatCompetitionDate` convierte a zona horaria del dispositivo con `OffsetDateTime.atZoneSameInstant`.
+12. **FIX 7 — Buscar resetea**: `MainActivity.kt` `navigateTopLevel("events")` hace `popBackStack("events", inclusive=true)` antes de navegar.
+13. **FIX 8 — Swipe back**: `AndroidManifest.xml` `android:enableOnBackInvokedCallback="true"`.
+14. **FIX 9 — Volumen máximo**: `AlarmService.kt` fuerza `STREAM_ALARM` a volumen máximo con `AudioManager.setStreamVolume`.
+15. **FIX alarma fantasma**: `AlarmReceiver` usa `NOTIFICATION_ID=2` (AlarmService mantiene ID=1) + cancela notificación del servicio. `AlarmScheduler.cleanupStale()` cancela alarmas con `triggerAtMillis` pasado o `fired=true` al iniciar. Llamado desde `AppContainer.ensureRegistered()`.
+16. **FIX logos fútbol Home**: `HomeViewModel.kt` añade rama `sport == "football"` con `firstOrNull()` sin filtro `matchNumber==1` (ESPN football no envía matchNumber → pydantic asigna 0).
+
+**Commits:** `c97de5d` fix: 13 bugs · `d38e226` fix: validador JWT_SECRET · `10b5a15` fix: alarma fantasma · `40da8fc` fix: tenis dobles · `bffb3fa` fix: logos fútbol Home
+
+**Verificación:** pytest 118/118 ✅ · ruff ✅ · black ✅ · assembleDebug BUILD SUCCESSFUL ✅ · Railway deploy OK ✅
 
 **Pendiente:**
-1. **Reinstalar APK** con fix full-screen intent en el móvil físico y validar que la pantalla aparece sobre el lockscreen + botón DETENER funciona.
-2. **Validar alarma natural** con evento WTA real (poller detecta transición → push update → alarma suena sola).
-3. **Validar alarma natural** con evento de fútbol (sin previo → fallback a hora programada → alarma suena a la hora oficial − lead).
-4. **Doze validation** — `adb shell dumpsys deviceidle force-idle` + verificar `setAlarmClock` despierta.
-5. **D65** sin registrar en `decisiones.md` (modelo fútbol: 1 partido = 1 bout).
-6. **Sonido custom** `alarm.ogg` en vez de `RingtoneManager.TYPE_ALARM` genérico.
-7. **Play Store**: release keystore + ProGuard + cuenta ($25).
+1. **Instalar APK en móvil físico** con todos los fixes y validar.
+2. **D66-D70** registradas en `decisiones.md`.
+3. **Sonido custom** `alarm.ogg` en vez de `RingtoneManager.TYPE_ALARM`.
+4. **Doze validation** — `adb shell dumpsys deviceidle force-idle`.
+5. **Play Store**: release keystore + ProGuard + cuenta ($25).
+6. **D65** sin registrar en `decisiones.md` (modelo fútbol: 1 partido = 1 bout).
 
 ---
 

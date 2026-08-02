@@ -2,6 +2,50 @@
 
 > Registro cronológico de cada sesión de trabajo: qué se hizo y qué quedó pendiente.
 
+## Sesión 30 — 16 bugfixes multi-sport: backend (FCM, polling, tenis) + Android (UI, alarma, fútbol) (2026-08-02)
+
+**Rama:** `dev` · **5 commits** (`c97de5d`, `d38e226`, `10b5a15`, `40da8fc`, `bffb3fa`) · **Máquina:** `pacor` (Windows, toolchain Android completo)
+
+**Contexto:** el owner probó la app en móvil físico y reportó 11 bugs, más el diagnóstico vía Railway que reveló FCM NotRegistered + spam loop de cancelled. Se abordaron en esta sesión + 5 bugs adicionales encontrados durante el testing (alarma fantasma, Washington Dobles vacío, logos fútbol, fix config.py resucitado, guard tenis FIX 4).
+
+**Hecho:**
+
+### Backend — bugs detectados vía Railway
+1. **Spam loop de cancelled (46 alertas/hora)**: `poller.py` + `fcm.py` + `base.py` — `PushResult.is_permanent` clasifica errores FCM (`NotRegistered`, `InvalidArgument`, `SenderIdMismatch`) como permanentes. El poller marca `sub.status = "fired"` y `try_mark_fired` aunque el push falle → elimina el loop.
+2. **Eventos MMA in-progress invisibles**: `espn_ufc.py` `list_upcoming_events` ya no filtra por fecha eventos con status != `post`. Los eventos en `in` (empezados) aparecen en Buscar.
+3. **Bouts "in" mostrados como "próximo"**: `events.py` fetch paralelo del `competition_status` de cada bout sin winner (semáforo 4). Filtra `in` + `post` → el primer bout restante es el verdadero "próximo". Solo para MMA (guard `sport != "tennis"`).
+
+### Backend — fix config.py roto por merge main
+4. **`config.py`**: eliminado validador `_check_production_secrets` + constante `_INSECURE_JWT_DEFAULT` y el import `model_validator` resucitados por el merge `main→dev`. Rompía el deploy Railway con `AttributeError: 'Settings' object has no attribute 'jwt_secret'`.
+
+### Backend — tenis
+5. **Washington Dobles vacío**: `espn_tennis.py` `_fetch_summary` verifica con 1 llamada ESPN si la 1ª competición de dobles está `post` antes de crear la entrada de dobles. Si acabaron → no crea entrada.
+
+### Android — FCM + alarmas
+6. **FCM token stale tras reinstall**: `AppContainer.kt` `ensureRegistered()` usa `FirebaseMessaging.getInstance().token` directo con 3s timeout en vez del DataStore stale.
+7. **Alarma fantasma sin notificación**: `AlarmReceiver` usa `NOTIFICATION_ID=2` (separado del ID=1 del `AlarmService`) + cancela la notificación del servicio antes de mostrar la suya. `AlarmScheduler.cleanupStale()` cancela alarmas con trigger pasado o `fired=true`.
+8. **Volumen máximo de alarma**: `AlarmService.kt` fuerza `STREAM_ALARM` a tope con `AudioManager.setStreamVolume`.
+
+### Android — UI
+9. **Suscripciones no persisten al reabrir**: `EventDetailViewModel.load()` fetch de `listSubscriptions()` y puebla `subscribedBouts` → tick verde al reabrir app.
+10. **Badge deporte vertical con nombre largo**: `SubscriptionsScreen.kt` `fightLabel` + badge con `maxLines=1 + Ellipsis`.
+11. **Deportes sin scroll**: `EventListScreen.kt` columna root con `.verticalScroll(rememberScrollState())`.
+12. **Fechas en UTC en lista**: `CompetitionsScreen.kt` `formatCompetitionDate` convierte a zona local con `OffsetDateTime.atZoneSameInstant`.
+13. **Buscar no resetea**: `MainActivity.kt` `navigateTopLevel("events")` hace `popBackStack("events", inclusive=true)`.
+14. **Swipe back**: `AndroidManifest.xml` `android:enableOnBackInvokedCallback="true"`.
+15. **Logos fútbol no aparecen en Home**: `HomeViewModel.kt` añade rama `sport == "football"` con `firstOrNull()` sin filtro `matchNumber==1`. ESPN football no envía matchNumber → pydantic asigna default=0 → el filtro excluía todos los bouts.
+
+**Decisiones:** D66-D70 registradas en `decisiones.md`.
+
+**Commits:** `c97de5d` fix: 13 bugs · `d38e226` fix: validador JWT_SECRET · `10b5a15` fix: alarma fantasma · `40da8fc` fix: tenis dobles · `bffb3fa` fix: logos fútbol Home
+
+**Pendiente:**
+1. Instalar APK en móvil físico con todos los fixes y validar.
+2. Sonido custom `alarm.ogg`.
+3. Doze validation.
+4. Play Store: release keystore + ProGuard + cuenta ($25).
+5. D65 sin registrar.
+
 ## Sesión 29 — Rediseño AlarmActivity + fixes alarma (full-screen intent + WTA provider) + merge dev→main (2026-07-31)
 
 **Rama:** `dev` · **3 commits** (`3ea78c3`, `76f931a` ya en Sesión 28 cont., `15b4d02`) · **Máquina:** `pacor` (Windows, toolchain Android completo)
