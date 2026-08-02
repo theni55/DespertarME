@@ -109,10 +109,10 @@ class HomeViewModel(
                         val card = runCatching {
                             container.api.getEvent(summary.id, sport, league)
                         }.getOrNull()
-                        val main = if (sport == "tennis") {
-                            mainBoutTennis(card)
-                        } else {
-                            card?.bouts?.firstOrNull { it.matchNumber == 1 }
+                        val main = when {
+                            sport == "tennis" -> mainBoutTennis(card)
+                            sport == "football" -> card?.bouts?.firstOrNull()
+                            else -> card?.bouts?.firstOrNull { it.matchNumber == 1 }
                         }
                         HomeEventUi(
                             event = summary,
