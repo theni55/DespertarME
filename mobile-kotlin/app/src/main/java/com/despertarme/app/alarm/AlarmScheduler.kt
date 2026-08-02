@@ -59,4 +59,19 @@ object AlarmScheduler {
         val existing = PendingAlarmStorage.get(context.applicationContext, boutId) ?: return
         schedule(context, existing.copy(triggerAtMillis = newTriggerAtMillis))
     }
+
+    /**
+     * Cancela alarmas cuyo trigger ya pasó o que ya fueron disparadas
+     * (fired=true). Las limpia del DataStore para que no suenen
+     * fantasmas al abrir la app tras reinstalar.
+     */
+    suspend fun cleanupStale(context: Context) {
+        val now = System.currentTimeMillis()
+        val all = PendingAlarmStorage.all(context.applicationContext)
+        for (alarm in all) {
+            if (alarm.fired || (alarm.triggerAtMillis > 0L && alarm.triggerAtMillis < now)) {
+                cancel(context, alarm.boutId)
+            }
+        }
+    }
 }

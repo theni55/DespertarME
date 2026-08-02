@@ -2,6 +2,7 @@ package com.despertarme.app.data
 
 import android.content.Context
 import android.util.Log
+import com.despertarme.app.alarm.AlarmScheduler
 import com.despertarme.app.data.remote.DespertarApi
 import com.despertarme.app.data.remote.DeviceCreate
 import com.despertarme.app.data.remote.DeviceIdInterceptor
@@ -18,6 +19,7 @@ import java.util.concurrent.TimeUnit
 
 class AppContainer(context: Context) {
 
+    private val appContext = context.applicationContext
     private val storage = DeviceStorage(context)
 
     // FCM is wired end-to-end since Sesión 18, but the token may not be available
@@ -64,6 +66,10 @@ class AppContainer(context: Context) {
         } catch (t: Throwable) {
             Log.e("DespertarMe", "ensureRegistered failed", t)
         }
+        // Limpiar alarmas viejas del DataStore que puedan sobrevivir
+        // a reinstalaciones (allowBackup). Si el trigger ya pasó o
+        // la alarma ya sonó, cancelarla para evitar fantasmas.
+        AlarmScheduler.cleanupStale(appContext)
         return id
     }
 

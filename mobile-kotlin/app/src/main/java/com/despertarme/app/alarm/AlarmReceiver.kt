@@ -14,6 +14,10 @@ import kotlinx.coroutines.launch
 
 class AlarmReceiver : BroadcastReceiver() {
 
+    companion object {
+        const val FULLSCREEN_NOTIFICATION_ID = 2
+    }
+
     override fun onReceive(rawContext: Context, intent: Intent) {
         if (intent.action != AlarmScheduler.ALARM_ACTION) return
 
@@ -93,7 +97,8 @@ class AlarmReceiver : BroadcastReceiver() {
             .build()
 
         val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        nm.notify(AlarmService.NOTIFICATION_ID, notification)
+        nm.cancel(AlarmService.NOTIFICATION_ID)
+        nm.notify(FULLSCREEN_NOTIFICATION_ID, notification)
 
         Log.i("AlarmReceiver", "Alarma disparada y fired=true marcado para bout=$boutId")
     }
