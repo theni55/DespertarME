@@ -309,13 +309,36 @@ class EspnTennisProvider(_EspnBaseProvider):
                     )
                 )
             if has_doubles:
-                result.append(
-                    EventSummary(
-                        id=ev_data["id"] + "_doubles",
-                        name=f"{name} Dobles",
-                        date=ev_data.get("date", ""),
+                # Antes de crear entrada de dobles, verificar que aun haya
+                # partidos de dobles sin acabar (1 sola llamada ESPN a la
+                # 1a competicion de dobles). Si ya estan todas en 'post',
+                # no crear la entrada para evitar pantalla vacia.
+                doubles_alive = True
+                try:
+                    for c in competitions:
+                        if "Doubles" in ((c.get("type") or {}).get("text") or ""):
+                            raw_ref = str(c.get("$ref", ""))
+                            cid = raw_ref.rstrip("?lang=en&region=us").split("/")[-1]
+                            if cid and not cid.startswith("http"):
+                                try:
+                                    async with sem:
+                                        st = await self.get_competition_status(eid, cid)
+                                    if st.type.state == "post":
+                                        doubles_alive = False
+                                except Exception:
+                                    pass
+                            break
+                except Exception:
+                    pass
+
+                if doubles_alive:
+                    result.append(
+                        EventSummary(
+                            id=ev_data["id"] + "_doubles",
+                            name=f"{name} Dobles",
+                            date=ev_data.get("date", ""),
+                        )
                     )
-                )
             if not result:
                 result.append(
                     EventSummary(

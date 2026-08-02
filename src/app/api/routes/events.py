@@ -247,7 +247,7 @@ async def get_event_detail(
     # futuros (fecha >= now), todos los combates estan en 'pre' → 0 llamadas.
     in_or_post_bout_ids: set[str] = set()
     ev_date = _parse_iso_z(event.date)
-    if ev_date < datetime.now(UTC):
+    if sport != "tennis" and ev_date < datetime.now(UTC):
         sem = asyncio.Semaphore(4)
 
         async def _fetch_status(bout: Any) -> tuple[str, str | None]:
