@@ -3,6 +3,8 @@ from functools import lru_cache
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+_INSECURE_JWT_DEFAULT = "change-me-please"
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -79,6 +81,27 @@ class Settings(BaseSettings):
             if v.startswith("postgresql://"):
                 return v.replace("postgresql://", "postgresql+asyncpg://", 1)
         return v
+
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def _normalize_database_url(cls, v: str) -> str:
+        """Normaliza URLs de PaaS (Railway da `postgresql://`) al driver async."""
+        if isinstance(v, str):
+            if v.startswith("postgres://"):
+                return v.replace("postgres://", "postgresql+asyncpg://", 1)
+            if v.startswith("postgresql://"):
+                return v.replace("postgresql://", "postgresql+asyncpg://", 1)
+        return v
+
+    @model_validator(mode="after")
+    def _check_production_secrets(self) -> "Settings":
+        """En producción el JWT_SECRET no puede ser el default inseguro."""
+        if self.app_env == "production" and self.jwt_secret == _INSECURE_JWT_DEFAULT:
+            raise ValueError(
+                "JWT_SECRET debe configurarse en producción (no uses el default). "
+                'Genera uno con: python -c "import secrets; print(secrets.token_urlsafe(48))"'
+            )
+        return self
 
 
 @lru_cache
