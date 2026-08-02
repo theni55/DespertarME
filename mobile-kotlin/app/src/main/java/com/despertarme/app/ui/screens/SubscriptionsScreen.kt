@@ -198,6 +198,8 @@ private fun SubscriptionCard(
                         color = Color.White,
                         fontWeight = FontWeight.Bold,
                         fontSize = 15.sp,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     val (badgeText, badgeColor) = when (ui.sport) {
@@ -212,6 +214,7 @@ private fun SubscriptionCard(
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
                         letterSpacing = 0.5.sp,
+                        maxLines = 1,
                         modifier = Modifier
                             .clip(RoundedCornerShape(4.dp))
                             .background(badgeColor.copy(alpha = 0.15f))

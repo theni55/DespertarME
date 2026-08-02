@@ -30,6 +30,8 @@ logger = logging.getLogger(__name__)
 
 _CREDENTIALS_ADAPTER: TypeAdapter[dict[str, Any]] = TypeAdapter(dict[str, Any])
 
+_PERMANENT_FCM_ERRORS = {"NotRegistered", "InvalidArgument", "SenderIdMismatch"}
+
 
 def _load_credentials() -> dict[str, Any] | None:
     """Carga el service account JSON desde path o env-var inline."""
@@ -97,9 +99,17 @@ class FcmNotifier(PushNotifier):
                 duration_seconds=time.monotonic() - start,
             )
         except Exception as exc:  # noqa: BLE001
-            logger.warning("FcmNotifier fallo enviando a token=%s: %s", payload.fcm_token[:12], exc)
+            exc_str = str(exc)
+            is_perm = any(tag in exc_str for tag in _PERMANENT_FCM_ERRORS)
+            logger.warning(
+                "FcmNotifier fallo enviando a token=%s (%s): %s",
+                payload.fcm_token[:12],
+                "permanente" if is_perm else "transitorio",
+                exc,
+            )
             return PushResult(
                 success=False,
-                error=str(exc),
+                error=exc_str,
                 duration_seconds=time.monotonic() - start,
+                is_permanent=is_perm,
             )

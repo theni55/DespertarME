@@ -5,6 +5,8 @@ import android.util.Log
 import com.despertarme.app.data.remote.DespertarApi
 import com.despertarme.app.data.remote.DeviceCreate
 import com.despertarme.app.data.remote.DeviceIdInterceptor
+import com.google.android.gms.tasks.Tasks
+import com.google.firebase.messaging.FirebaseMessaging
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.serialization.json.Json
@@ -48,7 +50,7 @@ class AppContainer(context: Context) {
     suspend fun ensureRegistered(): String {
         val id = storage.ensureDeviceId()
         deviceIdFlow.value = id
-        val token = storage.fcmToken() ?: "no-fcm-yet-$id"
+        val token = freshFcmToken() ?: storage.fcmToken() ?: "no-fcm-yet-$id"
         try {
             api.registerDevice(
                 DeviceCreate(
@@ -68,6 +70,9 @@ class AppContainer(context: Context) {
     suspend fun registerFcmToken(token: String) {
         val id = storage.ensureDeviceId()
         deviceIdFlow.value = id
+        // Guardar en DataStore como fallback, pero usar el token que nos
+        // pasan directamente (ya es el fresco de Firebase via onNewToken).
+        storage.setFcmToken(token)
         try {
             api.registerDevice(
                 DeviceCreate(
@@ -81,6 +86,20 @@ class AppContainer(context: Context) {
             Log.i("DespertarMe", "FCM token registrado con el backend")
         } catch (t: Throwable) {
             Log.e("DespertarMe", "registerFcmToken failed", t)
+        }
+    }
+
+    /**
+     * Obtiene el token FCM directamente de Firebase en vez de DataStore.
+     * DataStore puede conservar un token viejo tras reinstalar la app
+     * (allowBackup), provocando NotRegistered en todos los pushes.
+     */
+    private fun freshFcmToken(): String? {
+        return try {
+            val task = FirebaseMessaging.getInstance().token
+            Tasks.await(task, 3, java.util.concurrent.TimeUnit.SECONDS)
+        } catch (_: Exception) {
+            null
         }
     }
 }

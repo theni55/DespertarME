@@ -275,11 +275,19 @@ class Poller:
         )
 
         if result.success:
-            # E6: marcar idempotencia tras éxito (no antes de notificar).
             await self._state.set_last_estimate(sub_id, bout_id, estimate.start_at)
             await self._state.try_mark_fired(sub_id, bout_id, "update")
             logger.info(
                 "Push 'update' enviado a device=%s para suscripción %s", device_id[:8], sub_id
+            )
+            return True
+
+        if result.is_permanent:
+            await self._state.try_mark_fired(sub_id, bout_id, "update")
+            logger.warning(
+                "Push 'update' fallo permanente para sub=%s (token=%s); marcada como fired",
+                sub_id,
+                device_id[:8],
             )
             return True
 
@@ -336,6 +344,22 @@ class Poller:
             if msg_type == "cancelled":
                 sub.status = "fired"
                 await session.commit()
+            return True
+        # Error permanente de FCM: el token es invalido (NotRegistered) o el
+        # mensaje está mal formado (InvalidArgument, SenderIdMismatch). Marcar
+        # la suscripción como fired para no reintentar en el siguiente ciclo
+        # (spam loop de cancelled/hora).
+        if result.is_permanent:
+            await self._state.try_mark_fired(sub_id, bout_id, msg_type)
+            if msg_type == "cancelled":
+                sub.status = "fired"
+                await session.commit()
+            logger.warning(
+                "Push '%s' fallo permanente para sub=%s; marcada como fired (token=%s)",
+                msg_type,
+                sub_id,
+                device_id[:8],
+            )
             return True
         return False
 

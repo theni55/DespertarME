@@ -5,6 +5,7 @@ import android.app.Service
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.media.AudioAttributes
+import android.media.AudioManager
 import android.media.Ringtone
 import android.media.RingtoneManager
 import android.net.Uri
@@ -46,6 +47,9 @@ class AlarmService : Service() {
     }
 
     private fun playAlarmLoop() {
+        val am = getSystemService(AUDIO_SERVICE) as AudioManager
+        val maxVol = am.getStreamMaxVolume(AudioManager.STREAM_ALARM)
+        am.setStreamVolume(AudioManager.STREAM_ALARM, maxVol, 0)
         val uri: Uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
             ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
             ?: return

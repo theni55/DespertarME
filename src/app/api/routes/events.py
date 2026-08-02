@@ -13,6 +13,7 @@ se delega a `Card.previous_bout()`.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -240,6 +241,31 @@ async def get_event_detail(
 
     previous_map = _previous_bout_id_map(event.bouts, sport)
 
+    # Si el evento ya empezo (fecha pasada), filtrar combates que ya estan
+    # en curso o terminados (state=in/post) para que el "PRÓXIMO" badge de
+    # la app marque el primer combate REALMENTE pendiente. Para eventos
+    # futuros (fecha >= now), todos los combates estan en 'pre' → 0 llamadas.
+    in_or_post_bout_ids: set[str] = set()
+    ev_date = _parse_iso_z(event.date)
+    if ev_date < datetime.now(UTC):
+        sem = asyncio.Semaphore(4)
+
+        async def _fetch_status(bout: Any) -> tuple[str, str | None]:
+            rid = bout.red_corner
+            bid_blue = bout.blue_corner
+            if (rid and rid.winner) or (bid_blue and bid_blue.winner):
+                return (bout.id, "post")
+            async with sem:
+                try:
+                    st = await provider.get_competition_status(base_event_id, bout.id)
+                    return (bout.id, st.type.state)
+                except Exception:
+                    logger.debug("No se pudo obtener status del bout %s", bout.id)
+                    return (bout.id, None)
+
+        statuses = await asyncio.gather(*[_fetch_status(b) for b in event.bouts])
+        in_or_post_bout_ids = {bid for bid, state in statuses if state in ("in", "post")}
+
     # D49: tenis tiene nombres inline en competitor.name — no hace falta
     # resolver atletas via el endpoint /athletes/{id} (costoso: 126 llamadas
     # para 63 partidos, ~16s). Para MMA seguimos usando AthleteResolver.
@@ -314,6 +340,11 @@ async def get_event_detail(
 
         # Saltar combates ya acabados (winner=true) — MMA + Tenis.
         if (red and red.winner) or (blue and blue.winner):
+            continue
+
+        # Saltar combates en curso ('in') para eventos ya empezados.
+        # Asi el primer bout de la lista es el verdadero 'proximo' (pre).
+        if b.id in in_or_post_bout_ids:
             continue
 
         # Tenis: saltar partidos cuyos jugadores aun no se conocen (TBD).

@@ -362,5 +362,8 @@ private fun CompetitionCard(
 }
 
 private fun formatCompetitionDate(iso: String): String = runCatching {
-    if (iso.length >= 16) "${iso.substring(0, 10)} · ${iso.substring(11, 16)} UTC" else iso
+    val zoned = java.time.OffsetDateTime.parse(iso)
+        .atZoneSameInstant(java.time.ZoneId.systemDefault())
+    val locale = java.util.Locale("es", "ES")
+    zoned.format(java.time.format.DateTimeFormatter.ofPattern("d MMM \u00b7 HH:mm", locale))
 }.getOrDefault(iso)

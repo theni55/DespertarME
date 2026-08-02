@@ -44,7 +44,20 @@ class EventDetailViewModel(
         loadJob = viewModelScope.launch {
             try {
                 val card = container.api.getEvent(eventId, sport, league)
-                _state.value = EventDetailState(isLoading = false, event = card)
+                // Cargar suscripciones existentes para que los bouts
+                // ya suscritos muestren el tick verde al reabrir la app.
+                val subscriptions = runCatching {
+                    container.api.listSubscriptions()
+                }.getOrDefault(emptyList())
+                val subscribedIds = subscriptions
+                    .filter { it.eventId == eventId }
+                    .map { it.boutId }
+                    .toSet()
+                _state.value = EventDetailState(
+                    isLoading = false,
+                    event = card,
+                    subscribedBouts = subscribedIds,
+                )
             } catch (t: Exception) {
                 _state.value = EventDetailState(
                     isLoading = false,

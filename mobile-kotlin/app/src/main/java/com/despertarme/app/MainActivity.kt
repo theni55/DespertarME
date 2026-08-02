@@ -249,6 +249,9 @@ private fun AppGraph(
 }
 
 private fun NavHostController.navigateTopLevel(route: String) {
+    if (route == "events") {
+        popBackStack("events", inclusive = true)
+    }
     navigate(route) {
         popUpTo(graph.findStartDestination().id) { saveState = true }
         launchSingleTop = true

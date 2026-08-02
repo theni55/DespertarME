@@ -23,6 +23,7 @@ class PushResult:
     message_id: str | None = None
     error: str | None = None
     duration_seconds: float = 0.0
+    is_permanent: bool = False
 
 
 @dataclass(frozen=True)

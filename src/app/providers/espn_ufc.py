@@ -130,6 +130,11 @@ class EspnUfcProvider(_EspnBaseProvider):
                 continue
             if ev_dt >= cutoff:
                 upcoming.append(s)
+            else:
+                # Evento con fecha pasada que NO es 'post' (el _fetch_summary
+                # ya los filtra). Mantenerlo: es un evento en 'in' que sigue
+                # en curso y debe ser visible en Buscar/Home.
+                upcoming.append(s)
         upcoming.sort(key=lambda x: x.date)
         return upcoming
 
