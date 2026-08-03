@@ -83,13 +83,16 @@ class PollerScheduler:
         self._poller: Poller | None = None
 
     def _build(self) -> Poller:
-        self._providers[("mma", "")] = EspnUfcProvider()
-        self._providers[("tennis", "atp")] = EspnTennisProvider(league="atp")
-        self._providers[("tennis", "wta")] = EspnTennisProvider(league="wta")
-        self._providers[("nba", "")] = EspnNbaProvider(league=settings.espn_nba_league)
-        self._providers[("nfl", "")] = EspnNflProvider(league=settings.espn_nfl_league)
+        from app.api.routes.events import get_shared_http_client
+
+        http_client = get_shared_http_client()
+        self._providers[("mma", "")] = EspnUfcProvider(client=http_client)
+        self._providers[("tennis", "atp")] = EspnTennisProvider(league="atp", client=http_client)
+        self._providers[("tennis", "wta")] = EspnTennisProvider(league="wta", client=http_client)
+        self._providers[("nba", "")] = EspnNbaProvider(league=settings.espn_nba_league, client=http_client)
+        self._providers[("nfl", "")] = EspnNflProvider(league=settings.espn_nfl_league, client=http_client)
         for league in settings.football_leagues:
-            self._providers[("football", league)] = EspnFootballProvider(league=league)
+            self._providers[("football", league)] = EspnFootballProvider(league=league, client=http_client)
         if settings.app_env == "development":
             import fakeredis.aioredis as fakeredis_aio
 

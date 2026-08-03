@@ -18,6 +18,7 @@ import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -27,6 +28,7 @@ from app.api.schemas import (
     EventCardOut,
     EventSummaryOut,
 )
+from app.config import settings
 from app.db.session import get_session
 from app.domain.entities import Card
 from app.providers._visibility import bout_has_real_competitors
@@ -52,6 +54,23 @@ _providers: dict[tuple[str, str], Provider] = {}
 _resolvers: dict[str, AthleteResolver] = {}
 _team_resolvers: dict[str, TeamResolver] = {}
 _redis: Any = None
+_shared_client: httpx.AsyncClient | None = None
+_SHARED_CLIENT_LIMITS = httpx.Limits(max_connections=50, max_keepalive_connections=20)
+
+
+def get_shared_http_client() -> httpx.AsyncClient:
+    """Devuelve un singleton httpx.AsyncClient compartido entre todos los providers
+    del router events y el scheduler. Un solo pool de conexiones para evitar OOM
+    en Railway (512 MB free tier) cuando HomeViewModel dispara 6 fetches
+    paralelos que instancian ~6 providers cada uno con su propio cliente.
+    """
+    global _shared_client
+    if _shared_client is None:
+        _shared_client = httpx.AsyncClient(
+            timeout=httpx.Timeout(settings.espn_timeout_seconds),
+            limits=_SHARED_CLIENT_LIMITS,
+        )
+    return _shared_client
 
 
 def _get_provider(sport: str = "mma", league: str = "") -> Provider:
@@ -60,18 +79,18 @@ def _get_provider(sport: str = "mma", league: str = "") -> Provider:
     if key not in _providers:
         import redis.asyncio as aioredis
 
-        from app.config import settings
+        http_client = get_shared_http_client()
 
         if sport == "mma":
-            _providers[key] = EspnUfcProvider()
+            _providers[key] = EspnUfcProvider(client=http_client)
         elif sport == "tennis":
-            _providers[key] = EspnTennisProvider(league=league or settings.espn_tennis_league)
+            _providers[key] = EspnTennisProvider(league=league or settings.espn_tennis_league, client=http_client)
         elif sport == "nba":
-            _providers[key] = EspnNbaProvider(league=league or settings.espn_nba_league)
+            _providers[key] = EspnNbaProvider(league=league or settings.espn_nba_league, client=http_client)
         elif sport == "nfl":
-            _providers[key] = EspnNflProvider(league=league or settings.espn_nfl_league)
+            _providers[key] = EspnNflProvider(league=league or settings.espn_nfl_league, client=http_client)
         elif sport == "football":
-            _providers[key] = EspnFootballProvider(league=league or settings.espn_football_league)
+            _providers[key] = EspnFootballProvider(league=league or settings.espn_football_league, client=http_client)
         else:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -101,7 +120,7 @@ def _get_provider(sport: str = "mma", league: str = "") -> Provider:
 
 
 async def close_events_resources() -> None:
-    global _providers, _resolvers, _team_resolvers, _redis
+    global _providers, _resolvers, _team_resolvers, _redis, _shared_client
     for provider in _providers.values():
         try:
             await provider.aclose()
@@ -113,6 +132,9 @@ async def close_events_resources() -> None:
         _redis = None
     _resolvers = {}
     _team_resolvers = {}
+    if _shared_client is not None:
+        await _shared_client.aclose()
+        _shared_client = None
 
 
 def _parse_iso_z(raw: str) -> datetime:
