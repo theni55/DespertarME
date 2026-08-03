@@ -300,23 +300,12 @@ class EspnTennisProvider(_EspnBaseProvider):
             has_doubles = any(
                 "Doubles" in ((c.get("type") or {}).get("text") or "") for c in competitions
             )
-            result: list[EventSummary] = []
-            if has_singles:
-                result.append(
-                    EventSummary(
-                        id=ev_data["id"],
-                        name=name,
-                        date=ev_data.get("date", ""),
-                    )
-                )
-            if has_doubles:
-                # Verificar que haya AL MENOS un partido de dobles con
-                # competidores reales (no TBD/Bye/placeholders). Datos
-                # inline en el JSON del evento — cero llamadas extra a
-                # ESPN (sustituye el get_competition_status del fix D61).
-                doubles_alive = False
+
+            def _has_alive_bout(mode: str) -> bool:
+                """True si hay AL MENOS un bout del tipo indicado con competidores
+                reales y sin winner (datos inline, 0 llamadas extra a ESPN)."""
                 for c in competitions:
-                    if "Doubles" not in ((c.get("type") or {}).get("text") or ""):
+                    if mode not in ((c.get("type") or {}).get("text") or ""):
                         continue
                     competitors = c.get("competitors") or []
                     if len(competitors) >= 2:
@@ -328,24 +317,32 @@ class EspnTennisProvider(_EspnBaseProvider):
                             b.get("name"),
                             str(b.get("id", "")),
                         ) and not (r.get("winner") or b.get("winner")):
-                            doubles_alive = True
-                            break
+                            return True
                     elif len(competitors) == 1:
                         comp = competitors[0]
                         if bout_has_real_competitors(
                             comp.get("name"), str(comp.get("id", "")), None, None
                         ) and not comp.get("winner"):
-                            doubles_alive = True
-                            break
+                            return True
+                return False
 
-                if doubles_alive:
-                    result.append(
-                        EventSummary(
-                            id=ev_data["id"] + "_doubles",
-                            name=f"{name} Dobles",
-                            date=ev_data.get("date", ""),
-                        )
+            result: list[EventSummary] = []
+            if has_singles and _has_alive_bout("Singles"):
+                result.append(
+                    EventSummary(
+                        id=ev_data["id"],
+                        name=name,
+                        date=ev_data.get("date", ""),
                     )
+                )
+            if has_doubles and _has_alive_bout("Doubles"):
+                result.append(
+                    EventSummary(
+                        id=ev_data["id"] + "_doubles",
+                        name=f"{name} Dobles",
+                        date=ev_data.get("date", ""),
+                    )
+                )
             if not result:
                 result.append(
                     EventSummary(

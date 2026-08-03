@@ -127,12 +127,16 @@ class HomeViewModel(
                             mainRed = main?.red,
                             mainBlue = main?.blue,
                             boutCount = card?.bouts?.size,
-                            displayDate = if (sport == "tennis") main?.date else summary.date,
+                            displayDate = main?.date ?: summary.date,
                         )
                     }
                 }.awaitAll()
             }
-            _state.value = HomeState(isLoading = false, events = enriched)
+            // Re-ordenar por la fecha fresca del card (displayDate), no por
+            // la fecha cacheada del listing. Si ESPN actualiza la hora de un
+            // partido, el orden en Home lo refleja inmediatamente.
+            val sorted = enriched.sortedBy { parseDateEpoch(it.displayDate ?: it.event.date) }
+            _state.value = HomeState(isLoading = false, events = sorted)
         }
     }
 
