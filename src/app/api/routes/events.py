@@ -47,13 +47,13 @@ EVENTS_LIST_TTL_SECONDS = 300
 EVENTS_LIST_CACHE_KEY = "events:upcoming:{sport}:{league}"
 
 _providers: dict[tuple[str, str], Provider] = {}
-_resolver: AthleteResolver | None = None
+_resolvers: dict[str, AthleteResolver] = {}
 _team_resolvers: dict[str, TeamResolver] = {}
 _redis: Any = None
 
 
 def _get_provider(sport: str = "mma", league: str = "") -> Provider:
-    global _providers, _resolver, _team_resolvers, _redis
+    global _providers, _resolvers, _team_resolvers, _redis
     key = (sport, league)
     if key not in _providers:
         import redis.asyncio as aioredis
@@ -76,8 +76,8 @@ def _get_provider(sport: str = "mma", league: str = "") -> Provider:
 
         if _redis is None:
             _redis = aioredis.from_url(settings.redis_url, decode_responses=True)
-        if _resolver is None:
-            _resolver = AthleteResolver(_providers[key], redis_client=_redis)
+        if sport not in _resolvers:
+            _resolvers[sport] = AthleteResolver(_providers[key], redis_client=_redis)
         if sport == "nba" and "nba" not in _team_resolvers:
             _team_resolvers["nba"] = TeamResolver(
                 _providers[key],
@@ -92,7 +92,7 @@ def _get_provider(sport: str = "mma", league: str = "") -> Provider:
 
 
 async def close_events_resources() -> None:
-    global _providers, _resolver, _team_resolvers, _redis
+    global _providers, _resolvers, _team_resolvers, _redis
     for provider in _providers.values():
         try:
             await provider.aclose()
@@ -102,7 +102,7 @@ async def close_events_resources() -> None:
     if _redis is not None:
         await _redis.aclose()
         _redis = None
-    _resolver = None
+    _resolvers = {}
     _team_resolvers = {}
 
 
@@ -220,7 +220,7 @@ async def get_event_detail(
     segun el deporte (court+date para tenis, matchNumber+1 para MMA).
     """
     provider = _get_provider(sport, league)
-    resolver = _resolver or AthleteResolver(provider)
+    resolver = _resolvers.get(sport) or AthleteResolver(provider, redis_client=_redis)
     # Detectar sufijo _doubles para filtrar por modalidad (solo tenis).
     base_event_id = event_id
     doubles_only = False
@@ -266,14 +266,18 @@ async def get_event_detail(
         statuses = await asyncio.gather(*[_fetch_status(b) for b in event.bouts])
         in_or_post_bout_ids = {bid for bid, state in statuses if state in ("in", "post")}
 
-    # D49: tenis tiene nombres inline en competitor.name — no hace falta
-    # resolver atletas via el endpoint /athletes/{id} (costoso: 126 llamadas
-    # para 63 partidos, ~16s). Para MMA seguimos usando AthleteResolver.
     # D58: NBA usa TeamResolver (competitors llevan `team $ref`, no `athlete`).
     resolved: dict[str, Any] = {}
     resolved_teams: dict[str, Any] = {}
     if sport == "tennis":
-        pass  # tenis: nombres inline, no resolver.
+        athlete_ids = [
+            c.athlete.athlete_id
+            for b in event.bouts
+            for c in (b.red_corner, b.blue_corner)
+            if c and c.athlete and c.athlete.athlete_id
+        ]
+        if athlete_ids:
+            resolved = await resolver.resolve_many(athlete_ids)
     elif sport == "nba":
         team_ids = [
             c.team.team_id
@@ -306,9 +310,14 @@ async def get_event_detail(
     def _to_athlete_out(corner: ProviderCompetitor | None) -> BoutAthleteOut | None:
         if corner is None:
             return None
-        # D49 tenis: nombre inline directo.
+        # D49 tenis: nombre inline directo, headshot via athlete $ref.
         if corner.name:
-            return BoutAthleteOut(id=corner.id, name=corner.name)
+            headshot = None
+            if corner.athlete and corner.athlete.athlete_id:
+                found = resolved.get(corner.athlete.athlete_id)
+                if found:
+                    headshot = found.headshot_url
+            return BoutAthleteOut(id=corner.id, name=corner.name, headshot_url=headshot)
         # MMA: athlete $ref.
         if corner.athlete is not None:
             aid = corner.athlete.athlete_id
