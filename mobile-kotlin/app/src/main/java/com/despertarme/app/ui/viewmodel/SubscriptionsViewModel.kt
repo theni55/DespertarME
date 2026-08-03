@@ -45,6 +45,10 @@ class SubscriptionsViewModel(
 
     fun clearSnack() { _snack.value = null }
 
+    fun prepareForLoad() {
+        _state.value = _state.value.copy(isLoading = true, error = null)
+    }
+
     fun load() {
         _state.value = _state.value.copy(isLoading = true, error = null)
         viewModelScope.launch {

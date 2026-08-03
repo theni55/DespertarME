@@ -24,6 +24,7 @@ data class HomeEventUi(
     val mainRed: BoutAthleteOut? = null,
     val mainBlue: BoutAthleteOut? = null,
     val boutCount: Int? = null,
+    val displayDate: String? = null,
 )
 
 data class HomeState(
@@ -126,6 +127,7 @@ class HomeViewModel(
                             mainRed = main?.red,
                             mainBlue = main?.blue,
                             boutCount = card?.bouts?.size,
+                            displayDate = if (sport == "tennis") main?.date else summary.date,
                         )
                     }
                 }.awaitAll()

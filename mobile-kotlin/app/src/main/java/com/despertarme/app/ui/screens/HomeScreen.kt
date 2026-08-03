@@ -172,7 +172,7 @@ private fun HomeEventCard(
     ui: HomeEventUi,
     onClick: () -> Unit,
 ) {
-    val dateParts = eventDateParts(ui.event.date)
+    val dateParts = eventDateParts(ui.displayDate ?: ui.event.date)
     Card(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
         shape = RoundedCornerShape(18.dp),

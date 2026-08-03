@@ -144,7 +144,12 @@ private fun AppGraph(
                 TOP_LEVEL_DESTINATIONS.forEach { destination ->
                     NavigationBarItem(
                         selected = currentRoute == destination.route,
-                        onClick = { navController.navigateTopLevel(destination.route) },
+                        onClick = {
+                            if (destination.route == "subscriptions") {
+                                subsVm.prepareForLoad()
+                            }
+                            navController.navigateTopLevel(destination.route)
+                        },
                         icon = { Icon(destination.icon, contentDescription = destination.label) },
                         label = { Text(destination.label) },
                         colors = NavigationBarItemDefaults.colors(
