@@ -179,7 +179,10 @@ private fun AppGraph(
             }
             composable("events") {
                 EventListScreen(
-                    onSportClick = { sport -> navController.navigate("events/$sport") },
+                    onSportClick = { sport ->
+                        competitionsVm.prepareForLoad(sport)
+                        navController.navigate("events/$sport")
+                    },
                 )
             }
             composable("events/{sport}") { entry ->

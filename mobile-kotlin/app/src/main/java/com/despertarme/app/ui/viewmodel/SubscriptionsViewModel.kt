@@ -96,7 +96,7 @@ class SubscriptionsViewModel(
                     "tennis" -> "Partido #${sub.targetMatchNumber}"
                     "nba" -> if (sub.targetMatchNumber == 1) "Inicio" else "Cuarto #${sub.targetMatchNumber}"
                     "nfl" -> if (sub.targetMatchNumber == 1) "Inicio" else "Cuarto #${sub.targetMatchNumber}"
-                    "football" -> "Partido #${sub.targetMatchNumber}"
+                    "football" -> "Partido"
                     else -> "Combate #${sub.targetMatchNumber}"
                 }
             }

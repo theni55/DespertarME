@@ -35,6 +35,11 @@ class CompetitionsViewModel(
 
     private var loadJob: Job? = null
 
+    fun prepareForLoad(sport: String) {
+        loadJob?.cancel()
+        _state.value = CompetitionsState(isLoading = true)
+    }
+
     fun load(sport: String) {
         loadJob?.cancel()
         _state.value = CompetitionsState(isLoading = true)
