@@ -4,9 +4,36 @@
 
 ---
 
-## Última sesión
+## Última sesión (cont.)
 
-**Fecha:** 2026-08-03 · **Sesión 31 — NFL completa + fixes universales multi-sport (resolver por sport, headshots tenis, AsyncImage fallback, flash navegación, filtro visibilidad, iconos). Rama `feature/nfl`. Commits `2e4465a`, `295caec`, `4e727a3`, `474ca21`, `eee2bee`, `811eea1`.**
+**Fecha:** 2026-08-03 · **Sesión 31 (cont.) — Rediseño Alertas + fixes singles vacíos + displayDate universal. Rama `feature/alertas`. Commits `ad6d5f7`, `744f654`, `77698e7`.**
+
+**Hecho:**
+
+### Rediseño Mis Alertas (compacto)
+1. **Header**: "TUS ALERTAS" + contador "X combates pendientes" + divisor + ⚙️
+2. **Subscription cards**: compactas (~52dp alto, 10h/8v padding), borde del color del deporte, fila 1=combate 14sp bold, fila 2=evento + lead time + badge, botón `OutlinedButton` rojo sutil
+3. **Historial**: `AlertUi` con fightLabel enriquecido (cruce con suscripciones), fecha formateada `dd/MM HH:mm`, dot de color (verde=fired, rojo=cancelled)
+4. **Empty state**: icono 56dp, "Aún no tienes alertas", texto descriptivo
+5. `SubscriptionsViewModel` añade `AlertUi` data class, enriquece historial con fightLabel al cargar
+
+### Fixes
+6. **Fix singles vacíos (WTA Washington)**: `espn_tennis.py` `_fetch_summary` — nuevo helper `_has_alive_bout(mode)` compartido entre singles y doubles. Ahora singles también verifica visibilidad inline (competidores reales + sin winner). Si singles Y doubles están vacíos → no se crea entrada. Aplica misma regla que el fix de doubles de Sesión 30. D80.
+7. **Fix Alertas vacías**: `SubscriptionsViewModel.prepareForLoad()` + llamada desde `MainActivity.NavigationBarItem.onClick`. Mismo patrón D77/B2 — `restoreState=true` en `navigateTopLevel` restauraba state vacío y `LaunchedEffect(Unit)` no se disparaba. D82.
+8. **Fix displayDate universal**: `HomeEventUi.displayDate = main?.date ?: summary.date` para todos los deportes (antes solo tenis). Así la fecha mostrada en Home es la del próximo bout/partido, no la fecha del evento/torneo. D81.
+9. **Fix re-sort enriched**: la lista enriquecida se ordena por `displayDate` (fecha fresca del card) en vez de `event.date` (fecha cacheada del listing). Si ESPN actualiza la hora, el orden en Home lo refleja. D83.
+
+**Commits:** `ad6d5f7` feat rediseño Alertas · `744f654` fix prepareForLoad + displayDate · `77698e7` fix singles vacíos + displayDate universal + re-sort
+
+**Verificación:** pytest 179/179 ✅ · ruff ✅ · assembleDebug BUILD SUCCESSFUL ✅ · APK instalada emulador ✅
+
+**Pendiente:**
+1. Merge `feature/alertas` → `dev`.
+2. Pendientes de Sesión 31 original siguen: merge `dev` → `main`, APK en móvil físico, sonido `alarm.ogg`, Doze, Play Store, Railway 503 (ya corregido con shared httpx client).
+
+---
+
+## Última sesión
 
 **Hecho en esta sesión (máquina `pacor`):**
 

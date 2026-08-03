@@ -2,6 +2,34 @@
 
 > Registro cronológico de cada sesión de trabajo: qué se hizo y qué quedó pendiente.
 
+## Sesión 31 (cont.) — Rediseño Alertas + fixes singles vacíos + displayDate universal (2026-08-03)
+
+**Rama:** `feature/alertas` · **3 commits** (`ad6d5f7`, `744f654`, `77698e7`) · **Máquina:** `pacor` (Windows, toolchain Android completo)
+
+**Contexto:** continuación de Sesión 31. El owner reportó que Mis Alertas se veía "de desarrollo", que las suscripciones no aparecían al volver a la pestaña, que WTA Washington no devolvía partidos, y que las horas en Home no coincidían con las del detalle.
+
+**Hecho:**
+
+### Rediseño compacto Mis Alertas
+1. **Header**: "TUS ALERTAS" + "X combates pendientes" + divisor + ⚙️
+2. **Subscription cards**: compactas (10h/8v padding), borde color deporte, 2 filas: combate 14sp bold + evento/lead/badge 11sp, botón `OutlinedButton` rojo
+3. **Historial**: `AlertUi` con fightLabel enriquecido, fecha `dd/MM HH:mm`, dot de color por status
+4. **Empty state**: icono 56dp, textos descriptivos
+5. `SubscriptionsViewModel` añade `AlertUi` data class, enriquece historial con fightLabel cruzando con suscripciones
+
+### Fixes
+6. **Fix singles vacíos (WTA Washington)**: `espn_tennis.py` — `_has_alive_bout(mode)` compartido singles+doubles. Singles ahora también verifica visibilidad inline. WTA Washington tenía 39 singles y 15 doubles con `winner=true` pero status `in` → entrada vacía. D80.
+7. **Fix Alertas vacías**: `SubscriptionsViewModel.prepareForLoad()` + llamada desde `NavigationBarItem.onClick`. `restoreState=true` restauraba state vacío. D82.
+8. **Fix displayDate universal**: `HomeEventUi.displayDate = main?.date ?: summary.date` para todos los deportes. D81.
+9. **Fix re-sort enriched**: lista ordenada por `displayDate` (card fresco) en vez de `event.date` (listing cacheado). D83.
+
+**Decisiones:** D80-D83 registradas en `decisiones.md`.
+
+**Pendiente:**
+1. Merge `feature/alertas` → `dev`.
+2. Merge `dev` → `main`.
+3. APK en móvil físico, sonido `alarm.ogg`, Doze, Play Store.
+
 ## Sesión 31 — NFL completa + fixes universales multi-sport (backend + Android) (2026-08-03)
 
 **Rama:** `feature/nfl` · **6 commits** (`2e4465a`, `295caec`, `4e727a3`, `474ca21`, `eee2bee`, `811eea1`) · **Máquina:** `pacor` (Windows, toolchain Android completo)
