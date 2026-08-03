@@ -327,14 +327,14 @@ class EspnTennisProvider(_EspnBaseProvider):
                             str(r.get("id", "")),
                             b.get("name"),
                             str(b.get("id", "")),
-                        ):
+                        ) and not (r.get("winner") or b.get("winner")):
                             doubles_alive = True
                             break
                     elif len(competitors) == 1:
                         comp = competitors[0]
                         if bout_has_real_competitors(
                             comp.get("name"), str(comp.get("id", "")), None, None
-                        ):
+                        ) and not comp.get("winner"):
                             doubles_alive = True
                             break
 
