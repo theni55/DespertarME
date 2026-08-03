@@ -33,11 +33,13 @@ def _load(name: str) -> dict[str, Any]:
 def _reset_events_singletons():
     """Resetea los singletons module-level del router events entre tests."""
     events_route._providers = {}
-    events_route._resolver = None
+    events_route._resolvers = {}
+    events_route._team_resolvers = {}
     events_route._redis = None
     yield
     events_route._providers = {}
-    events_route._resolver = None
+    events_route._resolvers = {}
+    events_route._team_resolvers = {}
     events_route._redis = None
 
 
