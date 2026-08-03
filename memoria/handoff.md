@@ -6,7 +6,41 @@
 
 ## Última sesión
 
-**Fecha:** 2026-08-02 · **Sesión 30 — 16 bugfixes multi-sport (backend + Android): FCM token, spam loop, MMA in-progress, UI fixes, alarma fantasma, tenis dobles, logos fútbol. Rama `dev`. Commits `c97de5d`, `d38e226`, `10b5a15`, `40da8fc`, `bffb3fa`.**
+**Fecha:** 2026-08-03 · **Sesión 31 — NFL completa + fixes universales multi-sport (resolver por sport, headshots tenis, AsyncImage fallback, flash navegación, filtro visibilidad, iconos). Rama `feature/nfl`. Commits `2e4465a`, `295caec`, `4e727a3`, `474ca21`, `eee2bee`, `811eea1`.**
+
+**Hecho en esta sesión (máquina `pacor`):**
+
+### Fixes de backend
+1. **Fix resolver por sport — nombres MMA rotos**: `events.py` `_resolver` singleton → `_resolvers: dict[str, AthleteResolver]` por sport. Si tenis/NBA se consultaba primero, el resolver quedaba atado a un provider que no era MMA → `get_athlete()` pegaba al endpoint equivocado → nombres `null`. Ahora cada sport tiene su propio `AthleteResolver` con el provider correcto (mismo patrón que `_team_resolvers`). D74.
+2. **Headshots tenis**: los competitors de tenis SÍ tienen `athlete.$ref` (el campo opcional del modelo). Ahora `events.py` resuelve los athlete_ids de tenis vía `AthleteResolver` (con `sport="tennis"` para no usar el fallback CDN de MMA). `_to_athlete_out`: cuando `corner.name` está presente, también busca `headshot_url` en los resolved. `AthleteResolver` recibe `sport` param y en `_fetch_one` solo usa el CDN fallback para `sport="mma"`. D75.
+
+### Fixes de Android
+3. **AsyncImage error fallback**: las 3 pantallas con avatares (EventDetailScreen, HomeScreen, AlarmActivity) ahora usan `rememberAsyncImagePainter` + `AsyncImagePainter.State.Error`. Si la imagen da 404 → degrada al avatar de iniciales en vez de círculo vacío. D76.
+4. **Flash de datos viejos WTA↔ATP**: `EventDetailViewModel.prepareForNavigation(sport, league)` resetea el state a `isLoading=true` ANTES de navegar. Así cuando el composable lee `collectAsState()`, ve un spinner en vez del evento anterior. D77.
+
+### NFL multi-cuarto (D71-D73, mirror D56 NBA)
+5. **`EspnNflProvider`** (~260 líneas): ESPN Core API `/sports/football/leagues/nfl/` (ojo: ESPN usa "football" para NFL, la app registra `sport="nfl"`). Síntesis de 4 quarters (`{eventId}_q{N}`, clock=900s, remap order 0/1→1/2). `_derive_quarter_status` idéntico a NBA. `get_team` con year probing + TeamResolver.
+6. **Domain + config**: branches `"nfl"` en `estimated_duration_seconds`, `elapsed_seconds` (900s quarters), `previous_bout` (mn-1). Buffers `buffer_nfl_quarter_seconds=120`, `buffer_nfl_halftime_seconds=900`.
+7. **API + schemas**: `_get_provider` rama `"nfl"`, `_team_resolvers["nfl"]`, `validate_for_sport` permite lead=0 para NFL Q2-Q4, `_to_athlete_out` branch team. Poller: `_nfl_buffer_for` callback, TeamResolver para NFL.
+8. **Android** (8 archivos): `NflBlue=#013369`, fetch paralelo en Home, tile NFL en EventList, sección plana en Competitions, `NflGameCard` en EventDetail (mirror `NbaGameCard`), badge NFL en Subscriptions, lead=0 para Q2-Q4.
+9. **Tests**: 39 tests en `test_espn_nfl.py` (list, síntesis 4Q, remap corners, derivación status pre/in_q1..q4/post, circuit breaker, team resolver, domain, estimator buffers, schemas lead=0). 9 fixtures grabadas en vivo (event_list, event_401873271 Hall of Fame Game, team_1 ATL, team_22 ARI, 6 status JSONs).
+
+### Fix universal de visibilidad de bouts (D78)
+10. **`src/app/providers/_visibility.py`**: helpers `competitor_is_real(name, id)` y `bout_has_real_competitors(red_name, red_id, blue_name, blue_id)`. Reconoce placeholders "TBD"/"Bye"/"" + ids "0"/"2147483647". Reutilizado en `events.py` (detail — sustituye los 3 filtros dispersos TBD/None/Bye) y `espn_tennis.py` (`_fetch_summary` — verificación inline de dobles, 0 llamadas extra a ESPN, reemplaza el frágil check de la 1ª competición).
+11. **Iconos NBA/NFL** (D79): `SportsBasketball` para NBA, `SportsFootball` para NFL en `EventListScreen` (antes ambos usaban `SportsMma`).
+
+**Commits:** `2e4465a` fix resolver + headshots tenis · `295caec` fix AsyncImage fallback + prepareForNavigation · `4e727a3` fix flash datos viejos · `474ca21` feat NFL · `eee2bee` fix filtro visibilidad universal · `811eea1` fix iconos NBA/NFL
+
+**Verificación:** pytest 157/157 ✅ · ruff ✅ · black ✅ · mypy ✅ (solo error pre-existente config.py) · assembleDebug BUILD SUCCESSFUL ✅ · APK instalada emulador ✅
+
+**Pendiente:**
+1. **Apuntar Railway a `feature/nfl`** para probar NFL + fixes contra backend remoto.
+2. **Merge `feature/nfl` → `dev`** tras validación.
+3. Pendientes de Sesión 30 siguen vivos: instalar APK en móvil físico, sonido custom `alarm.ogg`, Doze, Play Store.
+
+---
+
+## Sesión 30 — 16 bugfixes multi-sport: backend (FCM, polling, tenis) + Android (UI, alarma, fútbol) (2026-08-02)
 
 **Hecho en esta sesión (máquina `pacor`):**
 

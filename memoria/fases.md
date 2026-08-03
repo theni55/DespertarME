@@ -567,6 +567,57 @@ Plan y decisión en `memoria/decisiones.md` D65. Modelo: 1 partido = 1 bout (MVP
 ### F7 — Smoke visual emulador (pendiente)
 
 - [ ] Abrir emulador + instalar APK
+
+---
+
+## Fase NFL — MVP multi-cuarto ✅ (completada en Sesión 31)
+
+Plan detallado en `memoria/handoff.md` Sesión 31. Decisiones D71-D73. Mirror D56 NBA.
+
+### NF1 — ESPN NFL Provider ✅
+
+- [x] `src/app/providers/espn_nfl.py` (266 líneas): `EspnNflProvider(_EspnBaseProvider)` — reutiliza circuit breaker + tenacity
+- [x] ESPN path `/sports/football/leagues/nfl/` interno, registrado como `sport="nfl"` (D73)
+- [x] Síntesis de 4 quarters: `bout_id="{eventId}_q{N}"`, `matchNumber=N`, `clock=900.0`
+- [x] Remapeo `order` 0/1 (home/away ESPN) → 1/2 (red/blue corner)
+- [x] `get_competition_status` deriva estado del cuarto N desde status global (period+state), cache 3s en memoria
+- [x] `get_team(team_id)` con year probing (current, current+1, current-1)
+- [x] `get_athlete`: `raise NotImplementedError` (NFL no usa athletes)
+
+### NF2 — Generalización del dominio + config ✅
+
+- [x] `domain/entities.py`: branches `"nfl"` en `estimated_duration_seconds` (900s), `elapsed_seconds` ((period-1)*900 + (900-clock)), `previous_bout` (mn-1)
+- [x] `config.py`: `espn_nfl_league="nfl"`, `buffer_nfl_quarter_seconds=120`, `buffer_nfl_halftime_seconds=900` (D72)
+
+### NF3 — DB + Schemas + API ✅
+
+- [x] Sin migración Alembic (columna `sport` ya es `String(20)` indexada)
+- [x] `api/schemas.py`: `validate_for_sport()` permite lead=0 para NFL Q2-Q4
+- [x] `api/routes/events.py`: branch `sport=="nfl"` en `_get_provider`, `_team_resolvers["nfl"]`, branch `"nfl"` en resolución de teams
+- [x] `api/routes/subscriptions.py`: sin cambios (usa `validate_for_sport`)
+- [x] `providers/__init__.py`: export `EspnNflProvider`
+
+### NF4 — Poller + Scheduler multi-sport ✅
+
+- [x] `scheduler.py`: `EspnNflProvider`, `_nfl_buffer_for(target)` callback (Q3=halftime 900s, otros=120s)
+- [x] `engine/poller.py`: fallback `team_resolver` para `sport=="nfl"`
+
+### NF5 — Tests + smoke ✅
+
+- [x] `tests/test_espn_nfl.py`: 39 tests (list, síntesis 4Q, remap corners, derivación status pre/in_q1..q4/post, circuit breaker, team resolver, domain, estimator buffers asimétricos, schemas lead=0)
+- [x] 9 fixtures grabadas en vivo: `tests/fixtures/espn_nfl/`
+- [x] **pytest 157/157** (118 preexistentes + 39 NFL), ruff/black/mypy limpios
+
+### NF6 — App Android ✅
+
+- [x] `Color.kt`: `NflBlue = Color(0xFF013369)`
+- [x] `HomeViewModel.kt`: 5º async fetch `listEvents("nfl","")` en paralelo
+- [x] `EventListScreen.kt`: tile NFL con icono `SportsFootball` (D79)
+- [x] `CompetitionsViewModel.kt` + `CompetitionsScreen.kt`: sección NFL plana (sin acordeón)
+- [x] `EventDetailScreen.kt`: `NflGameCard` (mirror `NbaGameCard`), cuartos "Inicio del partido"/"2º cuarto"/etc., lead=0 para Q2-Q4
+- [x] `SubscriptionsViewModel.kt` + `SubscriptionsScreen.kt`: badge "NFL" con NflBlue
+- [x] `DespertarMeFirebaseService.handleUpdate()`: branch `lead==0` ya universal (sin cambios)
+- [x] **assembleDebug BUILD SUCCESSFUL**, APK instalada en emulador
 - [ ] Navegar: Buscar → Fútbol → acordeón LaLiga → 2 partidos → EventDetail
 - [ ] Verificar: "Partido · 90 min", nombres de equipos con logos, botón Avisarme
 - [ ] Suscribir a un partido y verificar badge "Fútbol" en Mis Alertas

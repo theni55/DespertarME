@@ -2,6 +2,43 @@
 
 > Registro cronológico de cada sesión de trabajo: qué se hizo y qué quedó pendiente.
 
+## Sesión 31 — NFL completa + fixes universales multi-sport (backend + Android) (2026-08-03)
+
+**Rama:** `feature/nfl` · **6 commits** (`2e4465a`, `295caec`, `4e727a3`, `474ca21`, `eee2bee`, `811eea1`) · **Máquina:** `pacor` (Windows, toolchain Android completo)
+
+**Contexto:** sesión de trabajo continuado sobre `feature/nfl` (creada al inicio). El owner reportó que los nombres de peleadores MMA llegaban `null` y que los tenistas sin imagen mostraban círculo vacío. Se abordaron ambos bugs + se completó la feature NFL + filtro universal de visibilidad.
+
+**Hecho:**
+
+### Backend — fixes de bugs existentes
+1. **Fix resolver por sport — nombres MMA rotos**: `events.py` `_resolver` singleton → `_resolvers: dict[str, AthleteResolver]` por sport. Si otro deporte se consultaba primero, el resolver usaba el provider equivocado → nombres MMA `null`. D74.
+2. **Headshots tenis**: `events.py` ahora resuelve `athlete_ids` de tenis vía `AthleteResolver` (con `sport="tennis"`). `AthleteResolver` recibe `sport` param; si `sport != "mma"` y no hay `headshot` real → `headshot_url = None` (sin fallback CDN MMA). D75.
+
+### Android — fixes de bugs existentes
+3. **AsyncImage error fallback**: EventDetailScreen, HomeScreen y AlarmActivity usan `rememberAsyncImagePainter` + `AsyncImagePainter.State.Error`. Si la imagen falla → avatar de iniciales. D76.
+4. **Flash datos viejos WTA↔ATP**: `EventDetailViewModel.prepareForNavigation(sport, league)` pone `isLoading=true` antes de navegar. D77.
+
+### Backend — NFL multi-cuarto
+5. **`EspnNflProvider`** (266 líneas): ESPN `/sports/football/leagues/nfl/`, 4 quarters 900s, TeamResolver, status derivado por quarter. D71-D73.
+6. **Domain + config**: branches NFL en duración/elapsed/previous_bout, buffers 120s/900s.
+7. **API + schemas**: `_get_provider` rama NFL, TeamResolver NFL, `validate_for_sport` permite lead=0 Q2-Q4.
+8. **Poller + scheduler**: `_nfl_buffer_for`, TeamResolver NFL en poller.
+9. **Tests**: 39 tests + 9 fixtures grabadas en vivo. Verificación: **pytest 157/157**, ruff/black/mypy.
+
+### Android — NFL
+10. **8 archivos Kotlin**: Color (NflBlue), Home (fetch paralelo + card), EventList (tile), Competitions (sección plana), EventDetail (NflGameCard con quarter labels + lead=0 Q2-Q4), Subscriptions (badge).
+
+### Backend — filtro universal de visibilidad de bouts
+11. **`_visibility.py`**: helpers `competitor_is_real()` y `bout_has_real_competitors()` compartidos entre providers y API. Reconoce placeholders "TBD"/"Bye"/"" + ids "0"/"2147483647". Reemplaza filtros dispersos en `events.py` y el frágil check de dobles en `espn_tennis.py` (ahora inline, 0 llamadas ESPN). D78.
+12. **Iconos NBA/NFL**: `SportsBasketball` → NBA, `SportsFootball` → NFL. D79.
+
+**Decisiones:** D71-D79 registradas en `decisiones.md`.
+
+**Pendiente:**
+1. Apuntar Railway a `feature/nfl` para probar NFL + fixes contra backend remoto.
+2. Merge `feature/nfl` → `dev` tras validación.
+3. Pendientes de Sesión 30: APK en móvil físico, sonido `alarm.ogg`, Doze, Play Store.
+
 ## Sesión 30 — 16 bugfixes multi-sport: backend (FCM, polling, tenis) + Android (UI, alarma, fútbol) (2026-08-02)
 
 **Rama:** `dev` · **5 commits** (`c97de5d`, `d38e226`, `10b5a15`, `40da8fc`, `bffb3fa`) · **Máquina:** `pacor` (Windows, toolchain Android completo)
