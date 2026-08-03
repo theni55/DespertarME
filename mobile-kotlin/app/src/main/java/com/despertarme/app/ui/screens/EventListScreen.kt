@@ -16,6 +16,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.SportsBasketball
+import androidx.compose.material.icons.filled.SportsFootball
 import androidx.compose.material.icons.filled.SportsMma
 import androidx.compose.material.icons.filled.SportsSoccer
 import androidx.compose.material.icons.filled.SportsTennis
@@ -80,14 +82,14 @@ fun EventListScreen(
         )
         Spacer(modifier = Modifier.height(12.dp))
         SportCard(
-            icon = Icons.Filled.SportsMma,
+            icon = Icons.Filled.SportsBasketball,
             title = "NBA",
             subtitle = "National Basketball Association",
             stripColor = NbaBlue,
             onClick = { onSportClick("nba") },
         )
         SportCard(
-            icon = Icons.Filled.SportsMma,
+            icon = Icons.Filled.SportsFootball,
             title = "NFL",
             subtitle = "National Football League",
             stripColor = NflBlue,
