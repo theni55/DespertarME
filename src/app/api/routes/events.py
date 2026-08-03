@@ -29,6 +29,7 @@ from app.api.schemas import (
 )
 from app.db.session import get_session
 from app.domain.entities import Card
+from app.providers._visibility import bout_has_real_competitors
 from app.providers.athletes import AthleteResolver
 from app.providers.base import Provider
 from app.providers.espn_football import EspnFootballProvider
@@ -365,7 +366,16 @@ async def get_event_detail(
         red = b.red_corner
         blue = b.blue_corner
 
-        # Saltar combates ya acabados (winner=true) — MMA + Tenis.
+        # Universal: saltar bouts sin competidores reales (TBD/Bye/None).
+        if not bout_has_real_competitors(
+            red.name if red else None,
+            str(red.id) if red else None,
+            blue.name if blue else None,
+            str(blue.id) if blue else None,
+        ):
+            continue
+
+        # Saltar combates ya acabados (winner=true) — todos los deportes.
         if (red and red.winner) or (blue and blue.winner):
             continue
 
@@ -374,19 +384,13 @@ async def get_event_detail(
         if b.id in in_or_post_bout_ids:
             continue
 
-        # Tenis: saltar partidos cuyos jugadores aun no se conocen (TBD).
-        if sport == "tennis":
-            if red is None or blue is None:
+        # Tenis: filtrar por modalidad si se pidio solo doubles o singles.
+        if sport == "tennis" and (doubles_only or singles_only):
+            bout_type = (b.weight_class.text if b.weight_class else "") or ""
+            if doubles_only and "Doubles" not in bout_type:
                 continue
-            if (red.name or "").upper() == "TBD" or (blue.name or "").upper() == "TBD":
+            if singles_only and "Singles" not in bout_type:
                 continue
-            # Filtrar por modalidad si se pidio solo doubles o singles.
-            if doubles_only or singles_only:
-                bout_type = (b.weight_class.text if b.weight_class else "") or ""
-                if doubles_only and "Doubles" not in bout_type:
-                    continue
-                if singles_only and "Singles" not in bout_type:
-                    continue
 
         bouts_out.append(
             BoutOut(

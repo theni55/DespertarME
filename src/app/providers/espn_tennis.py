@@ -27,6 +27,7 @@ import httpx
 
 from app.config import settings
 from app.providers._base_provider import _EspnBaseProvider
+from app.providers._visibility import bout_has_real_competitors
 from app.providers.models import AthleteDetail, CompetitionStatus, Event, EventSummary
 
 logger = logging.getLogger(__name__)
@@ -309,27 +310,33 @@ class EspnTennisProvider(_EspnBaseProvider):
                     )
                 )
             if has_doubles:
-                # Antes de crear entrada de dobles, verificar que aun haya
-                # partidos de dobles sin acabar (1 sola llamada ESPN a la
-                # 1a competicion de dobles). Si ya estan todas en 'post',
-                # no crear la entrada para evitar pantalla vacia.
-                doubles_alive = True
-                try:
-                    for c in competitions:
-                        if "Doubles" in ((c.get("type") or {}).get("text") or ""):
-                            raw_ref = str(c.get("$ref", ""))
-                            cid = raw_ref.rstrip("?lang=en&region=us").split("/")[-1]
-                            if cid and not cid.startswith("http"):
-                                try:
-                                    async with sem:
-                                        st = await self.get_competition_status(eid, cid)
-                                    if st.type.state == "post":
-                                        doubles_alive = False
-                                except Exception:
-                                    pass
+                # Verificar que haya AL MENOS un partido de dobles con
+                # competidores reales (no TBD/Bye/placeholders). Datos
+                # inline en el JSON del evento — cero llamadas extra a
+                # ESPN (sustituye el get_competition_status del fix D61).
+                doubles_alive = False
+                for c in competitions:
+                    if "Doubles" not in ((c.get("type") or {}).get("text") or ""):
+                        continue
+                    competitors = c.get("competitors") or []
+                    if len(competitors) >= 2:
+                        r = competitors[0]
+                        b = competitors[1]
+                        if bout_has_real_competitors(
+                            r.get("name"),
+                            str(r.get("id", "")),
+                            b.get("name"),
+                            str(b.get("id", "")),
+                        ):
+                            doubles_alive = True
                             break
-                except Exception:
-                    pass
+                    elif len(competitors) == 1:
+                        comp = competitors[0]
+                        if bout_has_real_competitors(
+                            comp.get("name"), str(comp.get("id", "")), None, None
+                        ):
+                            doubles_alive = True
+                            break
 
                 if doubles_alive:
                     result.append(
