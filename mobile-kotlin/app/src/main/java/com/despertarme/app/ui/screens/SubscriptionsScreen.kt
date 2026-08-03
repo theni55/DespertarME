@@ -1,5 +1,6 @@
 package com.despertarme.app.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -26,6 +27,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -38,17 +40,18 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.despertarme.app.data.remote.AlertLogOut
-import com.despertarme.app.ui.theme.TennisClay
 import com.despertarme.app.ui.theme.BackgroundDark
 import com.despertarme.app.ui.theme.FootballGreen
 import com.despertarme.app.ui.theme.NbaBlue
 import com.despertarme.app.ui.theme.NflBlue
 import com.despertarme.app.ui.theme.SurfaceDark
+import com.despertarme.app.ui.theme.TennisClay
 import com.despertarme.app.ui.theme.TextSecondary
 import com.despertarme.app.ui.theme.UfcRed
+import com.despertarme.app.ui.viewmodel.AlertUi
 import com.despertarme.app.ui.viewmodel.SubscriptionUi
 import com.despertarme.app.ui.viewmodel.SubscriptionsState
 
@@ -82,31 +85,12 @@ fun SubscriptionsScreen(
             else -> LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                item {
-                    // D46: Ajustes sale de la bottom nav; se accede desde aquí.
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            text = "MIS ALERTAS",
-                            color = Color.White,
-                            fontSize = 20.sp,
-                            fontWeight = FontWeight.Black,
-                            letterSpacing = 1.sp,
-                            modifier = Modifier.weight(1f),
-                        )
-                        IconButton(onClick = onOpenSettings) {
-                            Icon(
-                                imageVector = Icons.Filled.Settings,
-                                contentDescription = "Ajustes",
-                                tint = TextSecondary,
-                            )
-                        }
-                    }
-                }
+                item { SubscriptionHeader(
+                    activeCount = state.subscriptions.count { it.sub.status == "active" },
+                    onOpenSettings = onOpenSettings,
+                ) }
                 if (state.subscriptions.isEmpty()) {
                     item { EmptyAlerts() }
                 } else {
@@ -114,25 +98,8 @@ fun SubscriptionsScreen(
                         SubscriptionCard(ui = ui, onCancel = { onCancel(ui.sub.id) })
                     }
                 }
-                item {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "HISTORIAL",
-                        color = TextSecondary,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.sp,
-                    )
-                }
-                if (state.alerts.isEmpty()) {
-                    item {
-                        Text(
-                            text = "Todavía no ha sonado ninguna alerta.",
-                            color = TextSecondary,
-                            fontSize = 13.sp,
-                        )
-                    }
-                } else {
+                if (state.alerts.isNotEmpty()) {
+                    item { HistorySectionHeader() }
                     items(state.alerts, key = { it.id }) { alert ->
                         AlertHistoryRow(alert = alert)
                     }
@@ -145,26 +112,86 @@ fun SubscriptionsScreen(
 }
 
 @Composable
+private fun SubscriptionHeader(activeCount: Int, onOpenSettings: () -> Unit) {
+    Column {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "TUS ALERTAS",
+                    color = Color.White,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Black,
+                    letterSpacing = 1.sp,
+                )
+                if (activeCount > 0) {
+                    Text(
+                        text = "$activeCount combates pendientes",
+                        color = TextSecondary,
+                        fontSize = 12.sp,
+                    )
+                }
+            }
+            IconButton(onClick = onOpenSettings) {
+                Icon(
+                    imageVector = Icons.Filled.Settings,
+                    contentDescription = "Ajustes",
+                    tint = TextSecondary,
+                )
+            }
+        }
+        Spacer(modifier = Modifier.height(6.dp))
+        Box(
+            modifier = Modifier.fillMaxWidth().height(1.dp)
+                .background(Color.White.copy(alpha = 0.08f)),
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+    }
+}
+
+@Composable
+private fun HistorySectionHeader() {
+    Column {
+        Spacer(modifier = Modifier.height(12.dp))
+        Box(
+            modifier = Modifier.fillMaxWidth().height(1.dp)
+                .background(Color.White.copy(alpha = 0.08f)),
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = "HISTORIAL",
+            color = TextSecondary,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 1.sp,
+        )
+    }
+}
+
+@Composable
 private fun EmptyAlerts() {
     Column(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 48.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Icon(
             imageVector = Icons.Filled.NotificationsNone,
             contentDescription = null,
             tint = TextSecondary,
-            modifier = Modifier.size(48.dp),
+            modifier = Modifier.size(56.dp),
         )
         Spacer(modifier = Modifier.height(12.dp))
         Text(
-            text = "No tienes alertas activas.",
+            text = "Aún no tienes alertas",
             color = Color.White,
             fontWeight = FontWeight.SemiBold,
+            fontSize = 16.sp,
         )
         Spacer(modifier = Modifier.height(4.dp))
         Text(
-            text = "Suscríbete a un combate desde Eventos.",
+            text = "Suscríbete a un combate desde Eventos",
             color = TextSecondary,
             fontSize = 13.sp,
         )
@@ -172,75 +199,87 @@ private fun EmptyAlerts() {
 }
 
 @Composable
-private fun SubscriptionCard(
-    ui: SubscriptionUi,
-    onCancel: () -> Unit,
-) {
+private fun SubscriptionCard(ui: SubscriptionUi, onCancel: () -> Unit) {
+    val sportColor = when (ui.sport) {
+        "tennis" -> TennisClay
+        "nba" -> NbaBlue
+        "nfl" -> NflBlue
+        "football" -> FootballGreen
+        else -> UfcRed
+    }
+    val badgeText = when (ui.sport) {
+        "tennis" -> "Tenis"
+        "nba" -> "NBA"
+        "nfl" -> "NFL"
+        "football" -> "Futbol"
+        else -> "MMA"
+    }
+    val isActive = ui.sub.status == "active"
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(10.dp),
         colors = CardDefaults.cardColors(containerColor = SurfaceDark),
+        border = BorderStroke(1.dp, sportColor.copy(alpha = 0.3f)),
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(
-                modifier = Modifier
-                    .size(10.dp)
-                    .clip(CircleShape)
-                    .background(if (ui.sub.status == "active") Color(0xFF4ADE80) else TextSecondary),
+                modifier = Modifier.size(8.dp).clip(CircleShape)
+                    .background(if (isActive) Color(0xFF4ADE80) else TextSecondary),
             )
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.width(8.dp))
             Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = ui.fightLabel,
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = ui.fightLabel,
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 15.sp,
-                        maxLines = 1,
-                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    val (badgeText, badgeColor) = when (ui.sport) {
-                        "tennis" -> "Tenis" to TennisClay
-                        "nba" -> "NBA" to NbaBlue
-                        "nfl" -> "NFL" to NflBlue
-                        "football" -> "Futbol" to FootballGreen
-                        else -> "MMA" to UfcRed
+                    if (ui.eventName != null) {
+                        Text(
+                            text = ui.eventName.take(40),
+                            color = TextSecondary,
+                            fontSize = 11.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false),
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
                     }
                     Text(
+                        text = "${ui.sub.leadMinutes} min",
+                        color = sportColor,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium,
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
                         text = badgeText,
-                        color = badgeColor,
-                        fontSize = 10.sp,
+                        color = sportColor,
+                        fontSize = 9.sp,
                         fontWeight = FontWeight.Bold,
                         letterSpacing = 0.5.sp,
-                        maxLines = 1,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(badgeColor.copy(alpha = 0.15f))
-                            .padding(horizontal = 6.dp, vertical = 2.dp),
+                        modifier = Modifier.clip(RoundedCornerShape(3.dp))
+                            .background(sportColor.copy(alpha = 0.15f))
+                            .padding(horizontal = 4.dp, vertical = 1.dp),
                     )
                 }
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = buildString {
-                        if (ui.eventName != null) {
-                            append(ui.eventName)
-                            append(" · ")
-                        }
-                        append("${ui.sub.leadMinutes} min antes")
-                    },
-                    color = TextSecondary,
-                    fontSize = 12.sp,
-                )
             }
-            IconButton(onClick = onCancel) {
+            OutlinedButton(
+                onClick = onCancel,
+                modifier = Modifier.padding(start = 4.dp),
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+            ) {
                 Icon(
                     imageVector = Icons.Filled.Delete,
-                    contentDescription = "Cancelar alerta",
-                    tint = UfcRed,
+                    contentDescription = "Cancelar",
+                    tint = Color(0xFFCF6679).copy(alpha = 0.8f),
+                    modifier = Modifier.size(16.dp),
                 )
             }
         }
@@ -248,32 +287,37 @@ private fun SubscriptionCard(
 }
 
 @Composable
-private fun AlertHistoryRow(alert: AlertLogOut) {
+private fun AlertHistoryRow(alert: AlertUi) {
+    val statusColor = when (alert.status) {
+        "fired" -> Color(0xFF4ADE80)
+        "cancelled" -> Color(0xFFCF6679)
+        else -> TextSecondary
+    }
     Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 3.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = "Alerta ${alert.status}",
-                color = Color.White,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Medium,
-            )
-            Text(
-                text = formatFiredAt(alert.firedAt),
-                color = TextSecondary,
-                fontSize = 12.sp,
-            )
-        }
+        Box(
+            modifier = Modifier.size(6.dp).clip(CircleShape).background(statusColor),
+        )
+        Spacer(modifier = Modifier.width(8.dp))
         Text(
-            text = "x${alert.attempts}",
+            text = alert.fightLabel,
+            color = Color.White.copy(alpha = 0.85f),
+            fontSize = 13.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+        Spacer(modifier = Modifier.width(6.dp))
+        Text(
+            text = formatFiredAt(alert.firedAt),
             color = TextSecondary,
-            fontSize = 12.sp,
+            fontSize = 11.sp,
         )
     }
 }
 
 private fun formatFiredAt(iso: String): String = runCatching {
-    if (iso.length >= 16) "${iso.substring(0, 10)} ${iso.substring(11, 16)}" else iso
+    if (iso.length >= 16) "${iso.substring(8, 10)}/${iso.substring(5, 7)} ${iso.substring(11, 16)}" else iso
 }.getOrDefault(iso)

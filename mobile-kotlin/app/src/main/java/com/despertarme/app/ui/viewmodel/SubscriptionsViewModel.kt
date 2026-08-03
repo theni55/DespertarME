@@ -6,7 +6,6 @@ import androidx.lifecycle.viewModelScope
 import com.despertarme.app.DespertarMeApp
 import com.despertarme.app.alarm.AlarmScheduler
 import com.despertarme.app.data.AppContainer
-import com.despertarme.app.data.remote.AlertLogOut
 import com.despertarme.app.data.remote.BoutSubscriptionOut
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -20,10 +19,17 @@ data class SubscriptionUi(
     val sport: String = "mma",
 )
 
+data class AlertUi(
+    val id: String,
+    val fightLabel: String,
+    val firedAt: String,
+    val status: String,
+)
+
 data class SubscriptionsState(
     val isLoading: Boolean = true,
     val subscriptions: List<SubscriptionUi> = emptyList(),
-    val alerts: List<AlertLogOut> = emptyList(),
+    val alerts: List<AlertUi> = emptyList(),
     val error: String? = null,
 )
 
@@ -44,12 +50,28 @@ class SubscriptionsViewModel(
         viewModelScope.launch {
             try {
                 val subs = container.api.listSubscriptions()
-                val alerts = runCatching { container.api.listAlerts() }.getOrDefault(emptyList())
+                val alertsRaw = runCatching { container.api.listAlerts() }.getOrDefault(emptyList())
                 val uiSubs = resolveLabels(subs)
+                // Enriquecer historial con fightLabel cruzando con suscripciones.
+                val subByBout = subs.associateBy { it.boutId }
+                val enrichedAlerts = alertsRaw.map { alert ->
+                    val sub = subByBout[alert.boutId]
+                    val fightLabel = if (sub != null) {
+                        uiSubs.firstOrNull { it.sub.id == sub.id }?.fightLabel ?: "Combate"
+                    } else {
+                        "Combate"
+                    }
+                    AlertUi(
+                        id = alert.id,
+                        fightLabel = fightLabel,
+                        firedAt = alert.firedAt,
+                        status = alert.status,
+                    )
+                }
                 _state.value = SubscriptionsState(
                     isLoading = false,
                     subscriptions = uiSubs,
-                    alerts = alerts,
+                    alerts = enrichedAlerts,
                 )
             } catch (t: Exception) {
                 _state.value = _state.value.copy(
