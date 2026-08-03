@@ -138,26 +138,18 @@ class HomeViewModel(
         const val MAX_FEATURED = 6
 
         /**
-         * Selecciona los eventos de Home garantizando 1 destacado por deporte
-         * (MMA, Tenis [atp+wta], NBA) + relleno cronológico deduplicado.
-         * Orden final por fecha (sin bloques por deporte).
+         * Selecciona los eventos de Home garantizando 1 destacado por
+         * combinacion sport+league (ATP y WTA son cards separadas).
+         * Orden final por fecha, sin relleno.
          */
         internal fun selectHomeEvents(
             all: List<Triple<EventSummaryOut, String, String>>,
         ): List<Triple<EventSummaryOut, String, String>> {
             val sorted = all.sortedBy { (event, _, _) -> parseDateEpoch(event.date) }
-            // 1 destacado (el más próximo) por deporte; atp+wta cuentan como "tennis".
-            val featured = sorted
-                .groupBy { (_, sport, _) -> sport }
+            // 1 destacado (el mas proximo) por sport+league.
+            return sorted
+                .groupBy { (_, sport, league) -> "$sport-$league" }
                 .mapNotNull { (_, events) -> events.firstOrNull() }
-            val featuredKeys = featured
-                .map { (event, sport, league) -> "$sport-$league-${event.id}" }
-                .toSet()
-            // Relleno por cronología pura, deduplicando los ya destacados.
-            val fill = sorted
-                .filter { (event, sport, league) -> "$sport-$league-${event.id}" !in featuredKeys }
-                .take((MAX_FEATURED - featured.size).coerceAtLeast(0))
-            return (featured + fill)
                 .sortedBy { (event, _, _) -> parseDateEpoch(event.date) }
         }
 

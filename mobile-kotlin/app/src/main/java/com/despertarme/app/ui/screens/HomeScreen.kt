@@ -60,6 +60,7 @@ import com.despertarme.app.ui.theme.NflBlue
 import com.despertarme.app.ui.theme.PosterSurface
 import com.despertarme.app.ui.theme.RedCorner
 import com.despertarme.app.ui.theme.SurfaceDark
+import com.despertarme.app.ui.theme.TennisClay
 import com.despertarme.app.ui.theme.TextSecondary
 import com.despertarme.app.ui.theme.UfcRed
 import com.despertarme.app.ui.theme.UfcRedDeep
@@ -210,12 +211,14 @@ private fun HomeEventCard(
                 .fillMaxWidth()
                 .background(Brush.horizontalGradient(listOf(
                     when (ui.sport) {
+                        "tennis" -> TennisClay
                         "nba" -> NbaBlue
                         "nfl" -> NflBlue
                         "football" -> FootballGreen
                         else -> UfcRed
                     },
                     when (ui.sport) {
+                        "tennis" -> TennisClay.copy(alpha = 0.7f)
                         "nba" -> NbaBlue.copy(alpha = 0.7f)
                         "nfl" -> NflBlue.copy(alpha = 0.7f)
                         "football" -> FootballGreen.copy(alpha = 0.7f)

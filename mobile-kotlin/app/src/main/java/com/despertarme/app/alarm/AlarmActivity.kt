@@ -127,7 +127,7 @@ private fun AlarmFullScreen(
     onOpenApp: () -> Unit,
 ) {
     val accentColor = when (sport) {
-        "tennis" -> com.despertarme.app.ui.theme.AccentGreen
+        "tennis" -> com.despertarme.app.ui.theme.TennisClay
         "nba" -> NbaBlue
         "football" -> FootballGreen
         else -> UfcRed

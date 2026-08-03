@@ -62,7 +62,7 @@ import java.time.OffsetDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
-import com.despertarme.app.ui.theme.AccentGreen
+import com.despertarme.app.ui.theme.TennisClay
 import com.despertarme.app.ui.theme.BackgroundDark
 import com.despertarme.app.ui.theme.BlueCorner
 import com.despertarme.app.ui.theme.FootballGreen
@@ -632,12 +632,12 @@ private fun NflGameCard(
 private fun TennisCourtBadge(court: String) {
     Text(
         text = court.uppercase(),
-        color = AccentGreen,
+        color = TennisClay,
         fontSize = 11.sp,
         fontWeight = FontWeight.SemiBold,
         modifier = Modifier
             .clip(RoundedCornerShape(4.dp))
-            .background(AccentGreen.copy(alpha = 0.18f))
+            .background(TennisClay.copy(alpha = 0.18f))
             .padding(horizontal = 6.dp, vertical = 2.dp),
     )
 }

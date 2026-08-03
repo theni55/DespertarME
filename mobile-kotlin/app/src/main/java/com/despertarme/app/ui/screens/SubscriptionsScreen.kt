@@ -41,7 +41,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.despertarme.app.data.remote.AlertLogOut
-import com.despertarme.app.ui.theme.AccentGreen
+import com.despertarme.app.ui.theme.TennisClay
 import com.despertarme.app.ui.theme.BackgroundDark
 import com.despertarme.app.ui.theme.FootballGreen
 import com.despertarme.app.ui.theme.NbaBlue
@@ -204,7 +204,7 @@ private fun SubscriptionCard(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     val (badgeText, badgeColor) = when (ui.sport) {
-                        "tennis" -> "Tenis" to AccentGreen
+                        "tennis" -> "Tenis" to TennisClay
                         "nba" -> "NBA" to NbaBlue
                         "nfl" -> "NFL" to NflBlue
                         "football" -> "Futbol" to FootballGreen

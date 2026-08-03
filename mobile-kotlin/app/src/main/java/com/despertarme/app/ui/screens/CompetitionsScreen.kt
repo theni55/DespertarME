@@ -44,7 +44,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.despertarme.app.ui.theme.AccentGreen
+import com.despertarme.app.ui.theme.TennisClay
 import com.despertarme.app.ui.theme.BackgroundDark
 import com.despertarme.app.ui.theme.FootballGreen
 import com.despertarme.app.ui.theme.NbaBlue
@@ -305,7 +305,7 @@ private fun CompetitionCard(
         else -> null
     }
     val stripColor = when (comp.sport) {
-        "tennis" -> AccentGreen
+        "tennis" -> TennisClay
         "nba" -> NbaBlue
         "nfl" -> NflBlue
         "football" -> FootballGreen
