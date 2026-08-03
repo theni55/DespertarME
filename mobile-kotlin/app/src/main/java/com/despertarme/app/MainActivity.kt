@@ -171,8 +171,7 @@ private fun AppGraph(
                     state = state,
                     onEventClick = { eventId, sport, league ->
                         detailVm.clearSnack()
-                        detailVm.currentSport = sport
-                        detailVm.currentLeague = league
+                        detailVm.prepareForNavigation(sport, league)
                         navController.navigate("event/$eventId")
                     },
                     onRetry = { homeVm.load(force = true) },
@@ -192,8 +191,7 @@ private fun AppGraph(
                     sport = sport,
                     onEventClick = { eventId, s, league ->
                         detailVm.clearSnack()
-                        detailVm.currentSport = s
-                        detailVm.currentLeague = league
+                        detailVm.prepareForNavigation(s, league)
                         navController.navigate("event/$eventId")
                     },
                     onBack = { navController.popBackStack() },

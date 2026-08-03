@@ -31,6 +31,12 @@ class EventDetailViewModel(
 
     fun clearSnack() { _snack.value = null }
 
+    fun prepareForNavigation(sport: String, league: String) {
+        currentSport = sport
+        currentLeague = league
+        _state.value = EventDetailState(isLoading = true)
+    }
+
     fun load(eventId: String) {
         if (eventId == "none") {
             resolveNextEvent()
