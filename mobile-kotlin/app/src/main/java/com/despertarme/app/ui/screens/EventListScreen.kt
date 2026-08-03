@@ -88,6 +88,7 @@ fun EventListScreen(
             stripColor = NbaBlue,
             onClick = { onSportClick("nba") },
         )
+        Spacer(modifier = Modifier.height(12.dp))
         SportCard(
             icon = Icons.Filled.SportsFootball,
             title = "NFL",
