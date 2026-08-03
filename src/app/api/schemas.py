@@ -86,9 +86,9 @@ class BoutSubscriptionCreate(BaseModel):
 
     def validate_for_sport(self) -> None:
         """Validacion contextual post-load: la UI debe llamar esta antes de
-        persistir. Permite lead=0 solo para NBA Q2-Q4.
+        persistir. Permite lead=0 solo para NBA/NFL Q2-Q4.
         """
-        if self.sport == "nba" and self.target_match_number in (2, 3, 4):
+        if self.sport in ("nba", "nfl") and self.target_match_number in (2, 3, 4):
             if self.lead_minutes != NBA_QUARTER_LEAD_MINUTES:
                 raise ValueError(f"NBA Q2-Q4 requiere lead_minutes={NBA_QUARTER_LEAD_MINUTES}")
         else:

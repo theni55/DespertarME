@@ -61,12 +61,17 @@ class HomeViewModel(
                             .getOrDefault(emptyList())
                             .map { Triple(it, "tennis", "wta") }
                     }
-                    val nbaDeferred = async {
-                        runCatching { container.api.listEvents("nba", "") }
-                            .getOrDefault(emptyList())
-                            .map { Triple(it, "nba", "") }
-                    }
-                    val footballDeferred = async {
+        val nbaDeferred = async {
+            runCatching { container.api.listEvents("nba", "") }
+                .getOrDefault(emptyList())
+                .map { Triple(it, "nba", "") }
+        }
+        val nflDeferred = async {
+            runCatching { container.api.listEvents("nfl", "") }
+                .getOrDefault(emptyList())
+                .map { Triple(it, "nfl", "") }
+        }
+        val footballDeferred = async {
                         val footballLeagues = listOf(
                             "esp.1", "eng.1", "ita.1", "ger.1", "fra.1",
                             "uefa.champions", "uefa.europa",
@@ -86,7 +91,7 @@ class HomeViewModel(
                     }
                     selectHomeEvents(
                         mmaDeferred.await() + atpDeferred.await() + wtaDeferred.await() +
-                            nbaDeferred.await() + footballDeferred.await(),
+                            nbaDeferred.await() + nflDeferred.await() + footballDeferred.await(),
                     )
                 }
             } catch (t: Exception) {

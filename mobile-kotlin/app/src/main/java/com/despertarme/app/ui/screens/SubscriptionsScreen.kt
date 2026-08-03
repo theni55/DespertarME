@@ -45,6 +45,7 @@ import com.despertarme.app.ui.theme.AccentGreen
 import com.despertarme.app.ui.theme.BackgroundDark
 import com.despertarme.app.ui.theme.FootballGreen
 import com.despertarme.app.ui.theme.NbaBlue
+import com.despertarme.app.ui.theme.NflBlue
 import com.despertarme.app.ui.theme.SurfaceDark
 import com.despertarme.app.ui.theme.TextSecondary
 import com.despertarme.app.ui.theme.UfcRed
@@ -205,6 +206,7 @@ private fun SubscriptionCard(
                     val (badgeText, badgeColor) = when (ui.sport) {
                         "tennis" -> "Tenis" to AccentGreen
                         "nba" -> "NBA" to NbaBlue
+                        "nfl" -> "NFL" to NflBlue
                         "football" -> "Futbol" to FootballGreen
                         else -> "MMA" to UfcRed
                     }

@@ -388,6 +388,8 @@ class Poller:
         team_resolver = self._team_resolvers.get(sport) or self._team_resolvers.get(league or "")
         if team_resolver is None and sport == "nba":
             team_resolver = self._team_resolvers.get("nba")
+        if team_resolver is None and sport == "nfl":
+            team_resolver = self._team_resolvers.get("nfl")
 
         event = await provider.get_event_card(event_id)
 

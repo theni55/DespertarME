@@ -32,6 +32,7 @@ from app.providers.athletes import AthleteResolver
 from app.providers.base import Provider
 from app.providers.espn_football import EspnFootballProvider
 from app.providers.espn_nba import EspnNbaProvider
+from app.providers.espn_nfl import EspnNflProvider
 from app.providers.espn_tennis import EspnTennisProvider
 from app.providers.espn_ufc import EspnUfcProvider
 from app.providers.teams import TeamResolver
@@ -49,6 +50,16 @@ def _nba_buffer_for(target: Bout) -> timedelta | None:
     if target.match_number == 3:
         return timedelta(seconds=settings.buffer_nba_halftime_seconds)
     return timedelta(seconds=settings.buffer_nba_quarter_seconds)
+
+
+def _nfl_buffer_for(target: Bout) -> timedelta | None:
+    """D72: buffer asimetrico NFL. Q3 (target.match_number==3) requiere Q2->Q3
+    halftime (~15 min). El resto Q2/Q4 usa comercial corto (2 min)."""
+    if target.sport != "nfl":
+        return None
+    if target.match_number == 3:
+        return timedelta(seconds=settings.buffer_nfl_halftime_seconds)
+    return timedelta(seconds=settings.buffer_nfl_quarter_seconds)
 
 
 def _football_buffer_for(target: Bout) -> timedelta | None:
@@ -76,6 +87,7 @@ class PollerScheduler:
         self._providers[("tennis", "atp")] = EspnTennisProvider(league="atp")
         self._providers[("tennis", "wta")] = EspnTennisProvider(league="wta")
         self._providers[("nba", "")] = EspnNbaProvider(league=settings.espn_nba_league)
+        self._providers[("nfl", "")] = EspnNflProvider(league=settings.espn_nfl_league)
         for league in settings.football_leagues:
             self._providers[("football", league)] = EspnFootballProvider(league=league)
         if settings.app_env == "development":
@@ -92,6 +104,10 @@ class PollerScheduler:
             self._providers[("nba", "")],
             redis_client=redis_client,
         )
+        team_resolvers["nfl"] = TeamResolver(
+            self._providers[("nfl", "")],
+            redis_client=redis_client,
+        )
         for league in settings.football_leagues:
             team_resolvers[league] = TeamResolver(
                 self._providers[("football", league)],
@@ -102,6 +118,9 @@ class PollerScheduler:
             nba_result = _nba_buffer_for(target)
             if nba_result is not None:
                 return nba_result
+            nfl_result = _nfl_buffer_for(target)
+            if nfl_result is not None:
+                return nfl_result
             return _football_buffer_for(target)
 
         estimator = EstimatorEngine(

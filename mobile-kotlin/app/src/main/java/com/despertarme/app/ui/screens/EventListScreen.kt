@@ -35,6 +35,7 @@ import com.despertarme.app.ui.theme.AccentGreen
 import com.despertarme.app.ui.theme.BackgroundDark
 import com.despertarme.app.ui.theme.FootballGreen
 import com.despertarme.app.ui.theme.NbaBlue
+import com.despertarme.app.ui.theme.NflBlue
 import com.despertarme.app.ui.theme.SurfaceDark
 import com.despertarme.app.ui.theme.TextSecondary
 import com.despertarme.app.ui.theme.UfcRed
@@ -84,6 +85,13 @@ fun EventListScreen(
             subtitle = "National Basketball Association",
             stripColor = NbaBlue,
             onClick = { onSportClick("nba") },
+        )
+        SportCard(
+            icon = Icons.Filled.SportsMma,
+            title = "NFL",
+            subtitle = "National Football League",
+            stripColor = NflBlue,
+            onClick = { onSportClick("nfl") },
         )
         Spacer(modifier = Modifier.height(12.dp))
         SportCard(

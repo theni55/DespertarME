@@ -33,6 +33,7 @@ from app.providers.athletes import AthleteResolver
 from app.providers.base import Provider
 from app.providers.espn_football import EspnFootballProvider
 from app.providers.espn_nba import EspnNbaProvider
+from app.providers.espn_nfl import EspnNflProvider
 from app.providers.espn_tennis import _TOURNAMENT_DISPLAY_NAMES, EspnTennisProvider
 from app.providers.espn_ufc import EspnUfcProvider
 from app.providers.models import Bout as ProviderBout
@@ -66,6 +67,8 @@ def _get_provider(sport: str = "mma", league: str = "") -> Provider:
             _providers[key] = EspnTennisProvider(league=league or settings.espn_tennis_league)
         elif sport == "nba":
             _providers[key] = EspnNbaProvider(league=league or settings.espn_nba_league)
+        elif sport == "nfl":
+            _providers[key] = EspnNflProvider(league=league or settings.espn_nfl_league)
         elif sport == "football":
             _providers[key] = EspnFootballProvider(league=league or settings.espn_football_league)
         else:
@@ -80,6 +83,11 @@ def _get_provider(sport: str = "mma", league: str = "") -> Provider:
             _resolvers[sport] = AthleteResolver(_providers[key], redis_client=_redis, sport=sport)
         if sport == "nba" and "nba" not in _team_resolvers:
             _team_resolvers["nba"] = TeamResolver(
+                _providers[key],
+                redis_client=_redis,
+            )
+        if sport == "nfl" and "nfl" not in _team_resolvers:
+            _team_resolvers["nfl"] = TeamResolver(
                 _providers[key],
                 redis_client=_redis,
             )
@@ -288,6 +296,16 @@ async def get_event_detail(
         nba_tr = _team_resolvers.get("nba")
         if nba_tr is not None and team_ids:
             resolved_teams = await nba_tr.resolve_many(team_ids)
+    elif sport == "nfl":
+        team_ids = [
+            c.team.team_id
+            for b in event.bouts
+            for c in (b.red_corner, b.blue_corner)
+            if c and c.team and c.team.team_id
+        ]
+        nfl_tr = _team_resolvers.get("nfl")
+        if nfl_tr is not None and team_ids:
+            resolved_teams = await nfl_tr.resolve_many(team_ids)
     elif sport == "football":
         team_ids = [
             c.team.team_id

@@ -54,10 +54,14 @@ class CompetitionsViewModel(
                         atp.map { CompetitionUi(it, "tennis", "atp") } +
                             wta.map { CompetitionUi(it, "tennis", "wta") }
                     }
-                    "nba" -> {
-                        val events = container.api.listEvents("nba", "")
-                        events.map { CompetitionUi(it, "nba", "") }
-                    }
+                "nba" -> {
+                    val events = container.api.listEvents("nba", "")
+                    events.map { CompetitionUi(it, "nba", "") }
+                }
+                "nfl" -> {
+                    val events = container.api.listEvents("nfl", "")
+                    events.map { CompetitionUi(it, "nfl", "") }
+                }
                     "football" -> {
                         val leagues = listOf(
                             "esp.1", "eng.1", "ita.1", "ger.1", "fra.1",

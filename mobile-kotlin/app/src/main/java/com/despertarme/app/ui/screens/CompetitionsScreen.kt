@@ -48,6 +48,7 @@ import com.despertarme.app.ui.theme.AccentGreen
 import com.despertarme.app.ui.theme.BackgroundDark
 import com.despertarme.app.ui.theme.FootballGreen
 import com.despertarme.app.ui.theme.NbaBlue
+import com.despertarme.app.ui.theme.NflBlue
 import com.despertarme.app.ui.theme.SurfaceDark
 import com.despertarme.app.ui.theme.TextSecondary
 import com.despertarme.app.ui.theme.UfcRed
@@ -65,6 +66,7 @@ fun CompetitionsScreen(
         val sportLabel = when (sport) {
             "tennis" -> "Tenis"
             "nba" -> "NBA"
+            "nfl" -> "NFL"
             "football" -> "Futbol"
             else -> "MMA"
         }
@@ -112,6 +114,7 @@ fun CompetitionsScreen(
                     val wtaList = state.tournaments.filter { it.league == "wta" }
                     val mmaList = state.tournaments.filter { it.sport == "mma" }
                     val nbaList = state.tournaments.filter { it.sport == "nba" }
+                    val nflList = state.tournaments.filter { it.sport == "nfl" }
                     val footballLeagues = listOf(
                         "esp.1", "eng.1", "ita.1", "ger.1", "fra.1",
                         "uefa.champions", "uefa.europa",
@@ -186,6 +189,16 @@ fun CompetitionsScreen(
                         }
                         if (nbaList.isNotEmpty()) {
                             items(nbaList, key = { "nba-${it.event.id}" }) { comp ->
+                                CompetitionCard(
+                                    comp = comp,
+                                    onClick = {
+                                        onEventClick(comp.event.id, comp.sport, comp.league)
+                                    },
+                                )
+                            }
+                        }
+                        if (nflList.isNotEmpty()) {
+                            items(nflList, key = { "nfl-${it.event.id}" }) { comp ->
                                 CompetitionCard(
                                     comp = comp,
                                     onClick = {
@@ -294,6 +307,7 @@ private fun CompetitionCard(
     val stripColor = when (comp.sport) {
         "tennis" -> AccentGreen
         "nba" -> NbaBlue
+        "nfl" -> NflBlue
         "football" -> FootballGreen
         else -> UfcRed
     }

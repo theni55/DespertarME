@@ -62,10 +62,7 @@ class Bout:
         if self.sport == "tennis":
             avg_set_seconds = 2700.0
             return self.periods * avg_set_seconds
-        if self.sport == "nba":
-            # Bout = un cuarto. `periods` sintetico es siempre 1; `round_seconds`
-            # es 720 (12:00 reglamentario). El descanso inter-cuarto se anade
-            # aparte en el estimator (D57 `buffer_for`), no en la duracion.
+        if self.sport == "nba" or self.sport == "nfl":
             return self.periods * self.round_seconds
         if self.sport == "football":
             # Bout = un partido completo (2 tiempos de 45 min).
@@ -107,10 +104,10 @@ class Card:
             if not same_court:
                 return None
             return max(same_court, key=lambda b: b.date)
-        # NBA: prev temporal es mn-1 (mn asciende con el tiempo).
+        # NBA/NFL: prev temporal es mn-1 (mn asciende con el tiempo).
         # Football (MVP): 1 bout/partido -> sin previo.
         # MMA: mn+1 (mn desciende con el tiempo).
-        if self.sport == "nba":
+        if self.sport == "nba" or self.sport == "nfl":
             return self.bout_by_match_number(target.match_number - 1)
         if self.sport == "football":
             return None
@@ -153,8 +150,10 @@ class BoutStatus:
             return max(0, self.period - 1) * avg_set_seconds
         if self.sport == "nba":
             # Period 1-indexed; clock = segundos restantes del cuarto actual.
-            # Si el tout es la Q2 (period=2) y clock=300, elapsed = 720 + 420.
+            # Si el bout es la Q2 (period=2) y clock=300, elapsed = 720 + 420.
             return max(0.0, (self.period - 1) * 720.0 + (720.0 - self.clock))
+        if self.sport == "nfl":
+            return max(0.0, (self.period - 1) * 900.0 + (900.0 - self.clock))
         if self.sport == "football":
             # Period 1-indexed (1=1st half, 2=2nd half); clock = segundos
             # transcurridos del tiempo actual (count-up desde 0 del half).

@@ -56,6 +56,7 @@ import com.despertarme.app.ui.theme.BlueCorner
 import com.despertarme.app.ui.theme.ErrorRed
 import com.despertarme.app.ui.theme.FootballGreen
 import com.despertarme.app.ui.theme.NbaBlue
+import com.despertarme.app.ui.theme.NflBlue
 import com.despertarme.app.ui.theme.PosterSurface
 import com.despertarme.app.ui.theme.RedCorner
 import com.despertarme.app.ui.theme.SurfaceDark
@@ -184,6 +185,7 @@ private fun HomeEventCard(
                 else -> "Tenis" to "Tenis"
             }
             "nba" -> "NBA" to "NBA"
+    "nfl" -> "NFL" to "NFL"
             "football" -> when (ui.league) {
                 "esp.1" -> "LaLiga" to "Futbol"
                 "eng.1" -> "Premier" to "Futbol"
@@ -199,6 +201,7 @@ private fun HomeEventCard(
         val boutCountLabel = when (ui.sport) {
             "tennis" -> "partidos"
             "nba" -> "cuartos"
+            "nfl" -> "cuartos"
             "football" -> "partidos"
             else -> "combates"
         }
@@ -208,11 +211,13 @@ private fun HomeEventCard(
                 .background(Brush.horizontalGradient(listOf(
                     when (ui.sport) {
                         "nba" -> NbaBlue
+                        "nfl" -> NflBlue
                         "football" -> FootballGreen
                         else -> UfcRed
                     },
                     when (ui.sport) {
                         "nba" -> NbaBlue.copy(alpha = 0.7f)
+                        "nfl" -> NflBlue.copy(alpha = 0.7f)
                         "football" -> FootballGreen.copy(alpha = 0.7f)
                         else -> UfcRedDeep
                     }
@@ -324,7 +329,7 @@ private fun HomeEventCard(
             val blue = ui.mainBlue?.name
             if (red != null || blue != null) {
                 Spacer(modifier = Modifier.height(3.dp))
-                val mainLabel = if (ui.sport == "tennis" || ui.sport == "nba" || ui.sport == "football") "Proximo" else "Main event"
+                val mainLabel = if (ui.sport == "tennis" || ui.sport == "nba" || ui.sport == "nfl" || ui.sport == "football") "Proximo" else "Main event"
                 Text(
                     text = "$mainLabel: ${red ?: "TBD"} vs ${blue ?: "TBD"}",
                     color = TextSecondary,
