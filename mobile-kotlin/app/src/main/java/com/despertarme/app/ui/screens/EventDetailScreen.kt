@@ -1,6 +1,7 @@
 package com.despertarme.app.ui.screens
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -53,6 +54,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import coil.compose.AsyncImagePainter
+import coil.compose.rememberAsyncImagePainter
 import coil.request.ImageRequest
 import com.despertarme.app.data.remote.BoutOut
 import java.time.OffsetDateTime
@@ -516,35 +519,25 @@ private fun AthleteColumn(name: String?, headshotUrl: String?, cornerColor: Colo
         ) {
             val display = headshotUrl
             if (display != null) {
-                AsyncImage(
+                val painter = rememberAsyncImagePainter(
                     model = ImageRequest.Builder(LocalContext.current)
                         .data(display)
                         .crossfade(true)
                         .build(),
-                    contentDescription = name,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize(),
                 )
-            } else {
-                // ESPN no resuelve headshot para todos los atletas (debutantes,
-                // prelims). Mostrem avatar amb les inicials sobre el color de la
-                // cantonada — mateix patro que el placeholder SVG de la web (S5).
-                val initials = initialsOf(name)
-                if (initials != null) {
-                    Text(
-                        text = initials,
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 20.sp,
-                    )
+                if (painter.state is AsyncImagePainter.State.Error) {
+                    // Imagen rota o 404: degradar al avatar de iniciales.
+                    AthleteAvatar(name, cornerColor)
                 } else {
-                    Icon(
-                        imageVector = Icons.Filled.Person,
-                        contentDescription = null,
-                        tint = Color.White.copy(alpha = 0.7f),
-                        modifier = Modifier.size(36.dp),
+                    Image(
+                        painter = painter,
+                        contentDescription = name,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize(),
                     )
                 }
+            } else {
+                AthleteAvatar(name, cornerColor)
             }
         }
         Spacer(modifier = Modifier.height(6.dp))
@@ -555,6 +548,26 @@ private fun AthleteColumn(name: String?, headshotUrl: String?, cornerColor: Colo
             fontWeight = FontWeight.Medium,
             textAlign = TextAlign.Center,
             maxLines = 2,
+        )
+    }
+}
+
+@Composable
+private fun AthleteAvatar(name: String?, cornerColor: Color) {
+    val initials = initialsOf(name)
+    if (initials != null) {
+        Text(
+            text = initials,
+            color = Color.White,
+            fontWeight = FontWeight.Bold,
+            fontSize = 20.sp,
+        )
+    } else {
+        Icon(
+            imageVector = Icons.Filled.Person,
+            contentDescription = null,
+            tint = Color.White.copy(alpha = 0.7f),
+            modifier = Modifier.size(36.dp),
         )
     }
 }

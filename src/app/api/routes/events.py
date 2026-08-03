@@ -77,7 +77,7 @@ def _get_provider(sport: str = "mma", league: str = "") -> Provider:
         if _redis is None:
             _redis = aioredis.from_url(settings.redis_url, decode_responses=True)
         if sport not in _resolvers:
-            _resolvers[sport] = AthleteResolver(_providers[key], redis_client=_redis)
+            _resolvers[sport] = AthleteResolver(_providers[key], redis_client=_redis, sport=sport)
         if sport == "nba" and "nba" not in _team_resolvers:
             _team_resolvers["nba"] = TeamResolver(
                 _providers[key],
@@ -220,7 +220,7 @@ async def get_event_detail(
     segun el deporte (court+date para tenis, matchNumber+1 para MMA).
     """
     provider = _get_provider(sport, league)
-    resolver = _resolvers.get(sport) or AthleteResolver(provider, redis_client=_redis)
+    resolver = _resolvers.get(sport) or AthleteResolver(provider, redis_client=_redis, sport=sport)
     # Detectar sufijo _doubles para filtrar por modalidad (solo tenis).
     base_event_id = event_id
     doubles_only = False

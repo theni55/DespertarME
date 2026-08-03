@@ -1,5 +1,6 @@
 package com.despertarme.app.ui.screens
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -46,6 +47,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import coil.compose.AsyncImagePainter
+import coil.compose.rememberAsyncImagePainter
 import coil.request.ImageRequest
 import com.despertarme.app.data.remote.BoutAthleteOut
 import com.despertarme.app.ui.theme.BackgroundDark
@@ -355,33 +358,43 @@ private fun HomeEventCard(
 private fun FighterFigure(athlete: BoutAthleteOut?, cornerColor: Color) {
     val url = athlete?.headshotUrl
     if (url != null) {
-        AsyncImage(
+        val painter = rememberAsyncImagePainter(
             model = ImageRequest.Builder(LocalContext.current)
                 .data(url)
                 .crossfade(true)
                 .build(),
-            contentDescription = athlete.name,
-            contentScale = ContentScale.Fit,
-            modifier = Modifier.fillMaxHeight().padding(top = 12.dp),
         )
-    } else {
-        // Sin headshot (TBD, debutante o carga en curso): avatar de iniciales
-        // sobre el color de la esquina — mismo patrón que EventDetail.
-        Box(
-            modifier = Modifier
-                .padding(bottom = 40.dp)
-                .size(72.dp)
-                .clip(CircleShape)
-                .background(cornerColor.copy(alpha = 0.35f)),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = figureInitials(athlete?.name),
-                color = Color.White,
-                fontWeight = FontWeight.Bold,
-                fontSize = 18.sp,
+        if (painter.state is AsyncImagePainter.State.Error) {
+            FigureAvatar(athlete?.name, cornerColor)
+        } else {
+            Image(
+                painter = painter,
+                contentDescription = athlete?.name,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.fillMaxHeight().padding(top = 12.dp),
             )
         }
+    } else {
+        FigureAvatar(athlete?.name, cornerColor)
+    }
+}
+
+@Composable
+private fun FigureAvatar(name: String?, cornerColor: Color) {
+    Box(
+        modifier = Modifier
+            .padding(bottom = 40.dp)
+            .size(72.dp)
+            .clip(CircleShape)
+            .background(cornerColor.copy(alpha = 0.35f)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = figureInitials(name),
+            color = Color.White,
+            fontWeight = FontWeight.Bold,
+            fontSize = 18.sp,
+        )
     }
 }
 

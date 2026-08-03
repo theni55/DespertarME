@@ -47,6 +47,7 @@ class AthleteResolver(CacheResolver[ResolvedAthlete]):
         ttl_seconds: int | None = None,
         clock: Callable[[], float] | None = None,
         memory_cache: dict[str, tuple[float, ResolvedAthlete]] | None = None,
+        sport: str = "mma",
     ) -> None:
         super().__init__(
             redis_client=redis_client,
@@ -55,6 +56,7 @@ class AthleteResolver(CacheResolver[ResolvedAthlete]):
             memory_cache=memory_cache,
         )
         self._provider = provider
+        self._sport = sport
 
     @property
     def _prefix(self) -> str:
@@ -62,10 +64,13 @@ class AthleteResolver(CacheResolver[ResolvedAthlete]):
 
     async def _fetch_one(self, athlete_id: str) -> ResolvedAthlete:
         detail = await self._provider.get_athlete(athlete_id)
+        headshot_url = detail.headshot_url
+        if self._sport != "mma" and detail.headshot is None:
+            headshot_url = None
         return ResolvedAthlete(
             id=athlete_id,
             name=detail.display_name or None,
-            headshot_url=detail.headshot_url,
+            headshot_url=headshot_url,
         )
 
     def _empty(self, entity_id: str) -> ResolvedAthlete:

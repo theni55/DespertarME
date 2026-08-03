@@ -6,6 +6,7 @@ import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -39,6 +40,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import coil.compose.AsyncImagePainter
+import coil.compose.rememberAsyncImagePainter
 import coil.request.ImageRequest
 import com.despertarme.app.ui.theme.BackgroundDark
 import com.despertarme.app.ui.theme.BlueCorner
@@ -217,32 +220,25 @@ private fun AthleteColumn(name: String, headshotUrl: String?, cornerColor: Color
             contentAlignment = Alignment.Center,
         ) {
             if (headshotUrl != null) {
-                AsyncImage(
+                val painter = rememberAsyncImagePainter(
                     model = ImageRequest.Builder(LocalContext.current)
                         .data(headshotUrl)
                         .crossfade(true)
                         .build(),
-                    contentDescription = name,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize(),
                 )
-            } else {
-                val initials = initialsOf(name)
-                if (initials != null) {
-                    Text(
-                        text = initials,
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 20.sp,
-                    )
+                if (painter.state is AsyncImagePainter.State.Error) {
+                    // Imagen rota o 404: degradar al avatar de iniciales.
+                    AlarmAvatar(name, "")
                 } else {
-                    Icon(
-                        imageVector = Icons.Filled.Person,
-                        contentDescription = null,
-                        tint = Color.White.copy(alpha = 0.7f),
-                        modifier = Modifier.size(32.dp),
+                    Image(
+                        painter = painter,
+                        contentDescription = name,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize(),
                     )
                 }
+            } else {
+                AlarmAvatar(name, "")
             }
         }
         Spacer(modifier = Modifier.height(6.dp))
@@ -253,6 +249,26 @@ private fun AthleteColumn(name: String, headshotUrl: String?, cornerColor: Color
             fontWeight = FontWeight.Medium,
             textAlign = TextAlign.Center,
             maxLines = 2,
+        )
+    }
+}
+
+@Composable
+private fun AlarmAvatar(name: String, extra: String) {
+    val initials = initialsOf(name)
+    if (initials != null) {
+        Text(
+            text = initials,
+            color = Color.White,
+            fontWeight = FontWeight.Bold,
+            fontSize = 20.sp,
+        )
+    } else {
+        Icon(
+            imageVector = Icons.Filled.Person,
+            contentDescription = null,
+            tint = Color.White.copy(alpha = 0.7f),
+            modifier = Modifier.size(32.dp),
         )
     }
 }
