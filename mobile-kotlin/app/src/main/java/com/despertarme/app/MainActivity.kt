@@ -1,7 +1,15 @@
 package com.despertarme.app
 
+import android.Manifest
+import android.app.AlarmManager
+import android.app.AlertDialog
+import android.app.NotificationManager
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -62,16 +70,16 @@ import kotlinx.coroutines.withContext
 class MainActivity : ComponentActivity() {
 
     private lateinit var container: AppContainer
+    private var permissionStep = 0
+    private var waitingForSettingsReturn = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        // Usar el AppContainer singleton del Application (lo comparten receivers/services).
         val app = application as DespertarMeApp
         container = app.container
 
-        // Registrar el device best-effort antes de que la UI rinda.
         runCatching {
             kotlinx.coroutines.runBlocking { withContext(Dispatchers.IO) { container.ensureRegistered() } }
         }
@@ -86,6 +94,112 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (waitingForSettingsReturn) {
+            waitingForSettingsReturn = false
+            advancePermissionChain()
+        } else if (permissionStep == 0) {
+            advancePermissionChain()
+        }
+    }
+
+    private fun advancePermissionChain() {
+        if (!hasNotificationsPermission()) {
+            showPermissionDialog(
+                title = "Notificaciones",
+                message = "DespertarME necesita enviarte notificaciones para avisarte cuando empiece tu combate.",
+            ) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    requestPermissions(
+                        arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+                        REQUEST_NOTIFICATIONS,
+                    )
+                }
+            }
+            return
+        }
+        permissionStep = 1
+
+        if (Build.VERSION.SDK_INT >= 34 && !canUseFullScreenIntent()) {
+            showPermissionDialog(
+                title = "Pantalla de bloqueo",
+                message = "DespertarME necesita mostrarse sobre la pantalla de bloqueo para que puedas detener la alarma sin desbloquear el movil.",
+            ) {
+                val intent = Intent(
+                    Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT,
+                    Uri.parse("package:$packageName"),
+                )
+                startActivity(intent)
+                waitingForSettingsReturn = true
+            }
+            return
+        }
+        permissionStep = 2
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !canScheduleExactAlarms()) {
+            showPermissionDialog(
+                title = "Alarmas exactas",
+                message = "DespertarME necesita alarmas exactas para que suene en el momento justo, sin retrasos del sistema.",
+            ) {
+                val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
+                    data = Uri.parse("package:$packageName")
+                }
+                startActivity(intent)
+                waitingForSettingsReturn = true
+            }
+            return
+        }
+        permissionStep = 3
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<String>,
+        grantResults: IntArray,
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == REQUEST_NOTIFICATIONS) {
+            advancePermissionChain()
+        }
+    }
+
+    private fun showPermissionDialog(title: String, message: String, onAccept: () -> Unit) {
+        AlertDialog.Builder(this)
+            .setTitle(title)
+            .setMessage(message)
+            .setPositiveButton("Activar") { _, _ -> onAccept() }
+            .setNegativeButton("Ahora no", null)
+            .setCancelable(false)
+            .show()
+    }
+
+    private fun hasNotificationsPermission(): Boolean =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) ==
+                PackageManager.PERMISSION_GRANTED
+        } else {
+            true
+        }
+
+    private fun canUseFullScreenIntent(): Boolean =
+        if (Build.VERSION.SDK_INT >= 34) {
+            (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).canUseFullScreenIntent()
+        } else {
+            true
+        }
+
+    private fun canScheduleExactAlarms(): Boolean =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            (getSystemService(ALARM_SERVICE) as AlarmManager).canScheduleExactAlarms()
+        } else {
+            true
+        }
+
+    companion object {
+        private const val REQUEST_NOTIFICATIONS = 1001
     }
 
     private fun startTestAlarm() {

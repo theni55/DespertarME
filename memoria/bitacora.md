@@ -2,6 +2,40 @@
 
 > Registro cronológico de cada sesión de trabajo: qué se hizo y qué quedó pendiente.
 
+## Sesión 32 — Fixes alarma + AdSlots + Onboarding permisos (2026-08-04)
+
+**Ramas:** `fix/alarma`, `feature/anuncios`, `feature/permisos` (todas mergeadas a `dev`) · **Máquina:** `pacor` (Windows, toolchain Android completo)
+
+**Contexto:** el owner reportó bugs recurrentes de alarma en móvil físico: la pantalla de DETENER no aparecía sobre el lockscreen y segundas alarmas no sonaban. También pidió slots para anuncios entre combates y onboarding automático de permisos.
+
+**Hecho:**
+
+### Fixes de alarma (rama `fix/alarma`, 7 archivos, commit `6a9ee1f`)
+1. **Fix FSI lockscreen**: `SettingsScreen.kt` chequeo `canUseFullScreenIntent()` + botón CONFIGURAR que abre `Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT`
+2. **Fix fired sync**: `AlarmReceiver.kt` cambia `CoroutineScope(Dispatchers.IO).launch` fire-and-forget a `runBlocking(Dispatchers.IO)` para garantizar escritura síncrona de `fired=true`
+3. **Fix BootReceiver**: añade filtro `triggerAtMillis > now && !fired` antes de reprogramar alarmas tras reinicio (regresión de D64 que no estaba en código)
+4. **Fix centinela FCM**: `DespertarMeFirebaseService.kt` reconstruye `PendingAlarm` desde los datos del payload FCM si no existe en DataStore (reinstalación, limpieza de datos). Nuevo helper `scheduleFromAlarm()`
+5. **Fix AlarmActivity**: elimina bloque `isAlarmServiceRunning()` + `startForegroundService` redundante que usaba API deprecated `ActivityManager.getRunningServices()`
+6. **Backend**: `AlertPayload` añade campos `lead_minutes: int | None` y `sport: str | None`; `to_data()` los incluye en el dict FCM; `poller.py` los rellena desde `sub.lead_minutes` y `sport`
+
+### Feature anuncios (rama `feature/anuncios`, 3 commits)
+7. **AdSlot composable**: Card 160dp alto, `SurfaceDark`, `RoundedCornerShape(12.dp)`, texto "BILLETES" centrado. Insertado cada 4 combates en MMA/Tenis/Fútbol vía `itemsIndexed`, y cada 4 partidos agrupados en NBA/NFL
+8. Espaciado: `Spacer(12.dp)` entre el combate y el slot de anuncio, mismo `verticalArrangement.spacedBy(12.dp)` del LazyColumn
+
+### Feature permisos (rama `feature/permisos`, commit `d14a55a`)
+9. **Onboarding automático en `MainActivity`**: `AlertDialog` secuencial con explicación para cada permiso:
+   - "Notificaciones" → `requestPermissions(POST_NOTIFICATIONS)` → pop-up nativo
+   - "Pantalla de bloqueo" → `Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT` → 1 toggle
+   - "Alarmas exactas" → `Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM` → 1 toggle
+10. Flujo: al volver de Settings, `onResume` detecta `waitingForSettingsReturn = true` y avanza al siguiente permiso. Si todos están concedidos, no muestra diálogos
+
+### Infraestructura
+11. Limpieza de 5 ramas remotas obsoletas: `feature/alertas`, `feature/anuncios`, `fix/alarma`, `feature/fase-0-espn-providers`, `feat/landing-polish-audit`
+
+**Decisiones:** D84 (onboarding permisos al primer arranque) + D85 (AdSlots cada 4 combates)
+
+**Verificación:** pytest 179/179 ✅ · ruff ✅ · assembleDebug BUILD SUCCESSFUL ✅ · sin FATAL en emulador ✅ · Railway desplegado con fixes backend ✅
+
 ## Sesión 31 (cont.) — Rediseño Alertas + fixes singles vacíos + displayDate universal (2026-08-03)
 
 **Rama:** `feature/alertas` · **3 commits** (`ad6d5f7`, `744f654`, `77698e7`) · **Máquina:** `pacor` (Windows, toolchain Android completo)
