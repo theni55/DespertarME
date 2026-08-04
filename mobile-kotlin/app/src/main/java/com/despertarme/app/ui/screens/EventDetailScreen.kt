@@ -161,6 +161,7 @@ fun EventDetailScreen(
                                 onSubscribe = onSubscribe,
                             )
                             if ((index + 1) % 4 == 0 && index < games.lastIndex) {
+                                Spacer(modifier = Modifier.height(12.dp))
                                 AdSlot()
                             }
                         }
@@ -176,6 +177,7 @@ fun EventDetailScreen(
                                 onSubscribe = onSubscribe,
                             )
                             if ((index + 1) % 4 == 0 && index < games.lastIndex) {
+                                Spacer(modifier = Modifier.height(12.dp))
                                 AdSlot()
                             }
                         }
@@ -190,6 +192,7 @@ fun EventDetailScreen(
                                 onSubscribe = { lead -> onSubscribe(bout, lead) },
                             )
                             if ((index + 1) % 4 == 0 && index < bouts.lastIndex) {
+                                Spacer(modifier = Modifier.height(12.dp))
                                 AdSlot()
                             }
                         }
@@ -770,7 +773,7 @@ private fun formatBoutTime(iso: String): String = runCatching {
 @Composable
 private fun AdSlot() {
     Card(
-        modifier = Modifier.fillMaxWidth().height(100.dp),
+        modifier = Modifier.fillMaxWidth().height(160.dp),
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = SurfaceDark),
     ) {
