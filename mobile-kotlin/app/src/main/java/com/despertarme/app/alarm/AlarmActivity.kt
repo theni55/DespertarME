@@ -1,6 +1,5 @@
 package com.despertarme.app.alarm
 
-import android.app.ActivityManager
 import android.content.Intent
 import android.os.Bundle
 import android.view.WindowManager
@@ -63,13 +62,6 @@ class AlarmActivity : ComponentActivity() {
                 WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON,
         )
 
-        if (!isAlarmServiceRunning()) {
-            val serviceIntent = Intent(this, AlarmService::class.java).apply {
-                action = AlarmService.ACTION_START
-            }
-            startForegroundService(serviceIntent)
-        }
-
         val fighterRed = intent.getStringExtra("fighter_red") ?: "TBD"
         val fighterBlue = intent.getStringExtra("fighter_blue") ?: "TBD"
         val leadMinutes = intent.getIntExtra("lead_minutes", 15)
@@ -107,13 +99,7 @@ class AlarmActivity : ComponentActivity() {
         }
     }
 
-    private fun isAlarmServiceRunning(): Boolean {
-        val manager = getSystemService(ACTIVITY_SERVICE) as ActivityManager
-        return manager.getRunningServices(Int.MAX_VALUE)
-            .any { it.service.className == AlarmService::class.java.name }
-    }
 }
-
 @Composable
 private fun AlarmFullScreen(
     fighterRed: String,

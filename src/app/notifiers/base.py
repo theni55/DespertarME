@@ -40,6 +40,8 @@ class AlertPayload:
     estimated_start_at: str | None = None
     minutes_until_start: int | None = None
     weight_class: str | None = None
+    lead_minutes: int | None = None
+    sport: str | None = None
 
     def to_data(self) -> dict[str, str]:
         """Construye el dict data-only para FCM (todos los valores como str)."""
@@ -58,6 +60,10 @@ class AlertPayload:
             data["minutes_until_start"] = str(self.minutes_until_start)
         if self.weight_class is not None:
             data["weight_class"] = self.weight_class
+        if self.lead_minutes is not None:
+            data["lead_minutes"] = str(self.lead_minutes)
+        if self.sport is not None:
+            data["sport"] = self.sport
         return data
 
 

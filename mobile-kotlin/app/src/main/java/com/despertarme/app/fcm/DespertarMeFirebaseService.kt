@@ -13,6 +13,7 @@ import com.despertarme.app.R
 import com.despertarme.app.alarm.AlarmActivity
 import com.despertarme.app.alarm.AlarmScheduler
 import com.despertarme.app.alarm.AlarmService
+import com.despertarme.app.alarm.PendingAlarm
 import com.despertarme.app.alarm.PendingAlarmStorage
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
@@ -77,11 +78,39 @@ class DespertarMeFirebaseService : FirebaseMessagingService() {
         val boutId = data["bout_id"] ?: return
         val estimatedStartRaw = data["estimated_start_at"] ?: return
         val estimatedStartMs = estimatedStartRaw.toLongOrNull() ?: return
+        val eventId = data["event_id"] ?: ""
+        val fighters = data["fighters"] ?: "TBD vs TBD"
+        val eventName = data["event_name"] ?: ""
+        val leadMinutesRaw = data["lead_minutes"]
+        val leadMinutes = leadMinutesRaw?.toIntOrNull() ?: 15
+        val sport = data["sport"] ?: "mma"
+
+        val parts = fighters.split(" vs ", limit = 2)
+        val fighterRed = parts.getOrNull(0)?.trim() ?: "TBD"
+        val fighterBlue = parts.getOrNull(1)?.trim() ?: "TBD"
 
         val app = application as DespertarMeApp
         CoroutineScope(Dispatchers.IO).launch {
-            val existing = PendingAlarmStorage.get(app, boutId) ?: run {
-                Log.w(TAG, "Update ignorado — no hay PendingAlarm para bout=$boutId")
+            val existing = PendingAlarmStorage.get(app, boutId)
+            if (existing == null) {
+                // El PendingAlarm no existe en DataStore: posible reinstalacion,
+                // limpieza de datos, o cambio de dispositivo. Reconstruir desde
+                // el payload FCM para no perder la alarma (antes se ignoraba).
+                val reconstructed = PendingAlarm(
+                    boutId = boutId,
+                    eventId = eventId,
+                    triggerAtMillis = 0L,
+                    leadMinutes = leadMinutes,
+                    fighterRed = fighterRed,
+                    fighterBlue = fighterBlue,
+                    eventName = eventName,
+                    boutMatchNumber = 0,
+                    fired = false,
+                    sport = sport,
+                )
+                PendingAlarmStorage.put(app, reconstructed)
+                Log.i(TAG, "PendingAlarm reconstruido desde payload FCM para bout=$boutId")
+                scheduleFromAlarm(app, reconstructed, estimatedStartMs)
                 return@launch
             }
 
@@ -98,27 +127,29 @@ class DespertarMeFirebaseService : FirebaseMessagingService() {
                 return@launch
             }
 
-            val now = System.currentTimeMillis()
-            val trigger: Long = if (existing.leadMinutes == 0) {
-                // D56 NBA Q2-Q4 "Cuando empieza": alarma 1 min antes del
-                // tip-off real. El est viaja como epoch millis desde el backend.
-                maxOf(now + 60_000L, estimatedStartMs - 60_000L)
-            } else if (existing.leadMinutes >= 30) {
-                // lead>=30: suena al recibir primer push + cushion 1 min
-                // ("cuando empieza el combate previo" tras cushion).
-                now + 60_000L
-            } else {
-                // lead<30: trigger = est-lead + cushion. Si el cálculo sale
-                // pasado, cushion floor de 1 min (max(now+1min, ...)).
-                maxOf(now + 60_000L, estimatedStartMs - existing.leadMinutes * 60_000L + 60_000L)
-            }
-
-            AlarmScheduler.schedule(app, existing.copy(triggerAtMillis = trigger))
-            Log.i(
-                TAG,
-                "Alarma programada: bout=$boutId trigger=$trigger (sonará en ${(trigger - now) / 1000}s)",
-            )
+            scheduleFromAlarm(app, existing, estimatedStartMs)
         }
+    }
+
+    private suspend fun scheduleFromAlarm(
+        app: DespertarMeApp,
+        alarm: PendingAlarm,
+        estimatedStartMs: Long,
+    ) {
+        val now = System.currentTimeMillis()
+        val trigger: Long = if (alarm.leadMinutes == 0) {
+            maxOf(now + 60_000L, estimatedStartMs - 60_000L)
+        } else if (alarm.leadMinutes >= 30) {
+            now + 60_000L
+        } else {
+            maxOf(now + 60_000L, estimatedStartMs - alarm.leadMinutes * 60_000L + 60_000L)
+        }
+
+        AlarmScheduler.schedule(app, alarm.copy(triggerAtMillis = trigger))
+        Log.i(
+            TAG,
+            "Alarma programada: bout=${alarm.boutId} trigger=$trigger (sonará en ${(trigger - now) / 1000}s)",
+        )
     }
 
     private fun handleStarted(data: Map<String, String>) {

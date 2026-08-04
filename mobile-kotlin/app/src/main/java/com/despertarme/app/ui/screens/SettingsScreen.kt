@@ -2,10 +2,15 @@ package com.despertarme.app.ui.screens
 
 import android.Manifest
 import android.app.AlarmManager
+import android.app.NotificationManager
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
+import android.provider.Settings
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -97,6 +102,10 @@ fun SettingsScreen(
                 label = "Alarmas exactas",
                 granted = canScheduleExactAlarms(context),
             )
+            if (Build.VERSION.SDK_INT >= 34) {
+                Spacer(modifier = Modifier.height(8.dp))
+                FullScreenIntentRow(context)
+            }
         }
         SettingsCard(title = "Diagnóstico") {
             Text(
@@ -193,3 +202,43 @@ private fun canScheduleExactAlarms(context: Context): Boolean =
     } else {
         true
     }
+
+@Composable
+private fun FullScreenIntentRow(context: Context) {
+    val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+    val granted = nm.canUseFullScreenIntent()
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = if (!granted) Modifier.clickable {
+            val intent = Intent(
+                Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT,
+                Uri.parse("package:${context.packageName}"),
+            )
+            context.startActivity(intent)
+        } else Modifier,
+    ) {
+        Icon(
+            imageVector = if (granted) Icons.Filled.CheckCircle else Icons.Filled.Cancel,
+            contentDescription = null,
+            tint = if (granted) Color(0xFF4ADE80) else Color(0xFFCF6679),
+            modifier = Modifier.size(18.dp),
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(text = "Pantalla bloqueo", color = Color.White, fontSize = 14.sp)
+        Spacer(modifier = Modifier.weight(1f))
+        if (!granted) {
+            Text(
+                text = "CONFIGURAR",
+                color = com.despertarme.app.ui.theme.UfcRed,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+            )
+        } else {
+            Text(
+                text = "concedido",
+                color = TextSecondary,
+                fontSize = 12.sp,
+            )
+        }
+    }
+}

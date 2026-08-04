@@ -8,9 +8,8 @@ import android.content.Intent
 import android.os.Build
 import android.util.Log
 import androidx.core.app.NotificationCompat
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 
 class AlarmReceiver : BroadcastReceiver() {
 
@@ -34,11 +33,14 @@ class AlarmReceiver : BroadcastReceiver() {
         val ctx = rawContext.applicationContext
 
         // D45 — Ring-once: marcar fired=true ANTES de que suene.
-        CoroutineScope(Dispatchers.IO).launch {
-            PendingAlarmStorage.put(
-                ctx,
-                (PendingAlarmStorage.get(ctx, boutId) ?: return@launch).copy(fired = true),
-            )
+        // runBlocking garantiza escritura sincrona en DataStore antes de que
+        // onReceive retorne. Sin esto, un fire-and-forget async (CoroutineScope)
+        // podria perder el write si el proceso muere antes del flush.
+        runBlocking(Dispatchers.IO) {
+            val existing = PendingAlarmStorage.get(ctx, boutId)
+            if (existing != null) {
+                PendingAlarmStorage.put(ctx, existing.copy(fired = true))
+            }
         }
 
         // Arrancar el sonido de alarma.

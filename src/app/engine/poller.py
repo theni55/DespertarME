@@ -268,6 +268,8 @@ class Poller:
             estimated_start_at=str(int(estimate.start_at.timestamp() * 1000)),
             minutes_until_start=max(0, int((estimate.start_at - now).total_seconds() // 60)),
             weight_class=target.weight_class,
+            lead_minutes=sub.lead_minutes,
+            sport=sport,
         )
         result = await self._call_with_retries(payload)
         await self._log_alert(

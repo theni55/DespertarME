@@ -16,9 +16,14 @@ class BootReceiver : BroadcastReceiver() {
 
         val app = context.applicationContext as DespertarMeApp
         CoroutineScope(Dispatchers.IO).launch {
+            val now = System.currentTimeMillis()
             val alarms = PendingAlarmStorage.all(app)
-            Log.i("BootReceiver", "Reprogramando ${alarms.size} alarmas tras reinicio")
-            alarms.forEach { alarm ->
+            val valid = alarms.filter { it.triggerAtMillis > now && !it.fired }
+            Log.i(
+                "BootReceiver",
+                "Reprogramando ${valid.size}/${alarms.size} alarmas tras reinicio (${alarms.size - valid.size} filtradas: pasadas/fired)",
+            )
+            valid.forEach { alarm ->
                 AlarmScheduler.schedule(app, alarm)
             }
         }
