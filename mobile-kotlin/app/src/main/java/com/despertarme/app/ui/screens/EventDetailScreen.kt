@@ -782,7 +782,7 @@ private fun AdSlot() {
             contentAlignment = Alignment.Center,
         ) {
             Text(
-                text = "Anuncio",
+                text = "BILLETES",
                 color = TextSecondary,
                 fontSize = 14.sp,
             )
