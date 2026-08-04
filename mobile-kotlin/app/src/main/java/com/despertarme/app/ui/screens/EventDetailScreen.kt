@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -153,27 +154,33 @@ fun EventDetailScreen(
                             .groupBy { it.id.substringBefore("_q") }
                             .values
                             .toList()
-                        items(games, key = { it.first().id.substringBefore("_q") }) { gameBouts ->
+                        itemsIndexed(games, key = { _, g -> g.first().id.substringBefore("_q") }) { index, gameBouts ->
                             NbaGameCard(
                                 bouts = gameBouts.sortedBy { it.matchNumber },
                                 subscribedBouts = state.subscribedBouts,
                                 onSubscribe = onSubscribe,
                             )
+                            if ((index + 1) % 4 == 0 && index < games.lastIndex) {
+                                AdSlot()
+                            }
                         }
                     } else if (isNfl) {
                         val games = bouts
                             .groupBy { it.id.substringBefore("_q") }
                             .values
                             .toList()
-                        items(games, key = { it.first().id.substringBefore("_q") }) { gameBouts ->
+                        itemsIndexed(games, key = { _, g -> g.first().id.substringBefore("_q") }) { index, gameBouts ->
                             NflGameCard(
                                 bouts = gameBouts.sortedBy { it.matchNumber },
                                 subscribedBouts = state.subscribedBouts,
                                 onSubscribe = onSubscribe,
                             )
+                            if ((index + 1) % 4 == 0 && index < games.lastIndex) {
+                                AdSlot()
+                            }
                         }
                     } else {
-                        items(bouts, key = { it.id }) { bout ->
+                        itemsIndexed(bouts, key = { _, bout -> bout.id }) { index, bout ->
                             BoutCard(
                                 bout = bout,
                                 // El backend lista los combates en orden cronologico:
@@ -182,6 +189,9 @@ fun EventDetailScreen(
                                 subscribed = state.subscribedBouts.contains(bout.id),
                                 onSubscribe = { lead -> onSubscribe(bout, lead) },
                             )
+                            if ((index + 1) % 4 == 0 && index < bouts.lastIndex) {
+                                AdSlot()
+                            }
                         }
                     }
                     item { Spacer(modifier = Modifier.height(24.dp)) }
@@ -756,3 +766,23 @@ private fun formatBoutTime(iso: String): String = runCatching {
     OffsetDateTime.parse(iso).atZoneSameInstant(ZoneId.systemDefault())
         .format(DateTimeFormatter.ofPattern("HH:mm"))
 }.getOrDefault("--:--")
+
+@Composable
+private fun AdSlot() {
+    Card(
+        modifier = Modifier.fillMaxWidth().height(100.dp),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = SurfaceDark),
+    ) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = "Anuncio",
+                color = TextSecondary,
+                fontSize = 14.sp,
+            )
+        }
+    }
+}
