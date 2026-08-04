@@ -10,6 +10,7 @@ import com.despertarme.app.data.remote.EventSummaryOut
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -138,6 +139,95 @@ class HomeViewModel(
             val sorted = enriched.sortedBy { parseDateEpoch(it.displayDate ?: it.event.date) }
             _state.value = HomeState(isLoading = false, events = sorted)
         }
+    }
+
+    fun startAutoRefresh() {
+        viewModelScope.launch {
+            while (true) {
+                delay(30_000)
+                refreshSilently()
+            }
+        }
+    }
+
+    private suspend fun refreshSilently() {
+        val allSummaries = coroutineScope {
+            val mmaDeferred = async {
+                runCatching { container.api.listEvents("mma", "") }
+                    .getOrDefault(emptyList())
+                    .map { Triple(it, "mma", "") }
+            }
+            val atpDeferred = async {
+                runCatching { container.api.listEvents("tennis", "atp") }
+                    .getOrDefault(emptyList())
+                    .map { Triple(it, "tennis", "atp") }
+            }
+            val wtaDeferred = async {
+                runCatching { container.api.listEvents("tennis", "wta") }
+                    .getOrDefault(emptyList())
+                    .map { Triple(it, "tennis", "wta") }
+            }
+            val nbaDeferred = async {
+                runCatching { container.api.listEvents("nba", "") }
+                    .getOrDefault(emptyList())
+                    .map { Triple(it, "nba", "") }
+            }
+            val nflDeferred = async {
+                runCatching { container.api.listEvents("nfl", "") }
+                    .getOrDefault(emptyList())
+                    .map { Triple(it, "nfl", "") }
+            }
+            val footballDeferred = async {
+                val footballLeagues = listOf(
+                    "esp.1", "eng.1", "ita.1", "ger.1", "fra.1",
+                    "uefa.champions", "uefa.europa",
+                )
+                val results: MutableList<Triple<EventSummaryOut, String, String>> = mutableListOf()
+                coroutineScope {
+                    footballLeagues.map { slug ->
+                        async {
+                            val events = runCatching {
+                                container.api.listEvents("football", slug)
+                            }.getOrDefault(emptyList())
+                            events.map { Triple(it, "football", slug) }
+                        }
+                    }.awaitAll().forEach { results.addAll(it) }
+                }
+                results
+            }
+            selectHomeEvents(
+                mmaDeferred.await() + atpDeferred.await() + wtaDeferred.await() +
+                    nbaDeferred.await() + nflDeferred.await() + footballDeferred.await(),
+            )
+        }
+        val enriched = coroutineScope {
+            allSummaries.map { (summary, sport, league) ->
+                async {
+                    val card = runCatching {
+                        container.api.getEvent(summary.id, sport, league)
+                    }.getOrNull()
+                    val main = when {
+                        sport == "tennis" -> mainBoutTennis(card)
+                        sport == "football" -> card?.bouts?.firstOrNull()
+                        else -> card?.bouts?.firstOrNull { it.matchNumber == 1 }
+                    }
+                    HomeEventUi(
+                        event = summary,
+                        sport = sport,
+                        league = league,
+                        mainRed = main?.red,
+                        mainBlue = main?.blue,
+                        boutCount = card?.bouts?.size,
+                        displayDate = main?.date ?: summary.date,
+                    )
+                }
+            }.awaitAll()
+        }
+        val sorted = enriched.sortedBy { parseDateEpoch(it.displayDate ?: it.event.date) }
+        _state.value = _state.value.copy(
+            events = sorted,
+            error = null,
+        )
     }
 
     companion object {

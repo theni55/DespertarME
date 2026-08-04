@@ -171,7 +171,7 @@ private fun AppGraph(
         ) {
             composable("home") {
                 val state by homeVm.state.collectAsState()
-                LaunchedEffect(Unit) { homeVm.load() }
+                LaunchedEffect(Unit) { homeVm.load(); homeVm.startAutoRefresh() }
                 HomeScreen(
                     state = state,
                     onEventClick = { eventId, sport, league ->
@@ -192,7 +192,7 @@ private fun AppGraph(
             }
             composable("events/{sport}") { entry ->
                 val sport = entry.arguments?.getString("sport") ?: "mma"
-                LaunchedEffect(sport) { competitionsVm.load(sport) }
+                LaunchedEffect(sport) { competitionsVm.load(sport); competitionsVm.startAutoRefresh() }
                 val state by competitionsVm.state.collectAsState()
                 CompetitionsScreen(
                     state = state,
@@ -228,7 +228,7 @@ private fun AppGraph(
             }
             composable("event/{eventId}") { entry ->
                 val eventId = entry.arguments?.getString("eventId") ?: "none"
-                LaunchedEffect(eventId) { detailVm.load(eventId) }
+                LaunchedEffect(eventId) { detailVm.load(eventId); detailVm.startAutoRefresh() }
                 val state by detailVm.state.collectAsState()
                 val snack by detailVm.snackMessage.collectAsState()
                 EventDetailScreen(

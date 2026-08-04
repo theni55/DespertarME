@@ -9,6 +9,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -34,6 +35,7 @@ class CompetitionsViewModel(
     val state: StateFlow<CompetitionsState> = _state.asStateFlow()
 
     private var loadJob: Job? = null
+    private var currentSport: String = "mma"
 
     fun prepareForLoad(sport: String) {
         loadJob?.cancel()
@@ -41,6 +43,7 @@ class CompetitionsViewModel(
     }
 
     fun load(sport: String) {
+        currentSport = sport
         loadJob?.cancel()
         _state.value = CompetitionsState(isLoading = true)
         loadJob = viewModelScope.launch {
@@ -96,6 +99,54 @@ class CompetitionsViewModel(
                 )
             }
         }
+    }
+
+    fun startAutoRefresh() {
+        viewModelScope.launch {
+            while (true) {
+                delay(30_000)
+                refreshSilently()
+            }
+        }
+    }
+
+    private suspend fun refreshSilently() {
+        val sport = currentSport
+        val tournaments = try {
+            when (sport) {
+                "tennis" -> {
+                    val (atp, wta) = coroutineScope {
+                        val atpDeferred = async {
+                            runCatching { container.api.listEvents("tennis", "atp") }.getOrDefault(emptyList())
+                        }
+                        val wtaDeferred = async {
+                            runCatching { container.api.listEvents("tennis", "wta") }.getOrDefault(emptyList())
+                        }
+                        atpDeferred.await() to wtaDeferred.await()
+                    }
+                    atp.map { CompetitionUi(it, "tennis", "atp") } +
+                        wta.map { CompetitionUi(it, "tennis", "wta") }
+                }
+                "nba" -> container.api.listEvents("nba", "").map { CompetitionUi(it, "nba", "") }
+                "nfl" -> container.api.listEvents("nfl", "").map { CompetitionUi(it, "nfl", "") }
+                "football" -> {
+                    val leagues = listOf("esp.1", "eng.1", "ita.1", "ger.1", "fra.1", "uefa.champions", "uefa.europa")
+                    val results = coroutineScope {
+                        leagues.map { slug ->
+                            async {
+                                runCatching { container.api.listEvents("football", slug) }
+                                    .getOrDefault(emptyList()).map { CompetitionUi(it, "football", slug) }
+                            }
+                        }.awaitAll()
+                    }
+                    results.flatten()
+                }
+                else -> container.api.listEvents("mma", "").map { CompetitionUi(it, "mma", "") }
+            }
+        } catch (_: Exception) {
+            return
+        }
+        _state.value = CompetitionsState(isLoading = false, tournaments = tournaments)
     }
 }
 
