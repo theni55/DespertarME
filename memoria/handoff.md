@@ -4,7 +4,46 @@
 
 ---
 
-## Última sesión (cont.)
+## Última sesión
+
+**Fecha:** 2026-08-04 · **Sesión 32 — Fixes alarma + AdSlots + Onboarding permisos. Ramas `fix/alarma`, `feature/anuncios`, `feature/permisos` (mergeadas a `dev`).**
+
+**Hecho:**
+
+### Fixes de alarma (5 bugs, rama `fix/alarma`, commit `6a9ee1f`)
+1. **Fix FSI lockscreen**: `SettingsScreen.kt` chequeo runtime `USE_FULL_SCREEN_INTENT` + botón CONFIGURAR
+2. **Fix fired sync**: `AlarmReceiver.kt` `runBlocking` síncrono en vez de `CoroutineScope(Dispatchers.IO).launch`
+3. **Fix BootReceiver**: filtra `triggerAtMillis > now && !fired` antes de reprogramar
+4. **Fix centinela FCM**: `DespertarMeFirebaseService.kt` reconstruye `PendingAlarm` desde payload FCM si DataStore está vacío
+5. **Fix AlarmActivity**: elimina bloque `isAlarmServiceRunning()` redundante
+6. **Backend**: `AlertPayload` añade `lead_minutes` + `sport` al payload FCM `update`
+
+### Feature anuncios (rama `feature/anuncios`, commits `ef6efc8` + `3c61a98` + `e67d902`)
+7. **AdSlot**: card 160dp alto, `SurfaceDark`, `RoundedCornerShape(12.dp)`, placeholder "BILLETES"
+8. Insertado cada 4 combates en MMA/Tenis/Fútbol/NBA/NFL
+
+### Feature permisos (rama `feature/permisos`, commit `d14a55a`)
+9. **Onboarding automático**: `MainActivity.kt` `AlertDialog` secuencial para 3 permisos:
+   - Notificaciones → pop-up nativo Android
+   - Pantalla bloqueo → redirige a Settings (1 toggle)
+   - Alarmas exactas → redirige a Settings (1 toggle)
+
+### Infraestructura
+10. Limpieza de 5 ramas remotas obsoletas
+11. Railway desplegado con fixes de backend
+
+**Decisiones:** D84 (onboarding permisos) + D85 (AdSlots) registradas en `decisiones.md`.
+
+**Verificación:** pytest 179/179 ✅ · ruff ✅ · assembleDebug BUILD SUCCESSFUL ✅ · sin FATAL en emulador ✅
+
+**Pendiente:**
+1. Instalar APK en móvil físico y validar el onboarding de permisos + fixes de alarma.
+2. Sonido custom `alarm.ogg`, Doze, release keystore, Play Store.
+3. Validar AdSlots visualmente en el emulador con un evento que tenga ≥8 combates.
+
+---
+
+## Sesión 31 (cont.)
 
 **Fecha:** 2026-08-03 · **Sesión 31 (cont.) — Rediseño Alertas + fixes singles vacíos + displayDate universal. Rama `feature/alertas`. Commits `ad6d5f7`, `744f654`, `77698e7`.**
 
