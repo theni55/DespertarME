@@ -28,9 +28,12 @@
    - Pantalla bloqueo → redirige a Settings (1 toggle)
    - Alarmas exactas → redirige a Settings (1 toggle)
 
+### Auto-refresh (rama `feature/auto-refresh`, commit `c4a9779`)
+10. **Polling silencioso cada 30s** en Home, EventDetail y Competitions. Cada ViewModel tiene `startAutoRefresh()` + `refreshSilently()` que re-fetch sin `isLoading=true` ni spinner. Si ESPN cambia la hora de un partido, se refleja automáticamente.
+
 ### Infraestructura
-10. Limpieza de 5 ramas remotas obsoletas
-11. Railway desplegado con fixes de backend
+11. Limpieza de 5 ramas remotas obsoletas
+12. `feature/auto-refresh` + `feature/permisos` mergeadas a `dev` y borradas
 
 **Decisiones:** D84 (onboarding permisos) + D85 (AdSlots) registradas en `decisiones.md`.
 

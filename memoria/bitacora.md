@@ -4,7 +4,7 @@
 
 ## Sesión 32 — Fixes alarma + AdSlots + Onboarding permisos (2026-08-04)
 
-**Ramas:** `fix/alarma`, `feature/anuncios`, `feature/permisos` (todas mergeadas a `dev`) · **Máquina:** `pacor` (Windows, toolchain Android completo)
+**Ramas:** `fix/alarma`, `feature/anuncios`, `feature/permisos`, `feature/auto-refresh` (todas mergeadas a `dev`) · **Máquina:** `pacor` (Windows, toolchain Android completo)
 
 **Contexto:** el owner reportó bugs recurrentes de alarma en móvil físico: la pantalla de DETENER no aparecía sobre el lockscreen y segundas alarmas no sonaban. También pidió slots para anuncios entre combates y onboarding automático de permisos.
 
@@ -29,10 +29,17 @@
    - "Alarmas exactas" → `Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM` → 1 toggle
 10. Flujo: al volver de Settings, `onResume` detecta `waitingForSettingsReturn = true` y avanza al siguiente permiso. Si todos están concedidos, no muestra diálogos
 
+### Auto-refresh silencioso (rama `feature/auto-refresh`, commit `c4a9779`)
+12. **HomeViewModel**: `startAutoRefresh()` + `refreshSilently()` — re-fetch paralelo de los 6 deportes cada 30s, enriquecimiento completo, update del state sin `isLoading`
+13. **EventDetailViewModel**: `refreshSilently()` re-fetch `getEvent()` cada 30s, actualiza `currentEventId` en `load()`
+14. **CompetitionsViewModel**: `refreshSilently()` re-fetch `listEvents()` cada 30s
+15. **MainActivity**: 3 `LaunchedEffect` llaman a `startAutoRefresh()` en Home, EventDetail y Competitions
+
 ### Infraestructura
 11. Limpieza de 5 ramas remotas obsoletas: `feature/alertas`, `feature/anuncios`, `fix/alarma`, `feature/fase-0-espn-providers`, `feat/landing-polish-audit`
+16. **Merge**: `feature/auto-refresh` + `feature/permisos` → `dev`, ramas borradas
 
-**Decisiones:** D84 (onboarding permisos al primer arranque) + D85 (AdSlots cada 4 combates)
+**Decisiones:** D84 (onboarding permisos) + D85 (AdSlots) + D86 (auto-refresh)
 
 **Verificación:** pytest 179/179 ✅ · ruff ✅ · assembleDebug BUILD SUCCESSFUL ✅ · sin FATAL en emulador ✅ · Railway desplegado con fixes backend ✅
 
