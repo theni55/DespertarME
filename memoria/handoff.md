@@ -6,7 +6,37 @@
 
 ## Última sesión
 
-**Fecha:** 2026-08-05 · **Sesión 33 — Fixes multi-bug: alertas cold-start, LIVE badge, stale cache, labels, status fired. Rama `fix/alertas` (sin mergear a `dev`).**
+**Fecha:** 2026-08-05 · **Sesión 34 — FSI en handleFire/handleStarted + diagnóstico Redmi Note 11 Pro 5G. Rama `dev`.**
+
+**Hecho:**
+
+### Diagnóstico test-alarm en hardware físico
+- FCM funciona perfecto en Redmi Note 11 Pro 5G (Xiaomi/MIUI) incluso con app cerrada y móvil bloqueado.
+- Root cause: `handleFire` usaba `startActivity()` desde servicio background → Android 10+ lo bloqueaba. `handleStarted` solo notificación silenciosa.
+
+### Fixes (3 archivos, commit `7049956`)
+1. **`DespertarMeFirebaseService.kt`**: nuevo helper `launchFullScreenAlarm` (FSI reutilizable). `handleFire` reescrito con FSI + extras en service intent. `handleStarted` ahora arranca sonido + FSI (antes solo notificación silenciosa).
+2. **`AlarmService.kt`**: campos de combate desde extras del intent. `buildNotification()` con `setContentIntent` → `AlarmActivity`.
+3. **`AlarmReceiver.kt`**: extras de combate en intent de `AlarmService`. Fallback `canFsi==false` con heads-up notification en vez de `startActivity` ciego. Log duplicado eliminado.
+
+### Resultados (Redmi Note 11 Pro 5G físico)
+
+| Escenario | Sonido | Pantalla |
+|-----------|--------|----------|
+| App abierta | ✅ | ✅ |
+| App cerrada + bloqueado | ✅ | ✅ (pero detrás de lockscreen en MIUI) |
+
+**Limitación Xiaomi MIUI**: el FSI lanza la actividad pero MIUI mantiene la lockscreen encima. En Android stock aparecería sobre la lockscreen.
+
+**Pendiente:**
+1. **F5-F8 — Romper barrera MIUI**: (a) `AlarmService.ACTION_STOP` cancelar FSI notification, (b) `FLAG_DISMISS_KEYGUARD` en intent de Activity, (c) permiso MIUI "Mostrar ventanas emergentes en segundo plano" manual, (d) overlay `SYSTEM_ALERT_WINDOW` si nada funciona.
+2. **Probar suscripción real con evento en vivo** (Tsitsipas ya pasó — esperar próximo evento).
+3. **Bug B** (siguiente alarma no suena — D45 `now+60s` y never-reschedule).
+4. Pendientes históricos: sonido `alarm.ogg`, Doze, Play Store.
+
+---
+
+## Sesión 33 — Fixes multi-bug: alertas cold-start, LIVE badge, stale cache, labels, status fired. Rama `fix/alertas` (sin mergear a `dev`).
 
 **Hecho:**
 

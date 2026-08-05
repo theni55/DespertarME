@@ -2,6 +2,53 @@
 
 > Registro cronológico de cada sesión de trabajo: qué se hizo y qué quedó pendiente.
 
+## Sesión 34 — FSI en handleFire/handleStarted + diagnóstico Xiaomi (2026-08-05)
+
+**Rama:** `dev` · **Máquina:** `pacor` (Windows, toolchain Android completo) · **APK instalada en Redmi Note 11 Pro 5G físico**
+
+**Contexto:** el owner instaló la APK en un Redmi Note 11 Pro 5G y reportó que la alarma no sonaba. Se ejecutó un diagnóstico sistemático con test-alarm vía `curl` al backend Railway.
+
+**Diagnóstico (4 escenarios probados):**
+
+| Escenario | Sonido | Pantalla full-screen |
+|-----------|--------|---------------------|
+| App abierta | ✅ | ✅ |
+| App en background | ✅ | ❌ (antes) → ✅ (tras fix) |
+| App cerrada (recentes) | ✅ | ❌ (antes) → ✅ (tras fix) |
+| Móvil bloqueado | ✅ | ✅ (pero detrás de lockscreen en MIUI) |
+
+**Root cause:** `DespertarMeFirebaseService.handleFire()` llamaba `startActivity()` directamente desde un servicio en background → Android 10+ lo bloquea en silencio. `handleStarted()` solo mostraba notificación silenciosa sin sonido cuando el combate ya había empezado.
+
+**Hecho:**
+
+### F1 — Nuevo helper `launchFullScreenAlarm` (DespertarMeFirebaseService.kt)
+Patrón FSI reutilizable (mismo que AlarmReceiver): notificación con `setFullScreenIntent` + `addAction("Parar")`. Fallback: notificación heads-up con `setContentIntent` cuando FSI no concedido.
+
+### F2 — handleFire reescrito con FSI
+Antes: `startActivity()` ciego desde servicio en background (roto en Android 10+). Ahora: pasa extras de combate al service intent + llama `launchFullScreenAlarm`.
+
+### F3 — handleStarted ahora arranca sonido + FSI
+Antes: solo notificación silenciosa `"⚔ El combate ha empezado"`. Ahora: arranca `AlarmService` (sonido) + `launchFullScreenAlarm` (pantalla). Si el combate ya empezó, el usuario recibe alerta completa, no solo una notificación.
+
+### F4 — AlarmService recibe extras + setContentIntent
+Campos de combate extraídos del intent en `onStartCommand`. `buildNotification()` con `setContentIntent` que abre `AlarmActivity` con los datos del combate al tocar la notificación del servicio.
+
+### F5 — AlarmReceiver: extras en service intent + fallback mejorado
+El intent de `AlarmService` ahora incluye todos los datos de combate. Fallback cuando `canFsi == false`: notificación heads-up con `setContentIntent` en vez de `startActivity` ciego. Log duplicado eliminado.
+
+**Limitación detectada — Xiaomi MIUI:** el `setFullScreenIntent` lanza la Activity pero MIUI mantiene la lockscreen encima (en Android stock aparecería encima). F5-F8 pendientes para romper esta barrera (FLAG_DISMISS_KEYGUARD, cancelar FSI en ACTION_STOP, overlay SYSTEM_ALERT_WINDOW si necesario).
+
+**Verificación:** assembleDebug BUILD SUCCESSFUL ✅ · APK instalada en Redmi físico ✅
+
+**Decisiones:** sin D nueva — los fixes son correcciones de bugs, no cambios de diseño.
+
+**Pendiente:**
+1. Implementar F5-F8 (cancelar FSI en ACTION_STOP, FLAG_DISMISS_KEYGUARD, permiso MIUI "ventanas emergentes", overlay SYSTEM_ALERT_WINDOW si necesario).
+2. Probar suscripción real con evento en vivo (Tsitsipas ya pasó).
+3. Resto de pendientes históricos: Bug B (siguiente alarma), sonido `alarm.ogg`, Doze, Play Store.
+
+---
+
 ## Sesión 33 — Fixes multi-bug: alarmas cold-start, LIVE badge, stale cache, labels, status fired (2026-08-05)
 
 **Rama:** `fix/alertas` (sin mergear a `dev`) · **Máquina:** `pacor` (Windows, toolchain Android completo)
