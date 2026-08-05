@@ -2,6 +2,42 @@
 
 > Registro cronológico de cada sesión de trabajo: qué se hizo y qué quedó pendiente.
 
+## Sesión 33 — Fixes multi-bug: alarmas cold-start, LIVE badge, stale cache, labels, status fired (2026-08-05)
+
+**Rama:** `fix/alertas` (sin mergear a `dev`) · **Máquina:** `pacor` (Windows, toolchain Android completo)
+
+**Contexto:** el owner reportó varios bugs acumulados tras la Sesión 32: alarmas que suenan sin UI para pararlas (app cerrada), partidos que ya empezaron/acabaron visibles, labels "Partido #0", HTTP 503 en Home, y suscripciones que no desaparecen tras sonar.
+
+**Hecho:**
+
+### Fixes de alarma cold-start (3 archivos Android)
+1. **`AlarmReceiver.kt`**: verifica `canUseFullScreenIntent()` (Android 14+). Si concedido → FSI notification con `addAction("Parar")`. Si no → fallback `startActivity` directo (el BroadcastReceiver sí puede, el comentario anterior era incorrecto).
+2. **`AlarmService.kt`**: `buildNotification()` ahora incluye `addAction("Parar")` + `setContentIntent` con `PendingIntent` que envía `ACTION_STOP`. Si AlarmActivity no abre, el usuario puede parar desde la cortina.
+3. **`AlarmActivity.kt`**: `onDismiss`/`onOpenApp` cancelan notificación FSI (`FULLSCREEN_NOTIFICATION_ID`) + `AlarmScheduler.cancel(boutId)` para limpiar DataStore. Nuevo método `stopAlarm()` con `runBlocking` para la llamada suspend.
+
+### Fixes de UI (Android)
+4. **Labels sin #0**: `SubscriptionsViewModel.kt` fallbacks "Partido" / "Combate" sin número + `android.util.Log.w` para diagnosticar causas de fallback.
+5. **`prepareForLoad()` limpio**: resetea `SubscriptionsState()` completo (antes solo `isLoading`) → evita flash de datos viejos.
+6. **`resolveLabels()` con `league` real**: key `Triple(eventId, sport, league)` + `getEvent()` con league de cada suscripción. Antes hardcodeado `""` → fallaba para tenis ATP/WTA.
+7. **LIVE badge**: `BoutCard`, `NbaGameCard`, `NflGameCard` — si `bout.status == "in"` → borde rojo, badge LIVE, "En directo", sin botón "Avísame".
+
+### Fixes de backend
+8. **Tenis + ALL sports `in`/`post`**: `events.py` `get_event_detail` — quitada exclusión `sport != "tennis"`. `post_bout_ids` filtrados, `in_bout_ids` visibles con `status="in"`. `BoutOut` añade `status` (schemas.py + Models.kt).
+9. **Stale cache 503**: `events.py` `list_events()` — segunda key Redis con TTL 1h. Si el provider falla, sirve stale en vez de 503.
+10. **Suscripción `fired` en `started`**: `poller.py` — `sub.status = "fired"` para `started` (antes solo `cancelled`). `listSubscriptions()` filtra solo `status == "active"`.
+
+**Decisiones:** D87 (LIVE/post), D88 (stale cache 503), D89 (fired en started + filtro active), D90 (labels league real).
+
+**Verificación:** ruff ✅ · pytest 179/179 ✅ · assembleDebug ✅ · APK reinstalada emulador ✅
+
+**Pendiente:**
+1. Merge `fix/alertas` → `dev`.
+2. Validar fixes de alarma cold-start con app completamente cerrada.
+3. Bug B (siguiente alarma no suena) pendiente de sesión dedicada.
+4. Pendientes históricos: móvil físico, sonido `alarm.ogg`, Doze, Play Store.
+
+---
+
 ## Sesión 32 — Fixes alarma + AdSlots + Onboarding permisos (2026-08-04)
 
 **Ramas:** `fix/alarma`, `feature/anuncios`, `feature/permisos`, `feature/auto-refresh` (todas mergeadas a `dev`) · **Máquina:** `pacor` (Windows, toolchain Android completo)

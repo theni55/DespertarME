@@ -6,43 +6,35 @@
 
 ## Última sesión
 
-**Fecha:** 2026-08-04 · **Sesión 32 — Fixes alarma + AdSlots + Onboarding permisos. Ramas `fix/alarma`, `feature/anuncios`, `feature/permisos` (mergeadas a `dev`).**
+**Fecha:** 2026-08-05 · **Sesión 33 — Fixes multi-bug: alertas cold-start, LIVE badge, stale cache, labels, status fired. Rama `fix/alertas` (sin mergear a `dev`).**
 
 **Hecho:**
 
-### Fixes de alarma (5 bugs, rama `fix/alarma`, commit `6a9ee1f`)
-1. **Fix FSI lockscreen**: `SettingsScreen.kt` chequeo runtime `USE_FULL_SCREEN_INTENT` + botón CONFIGURAR
-2. **Fix fired sync**: `AlarmReceiver.kt` `runBlocking` síncrono en vez de `CoroutineScope(Dispatchers.IO).launch`
-3. **Fix BootReceiver**: filtra `triggerAtMillis > now && !fired` antes de reprogramar
-4. **Fix centinela FCM**: `DespertarMeFirebaseService.kt` reconstruye `PendingAlarm` desde payload FCM si DataStore está vacío
-5. **Fix AlarmActivity**: elimina bloque `isAlarmServiceRunning()` redundante
-6. **Backend**: `AlertPayload` añade `lead_minutes` + `sport` al payload FCM `update`
+### Fixes de alarma cold-start (3 archivos Android)
+1. **`AlarmReceiver.kt`**: FSI con fallback `startActivity` si permiso no concedido + `addAction("Parar")` en notificación FSI.
+2. **`AlarmService.kt`**: `buildNotification()` con `addAction("Parar")` + `setContentIntent` → botón STOP en foreground notification.
+3. **`AlarmActivity.kt`**: `onDismiss`/`onOpenApp` cancelan notificación FSI (`FULLSCREEN_NOTIFICATION_ID`) + limpian `AlarmScheduler` del DataStore.
 
-### Feature anuncios (rama `feature/anuncios`, commits `ef6efc8` + `3c61a98` + `e67d902`)
-7. **AdSlot**: card 160dp alto, `SurfaceDark`, `RoundedCornerShape(12.dp)`, placeholder "BILLETES"
-8. Insertado cada 4 combates en MMA/Tenis/Fútbol/NBA/NFL
+### Fixes de UI
+4. **Labels sin #0**: `SubscriptionsViewModel.kt` — fallbacks "Partido" / "Combate" sin número + logging via `android.util.Log.w`.
+5. **`prepareForLoad()` limpio**: resetea state completo (`SubscriptionsState()`) en vez de solo `isLoading` → evita flash de datos viejos.
+6. **`resolveLabels()` league real**: key del mapa `Triple(eventId, sport, league)` + `getEvent()` usa la league real de cada suscripción (antes `""` hardcodeado → fallaba para tenis ATP/WTA y mostraba "Partido" genérico).
 
-### Feature permisos (rama `feature/permisos`, commit `d14a55a`)
-9. **Onboarding automático**: `MainActivity.kt` `AlertDialog` secuencial para 3 permisos:
-   - Notificaciones → pop-up nativo Android
-   - Pantalla bloqueo → redirige a Settings (1 toggle)
-   - Alarmas exactas → redirige a Settings (1 toggle)
+### Fixes de backend
+7. **Tenis + ALL sports LIVE/post**: `events.py` — quitada exclusión `sport != "tennis"`. `post` → oculto, `in` → visible con `status="in"`. `BoutOut` añade campo `status`. Android: `BoutCard`, `NbaGameCard` y `NflGameCard` muestran badge LIVE rojo y ocultan botón "Avísame" cuando `status == "in"`.
+8. **Stale cache 503**: `events.py` `list_events()` — escribe dos keys Redis: fresh (TTL 300s) + stale (TTL 3600s). Si el provider falla, sirve stale en vez de 503.
+9. **Suscripción `fired` en `started`**: `poller.py` — `sub.status = "fired"` también para pushes `started` (antes solo `cancelled`).
+10. **`listSubscriptions()` filtra `active`**: `subscriptions.py` — solo devuelve suscripciones con `status == "active"`.
 
-### Auto-refresh (rama `feature/auto-refresh`, commit `c4a9779`)
-10. **Polling silencioso cada 30s** en Home, EventDetail y Competitions. Cada ViewModel tiene `startAutoRefresh()` + `refreshSilently()` que re-fetch sin `isLoading=true` ni spinner. Si ESPN cambia la hora de un partido, se refleja automáticamente.
+**Decisiones:** D87 (LIVE/post), D88 (stale cache 503), D89 (fired en started + filtro active), D90 (fix labels league real) registradas en `decisiones.md`.
 
-### Infraestructura
-11. Limpieza de 5 ramas remotas obsoletas
-12. `feature/auto-refresh` + `feature/permisos` mergeadas a `dev` y borradas
-
-**Decisiones:** D84 (onboarding permisos) + D85 (AdSlots) registradas en `decisiones.md`.
-
-**Verificación:** pytest 179/179 ✅ · ruff ✅ · assembleDebug BUILD SUCCESSFUL ✅ · sin FATAL en emulador ✅
+**Verificación:** ruff ✅ · pytest 179/179 ✅ · assembleDebug ✅ · APK reinstalada emulador ✅
 
 **Pendiente:**
-1. Instalar APK en móvil físico y validar el onboarding de permisos + fixes de alarma.
-2. Sonido custom `alarm.ogg`, Doze, release keystore, Play Store.
-3. Validar AdSlots visualmente en el emulador con un evento que tenga ≥8 combates.
+1. Merge `fix/alertas` → `dev`.
+2. Validar fixes de alarma cold-start con app completamente cerrada en emulador (simular alarmas con `adb shell am broadcast` o similar).
+3. **Bug B** (siguiente alarma no suena — diseño D45 de `scheduleFromAlarm` con `now+60s` y never-reschedule) pendiente de sesión dedicada.
+4. Pendientes históricos: instalar APK en móvil físico, sonido `alarm.ogg`, Doze, Play Store.
 
 ---
 
