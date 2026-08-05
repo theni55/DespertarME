@@ -34,7 +34,10 @@ async def list_my_subscriptions(
     session: AsyncSession = Depends(get_session),
 ) -> list[BoutSubscription]:
     result = await session.execute(
-        select(BoutSubscription).where(BoutSubscription.device_id == device.id)
+        select(BoutSubscription).where(
+            BoutSubscription.device_id == device.id,
+            BoutSubscription.status == "active",
+        )
     )
     return list(result.scalars().all())
 

@@ -46,7 +46,7 @@ class SubscriptionsViewModel(
     fun clearSnack() { _snack.value = null }
 
     fun prepareForLoad() {
-        _state.value = _state.value.copy(isLoading = true, error = null)
+        _state.value = SubscriptionsState(isLoading = true, error = null)
     }
 
     fun load() {
@@ -110,7 +110,16 @@ class SubscriptionsViewModel(
     // Fase 8f: usamos el sport de la suscripcion para la llamada getEvent.
     private suspend fun resolveLabels(subs: List<BoutSubscriptionOut>): List<SubscriptionUi> {
         val cards = subs.map { it.eventId to it.sport }.distinct().associateWith { (eventId, sport) ->
-            runCatching { container.api.getEvent(eventId, sport, "") }.getOrNull()
+            runCatching { container.api.getEvent(eventId, sport, "") }.getOrNull()?.also { card ->
+                // Si la card se obtuvo pero el bout no esta (bout_id cambiado por ESPN),
+                // el fallback de abajo lo manejara sin numero (#0).
+            } ?: run {
+                android.util.Log.w(
+                    "SubscriptionsViewModel",
+                    "getEvent($eventId, $sport) fallo — usando label fallback para suscripciones de este evento",
+                )
+                null
+            }
         }
         return subs.map { sub ->
             val card = cards[sub.eventId to sub.sport]
@@ -118,12 +127,16 @@ class SubscriptionsViewModel(
             val label = if (bout != null) {
                 "${bout.red?.name ?: "TBD"} vs ${bout.blue?.name ?: "TBD"}"
             } else {
+                android.util.Log.w(
+                    "SubscriptionsViewModel",
+                    "bout ${sub.boutId} no encontrado en card del evento ${sub.eventId}",
+                )
                 when (sub.sport) {
-                    "tennis" -> "Partido #${sub.targetMatchNumber}"
+                    "tennis" -> "Partido"
                     "nba" -> if (sub.targetMatchNumber == 1) "Inicio" else "Cuarto #${sub.targetMatchNumber}"
                     "nfl" -> if (sub.targetMatchNumber == 1) "Inicio" else "Cuarto #${sub.targetMatchNumber}"
                     "football" -> "Partido"
-                    else -> "Combate #${sub.targetMatchNumber}"
+                    else -> "Combate"
                 }
             }
             SubscriptionUi(

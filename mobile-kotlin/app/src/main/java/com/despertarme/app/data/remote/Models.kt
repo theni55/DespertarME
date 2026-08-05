@@ -34,6 +34,7 @@ data class BoutOut(
     val court: String? = null,
     val sport: String = "mma",
     @SerialName("round_description") val roundDescription: String? = null,
+    val status: String? = null,  // "pre" | "in" | "post" | null
 )
 
 @Serializable

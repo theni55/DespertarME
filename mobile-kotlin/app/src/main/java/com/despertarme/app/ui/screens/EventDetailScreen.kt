@@ -212,16 +212,34 @@ private fun BoutCard(
     subscribed: Boolean,
     onSubscribe: (Int) -> Unit,
 ) {
+    val isLive = bout.status == "in"
     var selectedLead by remember { mutableStateOf(15) }
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = SurfaceDark),
-        border = if (isNext) BorderStroke(1.dp, UfcRed) else null,
+        border = when {
+            isLive -> BorderStroke(1.dp, Color(0xFFE53935))
+            isNext -> BorderStroke(1.dp, UfcRed)
+            else -> null
+        },
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                if (isNext) {
+                if (isLive) {
+                    Text(
+                        text = "LIVE",
+                        color = Color.White,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.sp,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(Color(0xFFE53935))
+                            .padding(horizontal = 6.dp, vertical = 2.dp),
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                } else if (isNext) {
                     Text(
                         text = "PRÓXIMO",
                         color = Color.White,
@@ -333,7 +351,19 @@ private fun BoutCard(
                 )
                 AthleteColumn(bout.blue?.name, bout.blue?.headshotUrl, BlueCorner)
             }
-            if (!subscribed) {
+            if (isLive) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFFE53935)),
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(text = "En directo", color = Color(0xFFE53935), fontWeight = FontWeight.SemiBold)
+                }
+            } else if (!subscribed) {
                 Spacer(modifier = Modifier.height(12.dp))
                 val options = leadOptionsFor(bout)
                 FlowRow(
@@ -484,7 +514,24 @@ private fun NbaGameCard(
                             )
                         }
                     }
-                    if (subscribed) {
+                    val isLiveBout = bout.status == "in"
+                    if (isLiveBout) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFFE53935)),
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "En directo",
+                                color = Color(0xFFE53935),
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                        }
+                    } else if (subscribed) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Box(
                                 modifier = Modifier
@@ -612,7 +659,24 @@ private fun NflGameCard(
                             )
                         }
                     }
-                    if (subscribed) {
+                    val isLiveBout = bout.status == "in"
+                    if (isLiveBout) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFFE53935)),
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "En directo",
+                                color = Color(0xFFE53935),
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                        }
+                    } else if (subscribed) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Box(
                                 modifier = Modifier

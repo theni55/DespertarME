@@ -343,7 +343,7 @@ class Poller:
                 device_id[:8],
                 sub_id,
             )
-            if msg_type == "cancelled":
+            if msg_type in ("started", "cancelled"):
                 sub.status = "fired"
                 await session.commit()
             return True
@@ -353,7 +353,7 @@ class Poller:
         # (spam loop de cancelled/hora).
         if result.is_permanent:
             await self._state.try_mark_fired(sub_id, bout_id, msg_type)
-            if msg_type == "cancelled":
+            if msg_type in ("started", "cancelled"):
                 sub.status = "fired"
                 await session.commit()
             logger.warning(

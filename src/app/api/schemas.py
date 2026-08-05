@@ -149,6 +149,7 @@ class BoutOut(BaseModel):
     court: str | None = None
     sport: str = "mma"
     round_description: str | None = None
+    status: str | None = None  # "pre" | "in" | "post" | None
 
 
 class EventSummaryOut(BaseModel):

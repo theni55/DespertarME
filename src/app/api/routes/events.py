@@ -193,12 +193,14 @@ async def list_events(
     provider = _get_provider(sport, league)
     cutoff = datetime.now(UTC) - timedelta(hours=include_past_hours)
     cacheable = include_past_hours == 0
-    cache_key = EVENTS_LIST_CACHE_KEY.format(sport=sport, league=league)
+    fresh_key = EVENTS_LIST_CACHE_KEY.format(sport=sport, league=league)
+    stale_key = f"{fresh_key}:stale"
+    stale_ttl = 3600  # 1 h — fallback si ESPN falla
 
     raw_cache: str | None = None
     if cacheable and _redis is not None:
         try:
-            raw_cache = await _redis.get(cache_key)
+            raw_cache = await _redis.get(fresh_key)
         except Exception:
             logger.debug("Redis caido en list_events; bypass cache")
     if raw_cache:
@@ -213,6 +215,21 @@ async def list_events(
     try:
         summaries = await provider.list_upcoming_events(min_date=cutoff)
     except Exception as exc:
+        # Si el provider falla, intentar servir cache stale.
+        if cacheable and _redis is not None:
+            try:
+                stale_raw = await _redis.get(stale_key)
+            except Exception:
+                stale_raw = None
+            if stale_raw:
+                import json
+
+                try:
+                    logger.warning("Provider caido (%s); sirviendo cache stale", exc)
+                    cached = json.loads(stale_raw)
+                    return [EventSummaryOut(**item) for item in cached]
+                except Exception:
+                    logger.warning("Cache stale corrupta")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=f"Provider no disponible: {exc}",
@@ -232,7 +249,8 @@ async def list_events(
                     for e in out
                 ]
             )
-            await _redis.set(cache_key, payload, ex=EVENTS_LIST_TTL_SECONDS)
+            await _redis.set(fresh_key, payload, ex=EVENTS_LIST_TTL_SECONDS)
+            await _redis.set(stale_key, payload, ex=stale_ttl)
         except Exception:
             logger.debug("No se pudo escribir cache events")
     return out
@@ -272,13 +290,14 @@ async def get_event_detail(
 
     previous_map = _previous_bout_id_map(event.bouts, sport)
 
-    # Si el evento ya empezo (fecha pasada), filtrar combates que ya estan
-    # en curso o terminados (state=in/post) para que el "PRÓXIMO" badge de
-    # la app marque el primer combate REALMENTE pendiente. Para eventos
-    # futuros (fecha >= now), todos los combates estan en 'pre' → 0 llamadas.
-    in_or_post_bout_ids: set[str] = set()
+    # Si el evento ya empezo (fecha pasada), detectar combates en curso
+    # y terminados. Los 'post' se filtran; los 'in' se muestran con badge
+    # LIVE (sin boton de aviso). Para eventos futuros (fecha >= now), todos
+    # los combates estan en 'pre' -> 0 llamadas.
+    post_bout_ids: set[str] = set()
+    in_bout_ids: set[str] = set()
     ev_date = _parse_iso_z(event.date)
-    if sport != "tennis" and ev_date < datetime.now(UTC):
+    if ev_date < datetime.now(UTC):
         sem = asyncio.Semaphore(4)
 
         async def _fetch_status(bout: Any) -> tuple[str, str | None]:
@@ -295,7 +314,8 @@ async def get_event_detail(
                     return (bout.id, None)
 
         statuses = await asyncio.gather(*[_fetch_status(b) for b in event.bouts])
-        in_or_post_bout_ids = {bid for bid, state in statuses if state in ("in", "post")}
+        post_bout_ids = {bid for bid, state in statuses if state == "post"}
+        in_bout_ids = {bid for bid, state in statuses if state == "in"}
 
     # D58: NBA usa TeamResolver (competitors llevan `team $ref`, no `athlete`).
     resolved: dict[str, Any] = {}
@@ -401,10 +421,14 @@ async def get_event_detail(
         if (red and red.winner) or (blue and blue.winner):
             continue
 
-        # Saltar combates en curso ('in') para eventos ya empezados.
-        # Asi el primer bout de la lista es el verdadero 'proximo' (pre).
-        if b.id in in_or_post_bout_ids:
+        # Saltar combates en estado 'post' (terminados sin winner declarado).
+        if b.id in post_bout_ids:
             continue
+
+        # Determinar status del bout (pre/in).
+        bout_status: str | None = None
+        if b.id in in_bout_ids:
+            bout_status = "in"
 
         # Tenis: filtrar por modalidad si se pidio solo doubles o singles.
         if sport == "tennis" and (doubles_only or singles_only):
@@ -432,6 +456,7 @@ async def get_event_detail(
                 court=b.court.description if b.court else None,
                 sport=sport,
                 round_description=b.round.description if b.round else None,
+                status=bout_status,
             )
         )
 

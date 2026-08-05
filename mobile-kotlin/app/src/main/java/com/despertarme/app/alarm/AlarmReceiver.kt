@@ -58,10 +58,6 @@ class AlarmReceiver : BroadcastReceiver() {
             }
         }
 
-        // Bug fix: usar full-screen intent notification en vez de startActivity
-        // directo. En Android 14+, startActivity desde un BroadcastReceiver en
-        // background no abre la Activity sobre el lockscreen. Una notificación
-        // con setFullScreenIntent es el patrón oficial de Android para alarmas.
         val activityIntent = Intent(ctx, AlarmActivity::class.java).apply {
             putExtra("bout_id", boutId)
             putExtra("event_id", eventId)
@@ -83,24 +79,47 @@ class AlarmReceiver : BroadcastReceiver() {
         } else {
             PendingIntent.FLAG_UPDATE_CURRENT
         }
-        val fullScreenPendingIntent = PendingIntent.getActivity(
-            ctx, boutId.hashCode(), activityIntent, pendingFlags,
+        val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
+        // Full-screen intent si el permiso esta concedido (Android 14+).
+        // Si no, fallback a startActivity directo desde el BroadcastReceiver.
+        val canFsi = if (Build.VERSION.SDK_INT >= 34) {
+            nm.canUseFullScreenIntent()
+        } else {
+            true
+        }
+
+        val stopPendingIntent = PendingIntent.getService(
+            ctx, boutId.hashCode() + 1, serviceIntent.apply { action = AlarmService.ACTION_STOP },
+            pendingFlags,
         )
 
-        val notification = NotificationCompat.Builder(ctx, AlarmService.CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
-            .setContentTitle("DespertarME")
-            .setContentText("$fighterRed vs $fighterBlue — $eventName")
-            .setCategory(NotificationCompat.CATEGORY_ALARM)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .setFullScreenIntent(fullScreenPendingIntent, true)
-            .setOngoing(true)
-            .build()
+        if (canFsi) {
+            val activityPendingIntent = PendingIntent.getActivity(
+                ctx, boutId.hashCode(), activityIntent, pendingFlags,
+            )
+            val notification = NotificationCompat.Builder(ctx, AlarmService.CHANNEL_ID)
+                .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
+                .setContentTitle("DespertarME")
+                .setContentText("$fighterRed vs $fighterBlue — $eventName")
+                .setCategory(NotificationCompat.CATEGORY_ALARM)
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                .setFullScreenIntent(activityPendingIntent, true)
+                .setOngoing(true)
+                .addAction(android.R.drawable.ic_media_pause, "Parar", stopPendingIntent)
+                .build()
+            nm.cancel(AlarmService.NOTIFICATION_ID)
+            nm.notify(FULLSCREEN_NOTIFICATION_ID, notification)
+        } else {
+            try {
+                ctx.startActivity(activityIntent)
+            } catch (e: Exception) {
+                Log.e("AlarmReceiver", "No se pudo abrir AlarmActivity: ${e.message}")
+            }
+        }
 
-        val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        nm.cancel(AlarmService.NOTIFICATION_ID)
-        nm.notify(FULLSCREEN_NOTIFICATION_ID, notification)
+        Log.i("AlarmReceiver", "Alarma disparada y fired=true marcado para bout=$boutId")
 
         Log.i("AlarmReceiver", "Alarma disparada y fired=true marcado para bout=$boutId")
     }

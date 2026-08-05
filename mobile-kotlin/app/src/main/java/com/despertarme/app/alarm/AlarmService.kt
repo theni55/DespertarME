@@ -1,6 +1,7 @@
 package com.despertarme.app.alarm
 
 import android.app.Notification
+import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
 import android.content.pm.ServiceInfo
@@ -69,15 +70,27 @@ class AlarmService : Service() {
         }
     }
 
-    private fun buildNotification(): Notification =
-        NotificationCompat.Builder(this, CHANNEL_ID)
+    private fun buildNotification(): Notification {
+        val stopIntent = Intent(this, AlarmService::class.java).apply {
+            action = ACTION_STOP
+        }
+        val flags = if (Build.VERSION.SDK_INT >= 31) {
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        } else {
+            PendingIntent.FLAG_UPDATE_CURRENT
+        }
+        val stopPend = PendingIntent.getService(this, 0, stopIntent, flags)
+        return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("DespertarME")
             .setContentText(getString(com.despertarme.app.R.string.alarm_notification_text))
             .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setOngoing(true)
             .setSilent(true)
+            .setContentIntent(stopPend)
+            .addAction(android.R.drawable.ic_media_pause, "Parar", stopPend)
             .build()
+    }
 
     override fun onDestroy() {
         ringtone?.stop()

@@ -1,5 +1,6 @@
 package com.despertarme.app.alarm
 
+import android.app.NotificationManager
 import android.content.Intent
 import android.os.Bundle
 import android.view.WindowManager
@@ -51,6 +52,8 @@ import com.despertarme.app.ui.theme.UfcRed
 
 class AlarmActivity : ComponentActivity() {
 
+    private var boutId: String = ""
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setShowWhenLocked(true)
@@ -69,6 +72,7 @@ class AlarmActivity : ComponentActivity() {
         val headshotRed = intent.getStringExtra("headshot_red")
         val headshotBlue = intent.getStringExtra("headshot_blue")
         val sport = intent.getStringExtra("sport") ?: "mma"
+        boutId = intent.getStringExtra("bout_id") ?: ""
 
         setContent {
             AlarmFullScreen(
@@ -80,15 +84,11 @@ class AlarmActivity : ComponentActivity() {
                 headshotBlue = headshotBlue,
                 sport = sport,
                 onDismiss = {
-                    stopService(Intent(this, AlarmService::class.java).apply {
-                        action = AlarmService.ACTION_STOP
-                    })
+                    stopAlarm()
                     finish()
                 },
                 onOpenApp = {
-                    stopService(Intent(this, AlarmService::class.java).apply {
-                        action = AlarmService.ACTION_STOP
-                    })
+                    stopAlarm()
                     val intent = Intent(this, com.despertarme.app.MainActivity::class.java).apply {
                         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
                     }
@@ -96,6 +96,19 @@ class AlarmActivity : ComponentActivity() {
                     finish()
                 },
             )
+        }
+    }
+
+    private fun stopAlarm() {
+        stopService(Intent(this, AlarmService::class.java).apply {
+            action = AlarmService.ACTION_STOP
+        })
+        val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+        nm.cancel(AlarmReceiver.FULLSCREEN_NOTIFICATION_ID)
+        if (boutId.isNotEmpty()) {
+            kotlinx.coroutines.runBlocking {
+                AlarmScheduler.cancel(applicationContext, boutId)
+            }
         }
     }
 
