@@ -11,6 +11,7 @@ import com.despertarme.app.DespertarMeApp
 import com.despertarme.app.MainActivity
 import com.despertarme.app.R
 import com.despertarme.app.alarm.AlarmActivity
+import com.despertarme.app.alarm.AlarmReceiver
 import com.despertarme.app.alarm.AlarmScheduler
 import com.despertarme.app.alarm.AlarmService
 import com.despertarme.app.alarm.PendingAlarm
@@ -155,7 +156,37 @@ class DespertarMeFirebaseService : FirebaseMessagingService() {
     private fun handleStarted(data: Map<String, String>) {
         val boutId = data["bout_id"] ?: return
         val fighters = data["fighters"] ?: "Combate"
+        val eventId = data["event_id"] ?: ""
+        val eventName = data["event_name"] ?: ""
+        val sport = data["sport"] ?: "mma"
+
+        val parts = fighters.split(" vs ", limit = 2)
+        val fighterRed = parts.getOrNull(0)?.trim() ?: "TBD"
+        val fighterBlue = parts.getOrNull(1)?.trim() ?: "TBD"
+
         cancelAlarmAndNotify(boutId, "\u2694 $fighters — El combate ha empezado")
+
+        val serviceIntent = Intent(this, AlarmService::class.java).apply {
+            action = AlarmService.ACTION_START
+            putExtra("bout_id", boutId)
+            putExtra("event_id", eventId)
+            putExtra("fighter_red", fighterRed)
+            putExtra("fighter_blue", fighterBlue)
+            putExtra("lead_minutes", 0)
+            putExtra("event_name", eventName)
+            putExtra("sport", sport)
+        }
+        startForegroundService(serviceIntent)
+
+        launchFullScreenAlarm(
+            boutId = boutId,
+            eventId = eventId,
+            fighterRed = fighterRed,
+            fighterBlue = fighterBlue,
+            leadMinutes = 0,
+            eventName = eventName,
+            sport = sport,
+        )
     }
 
     private fun handleCancelled(data: Map<String, String>) {
@@ -165,21 +196,111 @@ class DespertarMeFirebaseService : FirebaseMessagingService() {
     }
 
     private fun handleFire(_data: Map<String, String>) {
-        val intent = Intent(this, AlarmService::class.java).apply {
+        val serviceIntent = Intent(this, AlarmService::class.java).apply {
             action = AlarmService.ACTION_START
-        }
-        startForegroundService(intent)
-
-        val activityIntent = Intent(this, AlarmActivity::class.java).apply {
             putExtra("bout_id", "test")
             putExtra("event_id", "test")
             putExtra("fighter_red", "Test")
-            putExtra("fighter_blue", "Alarm")
+            putExtra("fighter_blue", "Alarma")
             putExtra("lead_minutes", 0)
             putExtra("event_name", "DespertarME — Test de alarma")
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            putExtra("sport", "mma")
         }
-        startActivity(activityIntent)
+        startForegroundService(serviceIntent)
+
+        launchFullScreenAlarm(
+            boutId = "test",
+            eventId = "test",
+            fighterRed = "Test",
+            fighterBlue = "Alarma",
+            leadMinutes = 0,
+            eventName = "DespertarME — Test de alarma",
+            sport = "mma",
+        )
+    }
+
+    private fun launchFullScreenAlarm(
+        boutId: String,
+        eventId: String,
+        fighterRed: String,
+        fighterBlue: String,
+        leadMinutes: Int,
+        eventName: String,
+        sport: String,
+        headshotRed: String? = null,
+        headshotBlue: String? = null,
+    ) {
+        val activityIntent = Intent(this, AlarmActivity::class.java).apply {
+            putExtra("bout_id", boutId)
+            putExtra("event_id", eventId)
+            putExtra("fighter_red", fighterRed)
+            putExtra("fighter_blue", fighterBlue)
+            putExtra("lead_minutes", leadMinutes)
+            putExtra("event_name", eventName)
+            putExtra("sport", sport)
+            headshotRed?.let { putExtra("headshot_red", it) }
+            headshotBlue?.let { putExtra("headshot_blue", it) }
+            addFlags(
+                Intent.FLAG_ACTIVITY_NEW_TASK or
+                    Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                    Intent.FLAG_ACTIVITY_NO_USER_ACTION,
+            )
+        }
+
+        val pendingFlags = if (android.os.Build.VERSION.SDK_INT >= 31) {
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        } else {
+            PendingIntent.FLAG_UPDATE_CURRENT
+        }
+
+        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val canFsi = if (android.os.Build.VERSION.SDK_INT >= 34) {
+            nm.canUseFullScreenIntent()
+        } else {
+            true
+        }
+
+        val stopIntent = Intent(this, AlarmService::class.java).apply {
+            action = AlarmService.ACTION_STOP
+        }
+        val stopPendingIntent = PendingIntent.getService(
+            this, boutId.hashCode() + 1, stopIntent, pendingFlags,
+        )
+
+        if (canFsi) {
+            val activityPendingIntent = PendingIntent.getActivity(
+                this, boutId.hashCode(), activityIntent, pendingFlags,
+            )
+            val notification = NotificationCompat.Builder(this, AlarmService.CHANNEL_ID)
+                .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
+                .setContentTitle("DespertarME")
+                .setContentText("$fighterRed vs $fighterBlue${if (eventName.isNotBlank()) " — $eventName" else ""}")
+                .setCategory(NotificationCompat.CATEGORY_ALARM)
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                .setFullScreenIntent(activityPendingIntent, true)
+                .setOngoing(true)
+                .addAction(android.R.drawable.ic_media_pause, "Parar", stopPendingIntent)
+                .build()
+            nm.cancel(AlarmService.NOTIFICATION_ID)
+            nm.notify(AlarmReceiver.FULLSCREEN_NOTIFICATION_ID, notification)
+        } else {
+            val notification = NotificationCompat.Builder(this, AlarmService.CHANNEL_ID)
+                .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
+                .setContentTitle("DespertarME")
+                .setContentText("$fighterRed vs $fighterBlue${if (eventName.isNotBlank()) " — $eventName" else ""}")
+                .setCategory(NotificationCompat.CATEGORY_ALARM)
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                .setOngoing(true)
+                .setContentIntent(
+                    PendingIntent.getActivity(this, boutId.hashCode(), activityIntent, pendingFlags),
+                )
+                .addAction(android.R.drawable.ic_media_pause, "Parar", stopPendingIntent)
+                .build()
+            nm.cancel(AlarmService.NOTIFICATION_ID)
+            nm.notify(AlarmReceiver.FULLSCREEN_NOTIFICATION_ID, notification)
+        }
     }
 
     private fun cancelAlarmAndNotify(boutId: String, message: String) {

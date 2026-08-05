@@ -28,6 +28,16 @@ class AlarmService : Service() {
     private var ringtone: Ringtone? = null
     private var wakeLock: PowerManager.WakeLock? = null
 
+    private var alarmBoutId: String = ""
+    private var alarmEventId: String = ""
+    private var alarmFighterRed: String = ""
+    private var alarmFighterBlue: String = ""
+    private var alarmLeadMinutes: Int = 0
+    private var alarmEventName: String = ""
+    private var alarmSport: String = "mma"
+    private var alarmHeadshotRed: String? = null
+    private var alarmHeadshotBlue: String? = null
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) {
             stopForeground(STOP_FOREGROUND_REMOVE)
@@ -37,6 +47,17 @@ class AlarmService : Service() {
         if (intent?.action != ACTION_START) {
             stopSelf()
             return START_NOT_STICKY
+        }
+        intent?.let {
+            alarmBoutId = it.getStringExtra("bout_id") ?: ""
+            alarmEventId = it.getStringExtra("event_id") ?: ""
+            alarmFighterRed = it.getStringExtra("fighter_red") ?: "TBD"
+            alarmFighterBlue = it.getStringExtra("fighter_blue") ?: "TBD"
+            alarmLeadMinutes = it.getIntExtra("lead_minutes", 0)
+            alarmEventName = it.getStringExtra("event_name") ?: ""
+            alarmSport = it.getStringExtra("sport") ?: "mma"
+            alarmHeadshotRed = it.getStringExtra("headshot_red")
+            alarmHeadshotBlue = it.getStringExtra("headshot_blue")
         }
         startForeground(
             NOTIFICATION_ID,
@@ -74,22 +95,43 @@ class AlarmService : Service() {
         val stopIntent = Intent(this, AlarmService::class.java).apply {
             action = ACTION_STOP
         }
-        val flags = if (Build.VERSION.SDK_INT >= 31) {
+        val pendingFlags = if (Build.VERSION.SDK_INT >= 31) {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         } else {
             PendingIntent.FLAG_UPDATE_CURRENT
         }
-        val stopPend = PendingIntent.getService(this, 0, stopIntent, flags)
-        return NotificationCompat.Builder(this, CHANNEL_ID)
+        val stopPend = PendingIntent.getService(this, 0, stopIntent, pendingFlags)
+
+        val builder = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("DespertarME")
             .setContentText(getString(com.despertarme.app.R.string.alarm_notification_text))
             .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setOngoing(true)
             .setSilent(true)
-            .setContentIntent(stopPend)
             .addAction(android.R.drawable.ic_media_pause, "Parar", stopPend)
-            .build()
+
+        if (alarmBoutId.isNotEmpty()) {
+            val contentIntent = Intent(this, AlarmActivity::class.java).apply {
+                putExtra("bout_id", alarmBoutId)
+                putExtra("event_id", alarmEventId)
+                putExtra("fighter_red", alarmFighterRed)
+                putExtra("fighter_blue", alarmFighterBlue)
+                putExtra("lead_minutes", alarmLeadMinutes)
+                putExtra("event_name", alarmEventName)
+                putExtra("sport", alarmSport)
+                alarmHeadshotRed?.let { putExtra("headshot_red", it) }
+                alarmHeadshotBlue?.let { putExtra("headshot_blue", it) }
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            }
+            builder.setContentIntent(
+                PendingIntent.getActivity(this, 1, contentIntent, pendingFlags),
+            )
+        } else {
+            builder.setContentIntent(stopPend)
+        }
+
+        return builder.build()
     }
 
     override fun onDestroy() {

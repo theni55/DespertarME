@@ -46,6 +46,15 @@ class AlarmReceiver : BroadcastReceiver() {
         // Arrancar el sonido de alarma.
         val serviceIntent = Intent(ctx, AlarmService::class.java).apply {
             action = AlarmService.ACTION_START
+            putExtra("bout_id", boutId)
+            putExtra("event_id", eventId)
+            putExtra("fighter_red", fighterRed)
+            putExtra("fighter_blue", fighterBlue)
+            putExtra("lead_minutes", leadMinutes)
+            putExtra("event_name", eventName)
+            putExtra("sport", sport)
+            headshotRed?.let { putExtra("headshot_red", it) }
+            headshotBlue?.let { putExtra("headshot_blue", it) }
         }
         try {
             ctx.startForegroundService(serviceIntent)
@@ -112,14 +121,21 @@ class AlarmReceiver : BroadcastReceiver() {
             nm.cancel(AlarmService.NOTIFICATION_ID)
             nm.notify(FULLSCREEN_NOTIFICATION_ID, notification)
         } else {
-            try {
-                ctx.startActivity(activityIntent)
-            } catch (e: Exception) {
-                Log.e("AlarmReceiver", "No se pudo abrir AlarmActivity: ${e.message}")
-            }
+            val notification = NotificationCompat.Builder(ctx, AlarmService.CHANNEL_ID)
+                .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
+                .setContentTitle("DespertarME")
+                .setContentText("$fighterRed vs $fighterBlue${if (eventName.isNotBlank()) " — $eventName" else ""}")
+                .setCategory(NotificationCompat.CATEGORY_ALARM)
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                .setOngoing(true)
+                .setContentIntent(
+                    PendingIntent.getActivity(ctx, boutId.hashCode(), activityIntent, pendingFlags),
+                )
+                .addAction(android.R.drawable.ic_media_pause, "Parar", stopPendingIntent)
+                .build()
+            nm.notify(FULLSCREEN_NOTIFICATION_ID, notification)
         }
-
-        Log.i("AlarmReceiver", "Alarma disparada y fired=true marcado para bout=$boutId")
 
         Log.i("AlarmReceiver", "Alarma disparada y fired=true marcado para bout=$boutId")
     }
