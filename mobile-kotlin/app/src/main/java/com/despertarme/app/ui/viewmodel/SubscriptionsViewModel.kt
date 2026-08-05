@@ -107,22 +107,24 @@ class SubscriptionsViewModel(
 
     // El backend solo devuelve ids en la suscripcion; resolvemos nombres de
     // peleadores con una fetch por evento unico (normalmente 1) y cache local.
-    // Fase 8f: usamos el sport de la suscripcion para la llamada getEvent.
+    // La key del mapa incluye league porque el backend necesita sport+league
+    // para encontrar el provider correcto (ej: atp vs wta para tenis).
     private suspend fun resolveLabels(subs: List<BoutSubscriptionOut>): List<SubscriptionUi> {
-        val cards = subs.map { it.eventId to it.sport }.distinct().associateWith { (eventId, sport) ->
-            runCatching { container.api.getEvent(eventId, sport, "") }.getOrNull()?.also { card ->
+        val cards = subs.map { Triple(it.eventId, it.sport, it.league) }.distinct()
+            .associateWith { (eventId, sport, league) ->
+            runCatching { container.api.getEvent(eventId, sport, league) }.getOrNull()?.also { card ->
                 // Si la card se obtuvo pero el bout no esta (bout_id cambiado por ESPN),
                 // el fallback de abajo lo manejara sin numero (#0).
             } ?: run {
                 android.util.Log.w(
                     "SubscriptionsViewModel",
-                    "getEvent($eventId, $sport) fallo — usando label fallback para suscripciones de este evento",
+                    "getEvent($eventId, $sport, $league) fallo — usando label fallback",
                 )
                 null
             }
         }
         return subs.map { sub ->
-            val card = cards[sub.eventId to sub.sport]
+            val card = cards[Triple(sub.eventId, sub.sport, sub.league)]
             val bout = card?.bouts?.firstOrNull { it.id == sub.boutId }
             val label = if (bout != null) {
                 "${bout.red?.name ?: "TBD"} vs ${bout.blue?.name ?: "TBD"}"
