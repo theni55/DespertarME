@@ -2,6 +2,22 @@
 
 > Registro cronológico de cada sesión de trabajo: qué se hizo y qué quedó pendiente.
 
+## Sesión 35 — Análisis de estrategia lockscreen MIUI (F5-F8) (2026-08-06)
+
+**Rama:** `dev` · **Máquina:** `pacor` (Windows) · **Sin cambios de código — solo documentación.**
+
+**Contexto:** el owner preguntó por las opciones para romper la barrera lockscreen de MIUI detectada en Sesión 34. Se analizó el código actual y se documentó la estrategia.
+
+**Hecho:**
+1. **Revisión del código Android** de alarma/FSI/lockscreen: `AlarmActivity`, `AlarmReceiver`, `DespertarMeFirebaseService`, `AlarmService`, `MainActivity`, `SettingsScreen`, `AndroidManifest.xml`.
+2. **Análisis de las 4 opciones** (F5-F8): F5 es un fix de limpieza independiente (cancelar notificación FSI en `ACTION_STOP`). F6/F7/F8 son alternativas progresivas para el mismo objetivo (mostrar la UI por encima del lockscreen MIUI), no pasos secuenciales obligatorios. F8 (`SYSTEM_ALERT_WINDOW`) no cambia el sistema de alarmas — solo sustituye el canal de UI (Activity → overlay vía `WindowManager.addView()`).
+3. **MIUI**: capa de personalización de Xiaomi/Redmi/Poco que reimplementa la lockscreen de Android. `setFullScreenIntent` funciona pero la Activity se lanza detrás del lockscreen (en Android stock estaría encima).
+4. **Decisión D91** registrada en `decisiones.md`. Secciones de `handoff.md`, `fases.md` y `bitacora.md` actualizadas.
+
+**Pendiente:** implementar F5+F6 juntos (~15 min) y probar en Redmi físico. Si no funciona, avanzar a F7 o directamente F8.
+
+---
+
 ## Sesión 34 — FSI en handleFire/handleStarted + diagnóstico Xiaomi (2026-08-05)
 
 **Rama:** `dev` · **Máquina:** `pacor` (Windows, toolchain Android completo) · **APK instalada en Redmi Note 11 Pro 5G físico**

@@ -29,7 +29,11 @@
 **Limitación Xiaomi MIUI**: el FSI lanza la actividad pero MIUI mantiene la lockscreen encima. En Android stock aparecería sobre la lockscreen.
 
 **Pendiente:**
-1. **F5-F8 — Romper barrera MIUI**: (a) `AlarmService.ACTION_STOP` cancelar FSI notification, (b) `FLAG_DISMISS_KEYGUARD` en intent de Activity, (c) permiso MIUI "Mostrar ventanas emergentes en segundo plano" manual, (d) overlay `SYSTEM_ALERT_WINDOW` si nada funciona.
+1. **F5-F8 — Romper barrera lockscreen MIUI** (D91). El sonido y el FSI funcionan correctamente; el problema es que MIUI (Xiaomi/Redmi/Poco) mantiene la lockscreen encima de la Activity. Opciones (solo se necesita que una funcione, F6/F7/F8 son alternativas, no secuenciales obligatorias):
+   - F5 (limpieza independiente): `AlarmService.ACTION_STOP` debe cancelar también la notificación FSI (`FULLSCREEN_NOTIFICATION_ID`), no solo la suya.
+   - F6 (mínimo esfuerzo): `FLAG_DISMISS_KEYGUARD` + `KeyguardManager.requestDismissKeyguard()` en `AlarmActivity.onCreate()`. Baja probabilidad en MIUI (~20%), pero es 1 línea.
+   - F7 (media): guiar al usuario a conceder el permiso MIUI "Mostrar ventanas emergentes en segundo plano" (Ajustes → Apps → DespertarME → Otros permisos). Probabilidad media (~50%), sin API pública.
+   - F8 (definitiva): `SYSTEM_ALERT_WINDOW` — overlay a pantalla completa vía `WindowManager.addView()`. Misma lógica de alarma, solo cambia el canal de UI (Activity → overlay). Probabilidad alta (~95%).
 2. **Probar suscripción real con evento en vivo** (Tsitsipas ya pasó — esperar próximo evento).
 3. **Bug B** (siguiente alarma no suena — D45 `now+60s` y never-reschedule).
 4. Pendientes históricos: sonido `alarm.ogg`, Doze, Play Store.

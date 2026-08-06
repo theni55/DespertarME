@@ -352,6 +352,15 @@ Sin Android Studio aún → el continuador instala Android Studio + emulador API
 - [x] `./gradlew assembleDebug` recompilar APK tras el cambio de `baseUrl`. *(Hecho en Sesión 20. Release APK pospuesta al tramo Play Store.)*
 - [ ] Smoke end-to-end: crear alerta → alarma local suena a la hora estimada en hardware físico con DnD/silencio. *(Sesión 21: test-alarm y push `update` del poller entregados al móvil. Falta validación con evento real → 25 julio 2026, UFC Fight Night Ankalaev vs Guskov.)*
 
+**Paso 6 — Barrera lockscreen MIUI (F5-F8, D91) 🔶 pendiente**
+
+MIUI (Xiaomi/Redmi/Poco) reimplementa la lockscreen de Android. El `setFullScreenIntent` lanza `AlarmActivity` pero MIUI la mantiene detrás del lockscreen (en Android stock aparecería encima). F5 es un fix de limpieza independiente. F6/F7/F8 son alternativas progresivas para el mismo objetivo — solo se necesita que **una** funcione.
+
+- [ ] **F5 — `ACTION_STOP` cancela notificación FSI**: `AlarmService.onStartCommand` rama `ACTION_STOP` debe cancelar `AlarmReceiver.FULLSCREEN_NOTIFICATION_ID` además de su propia `NOTIFICATION_ID=1`. Fix de limpieza: sin esto, la notificación FSI queda huérfana al parar desde la cortina.
+- [ ] **F6 — `FLAG_DISMISS_KEYGUARD` + `requestDismissKeyguard()`**: añadir `FLAG_DISMISS_KEYGUARD` a los flags de ventana en `AlarmActivity.onCreate()` + llamar a `keyguardManager.requestDismissKeyguard(this, null)`. ~1 línea, baja probabilidad en MIUI (~20%) pero no hace daño.
+- [ ] **F7 — Guía al permiso MIUI "ventanas emergentes"**: añadir paso en onboarding de permisos (`MainActivity`) o fila en `SettingsScreen` que abra `Settings.ACTION_APPLICATION_DETAILS_SETTINGS` y explique al usuario que debe activar "Mostrar ventanas emergentes en segundo plano" en Ajustes MIUI → Apps → DespertarME → Otros permisos. Sin API pública para detectarlo programáticamente. Probabilidad media (~50%).
+- [ ] **F8 — Overlay `SYSTEM_ALERT_WINDOW`** (fallback definitivo): permiso `SYSTEM_ALERT_WINDOW` + `WindowManager.addView()` con layout de alarma a pantalla completa. Misma lógica de alarma, solo cambia el canal de UI: en vez de lanzar `AlarmActivity`, se crea una ventana overlay que flota encima de todo (incluido lockscreen). `AlarmReceiver` y `launchFullScreenAlarm` bifurcan a overlay si `canFsi == false` o como fallback. Requiere que el usuario conceda el permiso manualmente (`Settings.ACTION_MANAGE_OVERLAY_PERMISSION`). Probabilidad alta (~95%).
+
 ### Fase 7c — Deploy + smoke real (Sesión 14 plan, reescrito con stack Kotlin; planificado Sesión 19 vía Opción C: Railway URL)
 
 - [x] Backend en Railway (D33) con env-vars: `FCM_CREDENTIALS_JSON` + `APP_ENV=production`. PG + Redis add-ons operativos. *(Sesión 20: deploy exitoso en Railway. `JWT_SECRET` ya no aplica tras pivot Device sin auth JWT D37.)*
