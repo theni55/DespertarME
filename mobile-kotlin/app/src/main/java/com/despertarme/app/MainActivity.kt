@@ -37,6 +37,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.lifecycleScope
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -44,6 +45,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.despertarme.app.alarm.AlarmActivity
+import com.despertarme.app.alarm.AlarmScheduler
 import com.despertarme.app.alarm.AlarmService
 import com.despertarme.app.data.AppContainer
 import com.despertarme.app.ui.screens.CompetitionsScreen
@@ -66,6 +68,7 @@ import com.despertarme.app.ui.viewmodel.SubscriptionsViewModel
 import com.despertarme.app.ui.viewmodel.SubscriptionsViewModelFactory
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
 
@@ -100,6 +103,7 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         if (waitingForSettingsReturn) {
             waitingForSettingsReturn = false
+            restorePendingAlarmsIfAllowed()
             advancePermissionChain()
         } else if (permissionStep == 0) {
             advancePermissionChain()
@@ -197,6 +201,13 @@ class MainActivity : ComponentActivity() {
         } else {
             true
         }
+
+    private fun restorePendingAlarmsIfAllowed() {
+        if (!canScheduleExactAlarms()) return
+        lifecycleScope.launch(Dispatchers.IO) {
+            AlarmScheduler.restorePending(applicationContext)
+        }
+    }
 
     companion object {
         private const val REQUEST_NOTIFICATIONS = 1001

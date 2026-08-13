@@ -37,15 +37,31 @@ object PendingAlarmStorage {
     private val json = Json { ignoreUnknownKeys = true }
 
     suspend fun put(context: Context, alarm: PendingAlarm) {
-        val all = readAll(context).toMutableMap()
-        all[alarm.boutId] = alarm
-        writeAll(context, all)
+        context.alarmDataStore.edit { prefs ->
+            val all = decode(prefs[PENDING_ALARMS_KEY]).toMutableMap()
+            all[alarm.boutId] = alarm
+            prefs[PENDING_ALARMS_KEY] = json.encodeToString(PendingAlarmsMap(all))
+        }
+    }
+
+    suspend fun putIfNotFired(context: Context, alarm: PendingAlarm): Boolean {
+        var stored = false
+        context.alarmDataStore.edit { prefs ->
+            val all = decode(prefs[PENDING_ALARMS_KEY]).toMutableMap()
+            if (all[alarm.boutId]?.fired == true) return@edit
+            all[alarm.boutId] = alarm
+            prefs[PENDING_ALARMS_KEY] = json.encodeToString(PendingAlarmsMap(all))
+            stored = true
+        }
+        return stored
     }
 
     suspend fun remove(context: Context, boutId: String) {
-        val all = readAll(context).toMutableMap()
-        all.remove(boutId)
-        writeAll(context, all)
+        context.alarmDataStore.edit { prefs ->
+            val all = decode(prefs[PENDING_ALARMS_KEY]).toMutableMap()
+            all.remove(boutId)
+            prefs[PENDING_ALARMS_KEY] = json.encodeToString(PendingAlarmsMap(all))
+        }
     }
 
     suspend fun get(context: Context, boutId: String): PendingAlarm? =
@@ -55,15 +71,14 @@ object PendingAlarmStorage {
         readAll(context).values.toList()
 
     private suspend fun readAll(context: Context): Map<String, PendingAlarm> {
-        val raw = context.alarmDataStore.data.first()[PENDING_ALARMS_KEY] ?: return emptyMap()
+        val raw = context.alarmDataStore.data.first()[PENDING_ALARMS_KEY]
+        return decode(raw)
+    }
+
+    private fun decode(raw: String?): Map<String, PendingAlarm> {
+        if (raw == null) return emptyMap()
         return runCatching {
             json.decodeFromString<PendingAlarmsMap>(raw).alarms
         }.getOrDefault(emptyMap())
-    }
-
-    private suspend fun writeAll(context: Context, map: Map<String, PendingAlarm>) {
-        context.alarmDataStore.edit { prefs ->
-            prefs[PENDING_ALARMS_KEY] = json.encodeToString(PendingAlarmsMap(map))
-        }
     }
 }

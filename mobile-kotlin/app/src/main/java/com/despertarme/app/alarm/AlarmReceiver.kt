@@ -8,8 +8,6 @@ import android.content.Intent
 import android.os.Build
 import android.util.Log
 import androidx.core.app.NotificationCompat
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.runBlocking
 
 class AlarmReceiver : BroadcastReceiver() {
 
@@ -32,17 +30,6 @@ class AlarmReceiver : BroadcastReceiver() {
 
         val ctx = rawContext.applicationContext
 
-        // D45 — Ring-once: marcar fired=true ANTES de que suene.
-        // runBlocking garantiza escritura sincrona en DataStore antes de que
-        // onReceive retorne. Sin esto, un fire-and-forget async (CoroutineScope)
-        // podria perder el write si el proceso muere antes del flush.
-        runBlocking(Dispatchers.IO) {
-            val existing = PendingAlarmStorage.get(ctx, boutId)
-            if (existing != null) {
-                PendingAlarmStorage.put(ctx, existing.copy(fired = true))
-            }
-        }
-
         // Arrancar el sonido de alarma.
         val serviceIntent = Intent(ctx, AlarmService::class.java).apply {
             action = AlarmService.ACTION_START
@@ -56,14 +43,17 @@ class AlarmReceiver : BroadcastReceiver() {
             headshotRed?.let { putExtra("headshot_red", it) }
             headshotBlue?.let { putExtra("headshot_blue", it) }
         }
-        try {
+        val serviceStarted = try {
             ctx.startForegroundService(serviceIntent)
+            true
         } catch (e: Exception) {
             Log.w("AlarmReceiver", "No se pudo arrancar AlarmService como foreground: ${e.message}")
             try {
                 ctx.startService(serviceIntent)
+                true
             } catch (e2: Exception) {
                 Log.e("AlarmReceiver", "No se pudo arrancar AlarmService: ${e2.message}")
+                false
             }
         }
 
@@ -91,7 +81,7 @@ class AlarmReceiver : BroadcastReceiver() {
         val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
         // Full-screen intent si el permiso esta concedido (Android 14+).
-        // Si no, fallback a startActivity directo desde el BroadcastReceiver.
+        // Si no, fallback a heads-up con accion para abrir la alarma.
         val canFsi = if (Build.VERSION.SDK_INT >= 34) {
             nm.canUseFullScreenIntent()
         } else {
@@ -118,7 +108,6 @@ class AlarmReceiver : BroadcastReceiver() {
                 .setOngoing(true)
                 .addAction(android.R.drawable.ic_media_pause, "Parar", stopPendingIntent)
                 .build()
-            nm.cancel(AlarmService.NOTIFICATION_ID)
             nm.notify(FULLSCREEN_NOTIFICATION_ID, notification)
         } else {
             val notification = NotificationCompat.Builder(ctx, AlarmService.CHANNEL_ID)
@@ -137,6 +126,9 @@ class AlarmReceiver : BroadcastReceiver() {
             nm.notify(FULLSCREEN_NOTIFICATION_ID, notification)
         }
 
-        Log.i("AlarmReceiver", "Alarma disparada y fired=true marcado para bout=$boutId")
+        Log.i(
+            "AlarmReceiver",
+            "Alarma disparada para bout=$boutId; servicio=${if (serviceStarted) "solicitado" else "fallido"}",
+        )
     }
 }

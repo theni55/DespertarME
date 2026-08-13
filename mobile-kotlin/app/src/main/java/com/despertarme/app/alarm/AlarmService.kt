@@ -1,6 +1,7 @@
 package com.despertarme.app.alarm
 
 import android.app.Notification
+import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
@@ -14,6 +15,8 @@ import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
 import androidx.core.app.NotificationCompat
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
 
 class AlarmService : Service() {
 
@@ -27,6 +30,7 @@ class AlarmService : Service() {
 
     private var ringtone: Ringtone? = null
     private var wakeLock: PowerManager.WakeLock? = null
+    private var originalAlarmVolume: Int? = null
 
     private var alarmBoutId: String = ""
     private var alarmEventId: String = ""
@@ -40,6 +44,10 @@ class AlarmService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) {
+            stopPlayback(restoreVolume = true)
+            val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+            nm.cancel(AlarmReceiver.FULLSCREEN_NOTIFICATION_ID)
+            nm.cancel(NOTIFICATION_ID)
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
             return START_NOT_STICKY
@@ -64,18 +72,33 @@ class AlarmService : Service() {
             buildNotification(),
             ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK,
         )
-        playAlarmLoop()
+        val playbackStarted = playAlarmLoop()
+        if (playbackStarted && alarmBoutId.isNotEmpty()) {
+            runBlocking(Dispatchers.IO) {
+                AlarmScheduler.markFired(applicationContext, alarmBoutId)
+            }
+        }
+        if (!playbackStarted) {
+            stopPlayback(restoreVolume = true)
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+            return START_NOT_STICKY
+        }
         return START_STICKY
     }
 
-    private fun playAlarmLoop() {
-        val am = getSystemService(AUDIO_SERVICE) as AudioManager
-        val maxVol = am.getStreamMaxVolume(AudioManager.STREAM_ALARM)
-        am.setStreamVolume(AudioManager.STREAM_ALARM, maxVol, 0)
+    private fun playAlarmLoop(): Boolean {
+        stopPlayback(restoreVolume = false)
         val uri: Uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
             ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
-            ?: return
-        val rt: Ringtone = RingtoneManager.getRingtone(this, uri) ?: return
+            ?: return false
+        val rt: Ringtone = RingtoneManager.getRingtone(this, uri) ?: return false
+        val am = getSystemService(AUDIO_SERVICE) as AudioManager
+        if (originalAlarmVolume == null) {
+            originalAlarmVolume = am.getStreamVolume(AudioManager.STREAM_ALARM)
+        }
+        val maxVol = am.getStreamMaxVolume(AudioManager.STREAM_ALARM)
+        am.setStreamVolume(AudioManager.STREAM_ALARM, maxVol, 0)
         rt.audioAttributes = AudioAttributes.Builder()
             .setUsage(AudioAttributes.USAGE_ALARM)
             .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
@@ -89,6 +112,7 @@ class AlarmService : Service() {
         wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, WAKE_TAG).apply {
             acquire(10 * 60 * 1000L)
         }
+        return true
     }
 
     private fun buildNotification(): Notification {
@@ -135,11 +159,22 @@ class AlarmService : Service() {
     }
 
     override fun onDestroy() {
+        stopPlayback(restoreVolume = true)
+        super.onDestroy()
+    }
+
+    private fun stopPlayback(restoreVolume: Boolean) {
         ringtone?.stop()
         ringtone = null
         wakeLock?.let { if (it.isHeld) it.release() }
         wakeLock = null
-        super.onDestroy()
+        if (restoreVolume) {
+            originalAlarmVolume?.let { volume ->
+                val am = getSystemService(AUDIO_SERVICE) as AudioManager
+                am.setStreamVolume(AudioManager.STREAM_ALARM, volume, 0)
+            }
+            originalAlarmVolume = null
+        }
     }
 
     override fun onBind(intent: Intent?): IBinder? = null

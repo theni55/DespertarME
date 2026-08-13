@@ -106,6 +106,10 @@ fun SettingsScreen(
                 Spacer(modifier = Modifier.height(8.dp))
                 FullScreenIntentRow(context)
             }
+            if (isXiaomiDevice()) {
+                Spacer(modifier = Modifier.height(12.dp))
+                XiaomiPopupPermissionRow(context)
+            }
         }
         SettingsCard(title = "Diagnóstico") {
             Text(
@@ -128,6 +132,61 @@ fun SettingsScreen(
                 )
             }
         }
+    }
+}
+
+private fun isXiaomiDevice(): Boolean =
+    Build.MANUFACTURER.equals("Xiaomi", ignoreCase = true) ||
+        Build.BRAND.equals("Redmi", ignoreCase = true) ||
+        Build.BRAND.equals("POCO", ignoreCase = true)
+
+@Composable
+private fun XiaomiPopupPermissionRow(context: Context) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable {
+                val miuiIntent = Intent("miui.intent.action.APP_PERM_EDITOR").apply {
+                    setClassName(
+                        "com.miui.securitycenter",
+                        "com.miui.permcenter.permissions.PermissionsEditorActivity",
+                    )
+                    putExtra("extra_pkgname", context.packageName)
+                }
+                runCatching { context.startActivity(miuiIntent) }
+                    .onFailure {
+                        val fallback = Intent(
+                            Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                            Uri.parse("package:${context.packageName}"),
+                        )
+                        context.startActivity(fallback)
+                    }
+            }
+            .padding(vertical = 4.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                imageVector = Icons.Filled.Cancel,
+                contentDescription = null,
+                tint = Color(0xFFFFB74D),
+                modifier = Modifier.size(18.dp),
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(text = "Ventana emergente Xiaomi", color = Color.White, fontSize = 14.sp)
+            Spacer(modifier = Modifier.weight(1f))
+            Text(
+                text = "CONFIGURAR",
+                color = com.despertarme.app.ui.theme.UfcRed,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+        Spacer(modifier = Modifier.height(6.dp))
+        Text(
+            text = "En Otros permisos activa Mostrar ventanas emergentes en segundo plano para ver la alarma sobre el bloqueo de MIUI.",
+            color = TextSecondary,
+            fontSize = 12.sp,
+        )
     }
 }
 

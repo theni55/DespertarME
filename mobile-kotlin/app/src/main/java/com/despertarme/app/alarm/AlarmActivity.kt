@@ -1,6 +1,7 @@
 package com.despertarme.app.alarm
 
 import android.app.NotificationManager
+import android.app.KeyguardManager
 import android.content.Intent
 import android.os.Bundle
 import android.view.WindowManager
@@ -62,8 +63,15 @@ class AlarmActivity : ComponentActivity() {
         window.addFlags(
             WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
                 WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
-                WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON,
+                WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or
+                WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD,
         )
+        val keyguardManager = getSystemService(KEYGUARD_SERVICE) as KeyguardManager
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O &&
+            keyguardManager.isKeyguardLocked
+        ) {
+            keyguardManager.requestDismissKeyguard(this, null)
+        }
 
         val fighterRed = intent.getStringExtra("fighter_red") ?: "TBD"
         val fighterBlue = intent.getStringExtra("fighter_blue") ?: "TBD"
@@ -100,16 +108,12 @@ class AlarmActivity : ComponentActivity() {
     }
 
     private fun stopAlarm() {
-        stopService(Intent(this, AlarmService::class.java).apply {
+        startService(Intent(this, AlarmService::class.java).apply {
             action = AlarmService.ACTION_STOP
         })
         val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
         nm.cancel(AlarmReceiver.FULLSCREEN_NOTIFICATION_ID)
-        if (boutId.isNotEmpty()) {
-            kotlinx.coroutines.runBlocking {
-                AlarmScheduler.cancel(applicationContext, boutId)
-            }
-        }
+        if (boutId.isNotEmpty()) AlarmScheduler.cancelScheduled(applicationContext, boutId)
     }
 
 }

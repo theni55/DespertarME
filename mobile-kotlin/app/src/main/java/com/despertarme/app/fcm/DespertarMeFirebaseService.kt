@@ -13,7 +13,9 @@ import com.despertarme.app.R
 import com.despertarme.app.alarm.AlarmActivity
 import com.despertarme.app.alarm.AlarmReceiver
 import com.despertarme.app.alarm.AlarmScheduler
+import com.despertarme.app.alarm.AlarmScheduleResult
 import com.despertarme.app.alarm.AlarmService
+import com.despertarme.app.alarm.AlarmTriggerPolicy
 import com.despertarme.app.alarm.PendingAlarm
 import com.despertarme.app.alarm.PendingAlarmStorage
 import com.google.firebase.messaging.FirebaseMessagingService
@@ -21,6 +23,7 @@ import com.google.firebase.messaging.RemoteMessage
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 
 class DespertarMeFirebaseService : FirebaseMessagingService() {
 
@@ -91,7 +94,7 @@ class DespertarMeFirebaseService : FirebaseMessagingService() {
         val fighterBlue = parts.getOrNull(1)?.trim() ?: "TBD"
 
         val app = application as DespertarMeApp
-        CoroutineScope(Dispatchers.IO).launch {
+        runBlocking(Dispatchers.IO) {
             val existing = PendingAlarmStorage.get(app, boutId)
             if (existing == null) {
                 // El PendingAlarm no existe en DataStore: posible reinstalacion,
@@ -112,20 +115,13 @@ class DespertarMeFirebaseService : FirebaseMessagingService() {
                 PendingAlarmStorage.put(app, reconstructed)
                 Log.i(TAG, "PendingAlarm reconstruido desde payload FCM para bout=$boutId")
                 scheduleFromAlarm(app, reconstructed, estimatedStartMs)
-                return@launch
+                return@runBlocking
             }
 
             // D45 ring-once: si ya sonó la alarma para este combate, ignorar.
             if (existing.fired) {
                 Log.i(TAG, "Update ignorado — alarma ya sonó para bout=$boutId")
-                return@launch
-            }
-
-            // D45 lead>=30: programa la alarma solo en el PRIMER push (cuando el
-            // prev transiciona pre→in). Pushes subsiguientes durante `in` no repro.
-            if (existing.leadMinutes >= 30 && existing.triggerAtMillis > 0L) {
-                Log.i(TAG, "Update ignorado — alarma ya programada (lead>=30) para bout=$boutId")
-                return@launch
+                return@runBlocking
             }
 
             scheduleFromAlarm(app, existing, estimatedStartMs)
@@ -138,15 +134,23 @@ class DespertarMeFirebaseService : FirebaseMessagingService() {
         estimatedStartMs: Long,
     ) {
         val now = System.currentTimeMillis()
-        val trigger: Long = if (alarm.leadMinutes == 0) {
-            maxOf(now + 60_000L, estimatedStartMs - 60_000L)
-        } else if (alarm.leadMinutes >= 30) {
-            now + 60_000L
-        } else {
-            maxOf(now + 60_000L, estimatedStartMs - alarm.leadMinutes * 60_000L + 60_000L)
-        }
+        val trigger = AlarmTriggerPolicy.calculate(now, estimatedStartMs, alarm.leadMinutes)
 
-        AlarmScheduler.schedule(app, alarm.copy(triggerAtMillis = trigger))
+        val result = AlarmScheduler.schedule(app, alarm.copy(triggerAtMillis = trigger))
+        if (result == AlarmScheduleResult.SUPPRESSED) {
+            Log.i(TAG, "Update ignorado por tombstone fired/cancelled para bout=${alarm.boutId}")
+            return
+        }
+        if (result != AlarmScheduleResult.SCHEDULED) {
+            val reason = if (result == AlarmScheduleResult.EXACT_PERMISSION_REQUIRED) {
+                "Activa Alarmas exactas en Ajustes para poder programar este aviso"
+            } else {
+                "No se pudo programar la alarma. Abre DespertarME para reintentarlo"
+            }
+            Log.e(TAG, "$reason (bout=$alarm.boutId)")
+            showInfoNotification(reason)
+            return
+        }
         Log.i(
             TAG,
             "Alarma programada: bout=${alarm.boutId} trigger=$trigger (sonará en ${(trigger - now) / 1000}s)",
@@ -164,7 +168,15 @@ class DespertarMeFirebaseService : FirebaseMessagingService() {
         val fighterRed = parts.getOrNull(0)?.trim() ?: "TBD"
         val fighterBlue = parts.getOrNull(1)?.trim() ?: "TBD"
 
-        cancelAlarmAndNotify(boutId, "\u2694 $fighters — El combate ha empezado")
+        val app = application as DespertarMeApp
+        val alreadyFired = runBlocking(Dispatchers.IO) {
+            AlarmScheduler.suppress(app, boutId)
+        }
+        showInfoNotification("\u2694 $fighters — El combate ha empezado")
+        if (alreadyFired) {
+            Log.i(TAG, "Started informativo — la alarma ya sono para bout=$boutId")
+            return
+        }
 
         val serviceIntent = Intent(this, AlarmService::class.java).apply {
             action = AlarmService.ACTION_START
@@ -282,7 +294,6 @@ class DespertarMeFirebaseService : FirebaseMessagingService() {
                 .setOngoing(true)
                 .addAction(android.R.drawable.ic_media_pause, "Parar", stopPendingIntent)
                 .build()
-            nm.cancel(AlarmService.NOTIFICATION_ID)
             nm.notify(AlarmReceiver.FULLSCREEN_NOTIFICATION_ID, notification)
         } else {
             val notification = NotificationCompat.Builder(this, AlarmService.CHANNEL_ID)
@@ -298,19 +309,14 @@ class DespertarMeFirebaseService : FirebaseMessagingService() {
                 )
                 .addAction(android.R.drawable.ic_media_pause, "Parar", stopPendingIntent)
                 .build()
-            nm.cancel(AlarmService.NOTIFICATION_ID)
             nm.notify(AlarmReceiver.FULLSCREEN_NOTIFICATION_ID, notification)
         }
     }
 
     private fun cancelAlarmAndNotify(boutId: String, message: String) {
         val app = application as DespertarMeApp
-        CoroutineScope(Dispatchers.IO).launch {
-            val existing = PendingAlarmStorage.get(app, boutId)
-            if (existing != null && !existing.fired) {
-                PendingAlarmStorage.put(app, existing.copy(fired = true))
-            }
-            AlarmScheduler.cancel(app, boutId)
+        runBlocking(Dispatchers.IO) {
+            AlarmScheduler.suppress(app, boutId)
         }
         showInfoNotification(message)
     }

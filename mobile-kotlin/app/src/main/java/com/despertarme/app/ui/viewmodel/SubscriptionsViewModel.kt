@@ -89,16 +89,15 @@ class SubscriptionsViewModel(
     fun cancel(subId: String) {
         viewModelScope.launch {
             try {
+                val current = _state.value.subscriptions.firstOrNull { it.sub.id == subId }?.sub
                 container.api.deleteSubscription(subId)
+                if (current != null) {
+                    AlarmScheduler.suppress(DespertarMeApp.instance, current.boutId)
+                }
                 _state.value = _state.value.copy(
                     subscriptions = _state.value.subscriptions.filterNot { it.sub.id == subId },
                 )
                 _snack.value = "Alerta cancelada"
-
-                val current = _state.value.subscriptions.firstOrNull { it.sub.id == subId }?.sub
-                if (current != null) {
-                    AlarmScheduler.cancel(DespertarMeApp.instance, current.boutId)
-                }
             } catch (t: Exception) {
                 _snack.value = "No se pudo cancelar: ${t.message ?: "error"}"
             }
