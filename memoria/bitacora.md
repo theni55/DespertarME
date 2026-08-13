@@ -2,6 +2,44 @@
 
 > Registro cronológico de cada sesión de trabajo: qué se hizo y qué quedó pendiente.
 
+## Sesión 37 — Fiabilidad de alarmas y MIUI F5/F6/F7 (2026-08-07)
+
+**Rama:** `dev` · **Máquina:** `javier.romero` (Windows)
+
+**Hecho:**
+
+1. Corregida cancelacion local rota de suscripciones.
+2. Persistencia de alarmas atomica en DataStore.
+3. Politica pura de trigger con cuatro tests: lead 0, 5, 30 y update tardio.
+4. Lead 30 deja de ignorar reestimaciones; `ring-once` se marca tras iniciar audio.
+5. Scheduling exacto devuelve errores explicitos, conserva pendientes y se restaura al conceder permiso/reiniciar.
+6. Servicio de sonido idempotente: no deja tonos anteriores, libera wake lock, restaura volumen y limpia notificaciones al parar.
+7. FCM espera a persistir/programar; BootReceiver usa `goAsync()`.
+8. F5/F6/F7 MIUI implementadas: STOP completo, dismiss keyguard y guia al permiso de ventanas emergentes.
+9. D92 registrada. F8 overlay diferido hasta prueba fisica.
+
+**Pendiente:** smoke en Redmi bloqueado/app cerrada, dos alarmas consecutivas, Doze y reboot. No declarar resuelta la barrera MIUI hasta esa validacion.
+
+---
+
+## Sesión 36 — Sincronización y auditoría integral de fiabilidad (2026-08-07)
+
+**Rama:** `dev` · **Máquina:** `javier.romero` (Windows) · **Sin fixes funcionales; documentación y plan.**
+
+**Hecho:**
+
+1. `git fetch --prune` + fast-forward de `dev`: 101 commits nuevos, `9b4b534 -> 206b3ab`, sin conflictos.
+2. Eliminado de la configuración local el token que estaba incrustado en la URL de `origin`; remoto conservado como HTTPS sin credencial.
+3. Leídos handoff, README, decisiones, fases, arquitectura, contexto y código actual de backend/Android.
+4. Auditoría multi-eje de alarmas, FCM, poller, API, persistencia, navegación, refresh y calidad.
+5. Detectados 18 hallazgos priorizados. Los más críticos: cancelación local rota, dobles sin polling, bloqueo del main thread, carreras de DataStore y ausencia de manejo al fallar exact alarms.
+6. Verificación: Android build/tests verdes; backend 178/179 tests, ruff verde, mypy y black rojos por problemas concretos documentados.
+7. Creado `memoria/plan-auditoria-fiabilidad-2026-08-07.md` con evidencia, corrección propuesta, orden de cinco sesiones y criterios de cierre.
+
+**Pendiente:** empezar por red de seguridad + P0, no por el overlay MIUI: primero asegurar que crear/cancelar/persistir dos alarmas funciona de forma determinista.
+
+---
+
 ## Sesión 35 — Análisis de estrategia lockscreen MIUI (F5-F8) (2026-08-06)
 
 **Rama:** `dev` · **Máquina:** `pacor` (Windows) · **Sin cambios de código — solo documentación.**

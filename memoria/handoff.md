@@ -6,6 +6,41 @@
 
 ## Última sesión
 
+**Fecha:** 2026-08-07 · **Sesión 37 — Fiabilidad de alarmas Android + MIUI F5/F6/F7 implementada. Rama `dev`.**
+
+**Hecho:**
+
+1. Cancelar una suscripcion ahora captura el `boutId` antes de quitar la card y cancela la alarma local correctamente.
+2. `PendingAlarmStorage` muta el mapa dentro de una unica transaccion `DataStore.edit`, evitando perder alarmas concurrentes.
+3. Nueva `AlarmTriggerPolicy` pura y testeada: lead 0/5/30, update tardio y suelo de 60 s. Lead 30 vuelve a reprogramarse con estimaciones nuevas.
+4. `AlarmScheduler` devuelve resultado, conserva pendientes cuando falta exact-alarm y los restaura al volver de Ajustes o tras reboot.
+5. `AlarmService` es idempotente: detiene tono/wakelock previo, restaura el volumen original, marca `fired` solo tras arrancar audio y STOP limpia ambas notificaciones.
+6. `BootReceiver` usa `goAsync()`; FCM completa persistencia/scheduling antes de retornar.
+7. MIUI: `FLAG_DISMISS_KEYGUARD` + `requestDismissKeyguard()` y acceso guiado al permiso "ventanas emergentes" de Xiaomi/Redmi/Poco.
+8. F8 (`SYSTEM_ALERT_WINDOW`) no implementado: solo se usara si F6+F7 fallan en el Redmi.
+
+**Pendiente antes de declarar resuelto MIUI:** instalar APK en Redmi, activar el permiso emergente y probar bloqueado con app cerrada; despues dos alarmas consecutivas y Doze.
+
+---
+
+## Última sesión
+
+**Fecha:** 2026-08-07 · **Sesión 36 — `dev` sincronizada (101 commits) + auditoría integral de fiabilidad. Sin fixes funcionales; plan preparado en `memoria/plan-auditoria-fiabilidad-2026-08-07.md`.**
+
+**Estado verificado:**
+
+1. `dev` avanzó por fast-forward de `9b4b534` a `206b3ab`; árbol limpio y sincronizado con `origin/dev`.
+2. Android: `assembleDebug` + `testDebugUnitTest` verdes. Solo existe el test placeholder `2 + 2 = 4`; alarmas sin cobertura automatizada.
+3. Backend: `ruff` verde; `pytest` 178/179 (falla fixture NFL dependiente de fecha); `mypy` falla por validador duplicado en `config.py`; `black --check` detecta 4 ficheros.
+4. Hallazgos P0 confirmados: cancelar en UI no cancela alarma local; tenis dobles no llega al poller por id `_doubles`; registro bloquea main thread; DataStore puede perder alarmas concurrentes; fallo de exact alarm se pierde; Bug B no tiene regresión ni causa única.
+5. Hallazgos P1 principales: poller agrupa sin `league`; error FCM permanente de `update` se reintenta; buffer tenis 900 s no se usa; auto-refresh se duplica al navegar; ringtone anterior puede quedar sonando; BootReceiver no usa `goAsync`; UNIQUE de alert log pierde mensajes.
+
+**Próximo paso recomendado:** ejecutar la Sesión 1 del plan: reparar gates, crear red de seguridad Android y corregir cancelación local + almacenamiento atómico antes de cambiar la política D45/MIUI.
+
+---
+
+## Última sesión
+
 **Fecha:** 2026-08-05 · **Sesión 34 — FSI en handleFire/handleStarted + diagnóstico Redmi Note 11 Pro 5G. Rama `dev`.**
 
 **Hecho:**
