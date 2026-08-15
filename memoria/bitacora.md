@@ -24,10 +24,14 @@
 
 **Verificación:** pytest **194/194** · ruff · black --check · mypy limpios · `alembic upgrade/downgrade` OK en SQLite · Android `testDebugUnitTest` + `assembleDebug` verdes.
 
+**Cierre (misma sesión):**
+1. Merge `fix/auditoria-fiabilidad` → `dev` (fast-forward) + push a origin (`8299f24`). Rama local borrada.
+2. Railway redeploy automático + migración A10 `e533157bd26f` aplicada en Postgres (`GET /health` OK). Poller enviando pushes reales (update/started de UFC 330 al emulador).
+3. Smoke emulador (`pixel_6_api34`, APK reinstalada): Home multi-sport con datos reales; test-alarm end-to-end OK (FCM `fire` → `AlarmService` foreground + sonido en loop + `AlarmActivity` full-screen con caras/DETENER). El corte de audio de una prueba intermedia era parada manual, no bug.
+
 **Pendiente:**
-1. Merge `fix/auditoria-fiabilidad` → `dev` y push (Railway redeploy).
-2. Smoke en hardware físico (Redmi MIUI: F6/F7, Doze, dos alarmas consecutivas, suscripción real).
-3. Deuda histórica: sonido `alarm.ogg`, Play Store.
+1. Smoke en hardware físico (Redmi MIUI: F6/F7, Doze, dos alarmas consecutivas, suscripción real).
+2. Deuda histórica: sonido `alarm.ogg`, Play Store.
 
 ---
 

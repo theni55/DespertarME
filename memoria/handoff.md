@@ -6,7 +6,7 @@
 
 ## Última sesión
 
-**Fecha:** 2026-08-15 · **Sesión 38 — Cierre de auditoría de fiabilidad (A2, A3, A7–A14, A18). Rama `fix/auditoria-fiabilidad` (sin mergear a `dev`).**
+**Fecha:** 2026-08-15 · **Sesión 38 — Cierre de auditoría de fiabilidad (A2, A3, A7–A14, A18). Rama `dev` (mergeada y pusheada, commit `8299f24`).**
 
 **Hecho (backend + Android):**
 
@@ -22,7 +22,12 @@
 
 **Verificación:** pytest **194/194** · ruff · black --check · mypy limpios · migración upgrade/downgrade OK en SQLite · Android `testDebugUnitTest` (AlarmTriggerPolicyTest + nuevo HomeViewModelTest) y `assembleDebug` verdes.
 
-**Pendiente:** merge `fix/auditoria-fiabilidad` → `dev` + deploy Railway; smoke en hardware (Redmi MIUI, Doze, dos alarmas consecutivas).
+**Cierre (misma sesión):**
+- Merge `fix/auditoria-fiabilidad` → `dev` (fast-forward) + **push a origin** (`8299f24`). Rama local borrada.
+- Railway redeploy automático + migración A10 `e533157bd26f` aplicada en Postgres (`GET /health` OK).
+- **Smoke emulador** (`pixel_6_api34`, APK reinstalada): Home multi-sport con datos reales (UFC 330 + NBA); **test-alarm end-to-end OK** — FCM `fire` → `AlarmService` en foreground + sonido en loop (`isLooping`) + pantalla completa `AlarmActivity` con caras y DETENER. El corte de audio visto en una prueba intermedia era una **parada manual** (botón "Parar"/"DETENER"), no un bug.
+
+**Pendiente:** smoke en hardware físico (Redmi MIUI: F6/F7, Doze, dos alarmas consecutivas, suscripción real) + deuda histórica (`alarm.ogg`, Play Store).
 
 ---
 
