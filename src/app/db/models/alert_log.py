@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import DateTime, Enum, ForeignKey, Index, Integer, String, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.models.base import Base
@@ -22,8 +22,18 @@ from app.db.models.base import Base
 class AlertLog(Base):
     __tablename__ = "alert_log"
     __table_args__ = (
-        UniqueConstraint(
-            "subscription_id", "bout_id", "fired_at_epoch_hour", name="uq_alert_idempotency"
+        # A10: la idempotencia real solo aplica a mensajes terminales
+        # `started`/`cancelled`. Las filas `update` son audit puro y se guardan
+        # todas (varias por hora, si la estimacion se mueve). Un `update` y un
+        # `started` en la misma hora ya no colisionan.
+        Index(
+            "uq_alert_status_idem",
+            "subscription_id",
+            "bout_id",
+            "message_type",
+            unique=True,
+            sqlite_where=text("message_type IN ('started', 'cancelled')"),
+            postgresql_where=text("message_type IN ('started', 'cancelled')"),
         ),
     )
 
@@ -38,6 +48,7 @@ class AlertLog(Base):
         String(36), ForeignKey("devices.id", ondelete="CASCADE"), nullable=False, index=True
     )
     bout_id: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    message_type: Mapped[str | None] = mapped_column(String(20), nullable=True)
     fired_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
     fired_at_epoch_hour: Mapped[int] = mapped_column(Integer, nullable=False)
     payload: Mapped[str | None] = mapped_column(String(2000), nullable=True)

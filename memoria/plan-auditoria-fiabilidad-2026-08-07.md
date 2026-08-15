@@ -14,6 +14,8 @@
 
 **Sesion 37 (2026-08-07):** corregidos A1, A4, A5, A6 (politica y ring-once), A15, A16 y A17. Implementadas F5+F6+F7 de D91. La validacion en Redmi fisico y Doze sigue pendiente; F8 overlay no se implementa salvo que F6+F7 fallen en hardware.
 
+**Sesion 38 (2026-08-15):** corregidos A2, A3, A7, A8, A9, A10, A11, A12, A13, A14 y A18. Rama `fix/auditoria-fiabilidad`. Detalle: A2 (dobles tenis: strip `_doubles` + filtro modalidad en poller), A7 (agrupar por `(sport, league, event_id)`), A8 (error FCM permanente invalida `device.fcm_token`), A9 (buffer tenis 900s en `scheduler.buffer_for`), A10 (columna `message_type` + partial unique index), A11 (allowlist sport/liga + 404→fired), A12/A13/A14 (auto-refresh en `LaunchedEffect`, key inmutable, fútbol=1 card + `.take(MAX_FEATURED)`), A3 (arranque: device_id local síncrono, red en background), A18 (config dup, test NFL/tenis clock, black, docs). Pendiente: deploy Railway, smoke en hardware (Redmi/Doze/dos alarmas consecutivas).
+
 ## Hallazgos
 
 ### P0 - Fiabilidad directa de alarmas
@@ -30,6 +32,8 @@
 
 #### A2. Las suscripciones de tenis dobles no pueden ser procesadas por el poller
 
+**Estado:** corregido en Sesion 38.
+
 **Evidencia:** la API usa un id sintetico `eventId_doubles` y solo lo convierte al id ESPN base dentro de `get_event_detail()` (`events.py:273-281`). Android persiste ese id sintetico al suscribirse (`EventDetailViewModel.kt:130-138`). El poller llama directamente a `provider.get_event_card(event_id)` sin quitar el sufijo (`poller.py:127-144`), y `EspnTennisProvider` construye la URL ESPN con el id recibido (`espn_tennis.py:375-378`).
 
 **Impacto:** ESPN responde 404 y el poller salta todas las alertas de dobles. La UI permite crearlas, pero nunca se actualizan ni suenan.
@@ -37,6 +41,8 @@
 **Correccion propuesta:** centralizar la conversion entre id publico y `provider_event_id`; usarla tanto en API como en poller. Mantener el id sintetico para presentacion/modalidad, pero consultar ESPN con el base y filtrar el card por `Doubles`. Test E2E de suscripcion `_doubles` hasta push `update`.
 
 #### A3. El registro del dispositivo bloquea el hilo principal al arrancar
+
+**Estado:** corregido en Sesion 38.
 
 **Evidencia:** `MainActivity.onCreate()` ejecuta `runBlocking` y espera a `container.ensureRegistered()` (`MainActivity.kt:83-85`). Esa ruta puede esperar 3 s por Firebase y despues una llamada Retrofit con timeouts de 10/20 s (`AppContainer.kt:37-40,52-72`).
 
@@ -78,6 +84,8 @@
 
 #### A7. El poller mezcla ligas que compartan `sport + event_id`
 
+**Estado:** corregido en Sesion 38.
+
 **Evidencia:** agrupa por `(sport, event_id)` y toma la liga de la primera suscripcion (`poller.py:120-132`). La clave correcta del provider es `(sport, league)`.
 
 **Impacto:** si ATP/WTA u otras ligas reutilizan un id, una suscripcion se procesa con el provider equivocado. Tambien vuelve no determinista el resultado segun el orden de BD.
@@ -85,6 +93,8 @@
 **Correccion propuesta:** agrupar y cachear por `(sport, league, provider_event_id)`. Test con dos suscripciones de mismo id y ligas distintas.
 
 #### A8. Un error FCM permanente en `update` sigue reintentandose cada ciclo
+
+**Estado:** corregido en Sesion 38.
 
 **Evidencia:** al fallar permanentemente, se escribe una marca Redis y se devuelve `True` (`poller.py:287-294`), pero el camino `update` no consulta `was_fired()` y tampoco cambia `sub.status` ni el device. Como no guarda `last_estimate`, el siguiente poll reenvia lo mismo.
 
@@ -94,6 +104,8 @@
 
 #### A9. El buffer de tenis configurado nunca se usa
 
+**Estado:** corregido en Sesion 38.
+
 **Evidencia:** `buffer_intermatch_tennis_seconds=900` solo aparece en `config.py`. El dispatcher de `scheduler.py:120-133` contempla NBA/NFL y para tenis cae al buffer general MMA de 600 s.
 
 **Impacto:** las estimaciones de tenis quedan 5 minutos antes de la decision D53/documentacion, afectando el momento de alarma.
@@ -102,6 +114,8 @@
 
 #### A10. La auditoria de pushes pierde eventos dentro de la misma hora
 
+**Estado:** corregido en Sesion 38.
+
 **Evidencia:** UNIQUE de `alert_log` sigue siendo `(subscription_id, bout_id, fired_at_epoch_hour)` (`alert_log.py:24-27` y migracion `f7a0001:185-187`). No incluye `message_type`, aunque una misma suscripcion puede recibir varios `update` y despues `started` en una hora.
 
 **Impacto:** `_log_alert()` hace rollback por duplicado y desaparecen filas validas de auditoria. La UI/historial no refleja todas las entregas.
@@ -109,6 +123,8 @@
 **Correccion propuesta:** columna `message_type` real y clave idempotente acorde al mensaje; para `update`, incluir estimacion/version o no imponer unicidad horaria. Migracion y tests de `update -> update -> started`.
 
 #### A11. La API acepta suscripciones a eventos/bouts inexistentes
+
+**Estado:** corregido en Sesion 38.
 
 **Evidencia:** `create_subscription()` valida lead contextual, pero no comprueba que `sport`, `league`, evento y bout existan ni que el match number coincida (`subscriptions.py:50-82`).
 
@@ -120,6 +136,8 @@
 
 #### A12. Cada regreso a una pantalla crea otro auto-refresh infinito
 
+**Estado:** corregido en Sesion 38.
+
 **Evidencia:** cada `LaunchedEffect` llama a `startAutoRefresh()` (`MainActivity.kt:286-345`), pero ese metodo abre un nuevo job en `viewModelScope` y no conserva/cancela el anterior (`HomeViewModel.kt:144-151`, `CompetitionsViewModel.kt:104-111`, `EventDetailViewModel.kt:102-109`).
 
 **Impacto:** tras navegar varias veces hay N loops cada 30 s, multiplicando llamadas, carreras y consumo de bateria/red incluso cuando la ruta ya no esta visible.
@@ -128,6 +146,8 @@
 
 #### A13. El refresh de detalle puede escribir datos de otro evento
 
+**Estado:** corregido en Sesion 38.
+
 **Evidencia:** `refreshSilently()` captura `eventId`, pero lee `currentSport/currentLeague` mutables al hacer la llamada y escribe sin verificar que la navegacion siga siendo la misma (`EventDetailViewModel.kt:111-119`). Los loops duplicados de A12 agravan la carrera.
 
 **Impacto:** al cambiar rapido ATP/WTA/deporte, una respuesta antigua puede sobrescribir el evento actual.
@@ -135,6 +155,8 @@
 **Correccion propuesta:** capturar una key inmutable `(eventId,sport,league)`, cancelar el job anterior y aplicar resultado solo si la key sigue vigente.
 
 #### A14. Home ignora su limite y refresca demasiados detalles
+
+**Estado:** corregido en Sesion 38.
 
 **Evidencia:** `MAX_FEATURED=6` no se usa (`HomeViewModel.kt:233-250`). La seleccion devuelve uno por `sport+league`: actualmente hasta 12 cards. Cada carga y cada 30 s hace todos los listados y luego un detalle por card.
 
@@ -175,6 +197,8 @@
 ### P2 - Seguridad, calidad y deuda operativa
 
 #### A18. Gates y documentacion no representan el estado real
+
+**Estado:** corregido en Sesion 38 (config dup, test NFL/tenis clock, black, docs contexto/arquitectura/README). Los tests Android utiles ya existen (AlarmTriggerPolicyTest, HomeViewModelTest). El riesgo de `POST /api/devices` (X-Device-Id como identidad) se acepta para dogfooding.
 
 - `pytest`: falla un test NFL dependiente del reloj; el fixture ya quedo en el pasado (`test_espn_nfl.py:52-64`).
 - `mypy`: falla por el validador `_normalize_database_url` duplicado (`config.py:75-95`).

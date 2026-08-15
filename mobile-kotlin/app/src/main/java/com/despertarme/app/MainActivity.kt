@@ -67,7 +67,8 @@ import com.despertarme.app.ui.viewmodel.HomeViewModelFactory
 import com.despertarme.app.ui.viewmodel.SubscriptionsViewModel
 import com.despertarme.app.ui.viewmodel.SubscriptionsViewModelFactory
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -83,8 +84,14 @@ class MainActivity : ComponentActivity() {
         val app = application as DespertarMeApp
         container = app.container
 
+        // A3: resuelve el device_id local (DataStore, sin red) de forma síncrona
+        // para que la API lo tenga disponible antes de la primera composición;
+        // el registro con backend (red, timeouts 10/20s) va en segundo plano.
         runCatching {
-            kotlinx.coroutines.runBlocking { withContext(Dispatchers.IO) { container.ensureRegistered() } }
+            kotlinx.coroutines.runBlocking(Dispatchers.IO) { container.ensureDeviceIdLocal() }
+        }
+        lifecycleScope.launch(Dispatchers.IO) {
+            container.registerWithBackend()
         }
         setContent {
             DespertarTheme {
@@ -296,7 +303,13 @@ private fun AppGraph(
         ) {
             composable("home") {
                 val state by homeVm.state.collectAsState()
-                LaunchedEffect(Unit) { homeVm.load(); homeVm.startAutoRefresh() }
+                LaunchedEffect(Unit) {
+                    homeVm.load()
+                    while (isActive) {
+                        delay(30_000)
+                        homeVm.refreshSilently()
+                    }
+                }
                 HomeScreen(
                     state = state,
                     onEventClick = { eventId, sport, league ->
@@ -317,7 +330,13 @@ private fun AppGraph(
             }
             composable("events/{sport}") { entry ->
                 val sport = entry.arguments?.getString("sport") ?: "mma"
-                LaunchedEffect(sport) { competitionsVm.load(sport); competitionsVm.startAutoRefresh() }
+                LaunchedEffect(sport) {
+                    competitionsVm.load(sport)
+                    while (isActive) {
+                        delay(30_000)
+                        competitionsVm.refreshSilently()
+                    }
+                }
                 val state by competitionsVm.state.collectAsState()
                 CompetitionsScreen(
                     state = state,
@@ -353,7 +372,13 @@ private fun AppGraph(
             }
             composable("event/{eventId}") { entry ->
                 val eventId = entry.arguments?.getString("eventId") ?: "none"
-                LaunchedEffect(eventId) { detailVm.load(eventId); detailVm.startAutoRefresh() }
+                LaunchedEffect(eventId) {
+                    detailVm.load(eventId)
+                    while (isActive) {
+                        delay(30_000)
+                        detailVm.refreshSilently()
+                    }
+                }
                 val state by detailVm.state.collectAsState()
                 val snack by detailVm.snackMessage.collectAsState()
                 EventDetailScreen(

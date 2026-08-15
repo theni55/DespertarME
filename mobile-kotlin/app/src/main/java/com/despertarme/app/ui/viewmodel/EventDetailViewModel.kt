@@ -9,7 +9,6 @@ import com.despertarme.app.alarm.PendingAlarmStorage
 import com.despertarme.app.data.AppContainer
 import com.despertarme.app.ui.screens.EventDetailState
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -99,23 +98,17 @@ class EventDetailViewModel(
         }
     }
 
-    fun startAutoRefresh() {
-        viewModelScope.launch {
-            while (true) {
-                delay(30_000)
-                refreshSilently()
-            }
-        }
-    }
-
-    private suspend fun refreshSilently() {
-        val eventId = currentEventId
-        if (eventId.isEmpty() || eventId == "none") return
+    // A12: el bucle de auto-refresh vive en el LaunchedEffect de la pantalla.
+    internal suspend fun refreshSilently() {
+        // A13: capturar una key inmutable (eventId, sport, league) y aplicar el
+        // resultado solo si la navegacion sigue apuntando al mismo evento.
+        val key = Triple(currentEventId, currentSport, currentLeague)
+        if (key.first.isEmpty() || key.first == "none") return
         val card = runCatching {
-            container.api.getEvent(eventId, currentSport, currentLeague)
+            container.api.getEvent(key.first, key.second, key.third)
         }.getOrNull() ?: return
-        val current = _state.value
-        _state.value = current.copy(event = card)
+        if (Triple(currentEventId, currentSport, currentLeague) != key) return
+        _state.value = _state.value.copy(event = card)
     }
 
     fun subscribe(

@@ -36,6 +36,7 @@ from collections import defaultdict
 from datetime import UTC, datetime
 from typing import Any
 
+import httpx
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -54,6 +55,7 @@ from app.engine.state import AlertState
 from app.notifiers.base import AlertPayload, PushNotifier, PushResult
 from app.providers.athletes import AthleteResolver
 from app.providers.base import Provider
+from app.providers.espn_tennis import tennis_event_id_parts
 from app.providers.models import Competitor as ProviderCompetitor
 from app.providers.teams import TeamResolver
 
@@ -117,15 +119,14 @@ class Poller:
         )
         subs = result.scalars().all()
 
-        # D47: agrupar por (sport, event_id) para usar el provider correcto.
-        subs_by_key: dict[tuple[str, str], list[BoutSubscription]] = defaultdict(list)
+        # D47: agrupar por (sport, league, event_id) para usar el provider
+        # correcto con cada liga/deporte (A7: la liga no se toma de la primera
+        # sub del grupo, y ATP/WTA con ids solapados no se mezclan).
+        subs_by_key: dict[tuple[str, str, str], list[BoutSubscription]] = defaultdict(list)
         for sub in subs:
-            subs_by_key[(sub.sport, sub.event_id)].append(sub)
+            subs_by_key[(sub.sport, sub.league or "", sub.event_id)].append(sub)
 
-        card_cache: dict[str, Card] = {}
-
-        for (sport, event_id), event_subs in subs_by_key.items():
-            league = (event_subs[0].league or "") if event_subs else ""
+        for (sport, league, event_id), event_subs in subs_by_key.items():
             provider_key = (sport, league)
             provider = self._providers.get(provider_key)
             if provider is None and league:
@@ -141,7 +142,30 @@ class Poller:
 
             try:
                 card = await self._load_card(provider, event_id, sport, league)
-                card_cache[event_id] = card
+            except httpx.HTTPStatusError as exc:
+                if exc.response.status_code == 404:
+                    # A11: el evento no existe en ESPN (id invalido/borrado). Las
+                    # suscripciones quedan imposibles de procesar para siempre;
+                    # marcarlas fired evita el warning por sub en cada ciclo.
+                    logger.warning(
+                        "Evento %s (sport=%s, league=%s) no existe (404); "
+                        "marcando %d suscripciones como fired",
+                        event_id,
+                        sport,
+                        league,
+                        len(event_subs),
+                    )
+                    for s in event_subs:
+                        s.status = "fired"
+                    await session.commit()
+                    continue
+                logger.exception(
+                    "Error cargando card del evento %s (sport=%s); saltando %d subs",
+                    event_id,
+                    sport,
+                    len(event_subs),
+                )
+                continue
             except Exception:
                 logger.exception(
                     "Error cargando card del evento %s (sport=%s); saltando %d subs",
@@ -164,7 +188,7 @@ class Poller:
                         session,
                         sub,
                         devices.get(sub.device_id),
-                        card_cache[event_id],
+                        card,
                         now,
                         provider,
                     ):
@@ -189,6 +213,11 @@ class Poller:
         event_id = sub.event_id
         sport = sub.sport
 
+        # A2: ESPN solo conoce el id base; el sufijo `_doubles` es solo interno.
+        provider_event_id = event_id
+        if sport == "tennis":
+            provider_event_id, _ = tennis_event_id_parts(event_id)
+
         if device is None or not device.is_active:
             logger.warning("Suscripción %s: device inexistente o inactivo, skip", sub_id)
             return False
@@ -204,7 +233,7 @@ class Poller:
             return False
 
         # E3 — Guard del estado del combate objetivo.
-        target_status_raw = await provider.get_competition_status(event_id, bout_id)
+        target_status_raw = await provider.get_competition_status(provider_event_id, bout_id)
         target_state = target_status_raw.type.state
         if target_state == "in":
             return await self._send_status_push(session, sub, device, card, target, "started", now)
@@ -218,7 +247,7 @@ class Poller:
         prev_bout_status: BoutStatus | None = None
         observed_at: datetime | None = None
         if prev is not None:
-            prev_raw = await provider.get_competition_status(event_id, prev.id)
+            prev_raw = await provider.get_competition_status(provider_event_id, prev.id)
             prev_state = prev_raw.type.state
             prev_bout_status = BoutStatus(
                 bout_id=prev.id,
@@ -230,7 +259,7 @@ class Poller:
             )
             if prev_state == "post":
                 # E2: anclar la transición in→post al primer momento observado.
-                observed_at = await self._state.remember_transition(event_id, prev.id, now)
+                observed_at = await self._state.remember_transition(provider_event_id, prev.id, now)
 
         # D45 — No pushear cuando el combate previo sigue en `pre` (no arrancó).
         # El primer push útil llega cuando el prev transiciona a `in` (lead>=30
@@ -285,13 +314,7 @@ class Poller:
             return True
 
         if result.is_permanent:
-            await self._state.try_mark_fired(sub_id, bout_id, "update")
-            logger.warning(
-                "Push 'update' fallo permanente para sub=%s (token=%s); marcada como fired",
-                sub_id,
-                device_id[:8],
-            )
-            return True
+            return await self._handle_permanent_fcm(session, device, sub, "update")
 
         logger.warning("Push 'update' fallido para suscripción %s: %s", sub_id, result.error)
         return False
@@ -348,22 +371,41 @@ class Poller:
                 await session.commit()
             return True
         # Error permanente de FCM: el token es invalido (NotRegistered) o el
-        # mensaje está mal formado (InvalidArgument, SenderIdMismatch). Marcar
-        # la suscripción como fired para no reintentar en el siguiente ciclo
-        # (spam loop de cancelled/hora).
+        # mensaje esta mal formado (InvalidArgument, SenderIdMismatch). A8:
+        # invalidamos el token del device para pausar TODAS sus suscripciones
+        # hasta que la app se re-registre (en vez de reintentar cada ciclo).
         if result.is_permanent:
-            await self._state.try_mark_fired(sub_id, bout_id, msg_type)
-            if msg_type in ("started", "cancelled"):
-                sub.status = "fired"
-                await session.commit()
-            logger.warning(
-                "Push '%s' fallo permanente para sub=%s; marcada como fired (token=%s)",
-                msg_type,
-                sub_id,
-                device_id[:8],
-            )
-            return True
+            return await self._handle_permanent_fcm(session, device, sub, msg_type)
         return False
+
+    async def _handle_permanent_fcm(
+        self,
+        session: AsyncSession,
+        device: Device,
+        sub: BoutSubscription,
+        msg_type: str,
+    ) -> bool:
+        """Maneja un error FCM permanente (A8).
+
+        Invalida `device.fcm_token` para que el poller skip todas las
+        suscripciones del device (`device.fcm_token is None`) hasta que la app
+        lo vuelva a registrar. `started`/`cancelled` son terminales: la sub ya
+        cumplio su ciclo y se marca `fired`. `update` NO se marca fired para no
+        perder la alerta si el token se recupera (la sub se reanuda sola).
+        """
+        device.fcm_token = None
+        if msg_type in ("started", "cancelled"):
+            sub.status = "fired"
+            await self._state.try_mark_fired(sub.id, sub.bout_id, msg_type)
+        await session.commit()
+        logger.warning(
+            "Push '%s' fallo permanente para sub=%s; token del device=%s invalidado "
+            "hasta re-registro",
+            msg_type,
+            sub.id,
+            device.id[:8],
+        )
+        return True
 
     def _format_fighters(self, target: Bout) -> str | None:
         red = target.red.name if target.red and target.red.name else None
@@ -393,18 +435,35 @@ class Poller:
         if team_resolver is None and sport == "nfl":
             team_resolver = self._team_resolvers.get("nfl")
 
-        event = await provider.get_event_card(event_id)
+        # A2: los ids de tenis pueden llevar el sufijo sintetico `_doubles` (D61).
+        # ESPN solo conoce el id base; tras cargar, filtramos los bouts por la
+        # modalidad pedida para que el previous_bout del poller coincida con el
+        # detalle (singles solo toca singles, doubles solo toca doubles).
+        base_event_id = event_id
+        modalidad: str | None = None
+        if sport == "tennis":
+            base_event_id, modalidad = tennis_event_id_parts(event_id)
+
+        event = await provider.get_event_card(base_event_id)
+
+        provider_bouts = event.bouts
+        if sport == "tennis" and modalidad:
+            provider_bouts = [
+                b
+                for b in provider_bouts
+                if modalidad in ((b.weight_class.text if b.weight_class else "") or "")
+            ]
 
         athlete_ids = [
             corner.athlete.athlete_id
-            for comp in event.bouts
+            for comp in provider_bouts
             for corner in (comp.red_corner, comp.blue_corner)
             if corner and corner.athlete and corner.athlete.athlete_id
         ]
         # D58: para NBA, los competitors traen `team $ref` (no `athlete $ref`).
         team_ids = [
             corner.team.team_id
-            for comp in event.bouts
+            for comp in provider_bouts
             for corner in (comp.red_corner, comp.blue_corner)
             if corner and corner.team and corner.team.team_id
         ]
@@ -434,7 +493,7 @@ class Poller:
             return None
 
         bouts: list[Bout] = []
-        for comp in event.bouts:
+        for comp in provider_bouts:
             comp_date = comp.date
             if comp_date.endswith("Z"):
                 comp_date = comp_date[:-1] + "+00:00"
@@ -497,6 +556,7 @@ class Poller:
             subscription_id=sub_id,
             device_id=device_id,
             bout_id=bout_id,
+            message_type=msg_type,
             fired_at=now,
             fired_at_epoch_hour=int(now.timestamp()) // 3600,
             payload=payload,

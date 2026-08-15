@@ -9,7 +9,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -101,16 +100,8 @@ class CompetitionsViewModel(
         }
     }
 
-    fun startAutoRefresh() {
-        viewModelScope.launch {
-            while (true) {
-                delay(30_000)
-                refreshSilently()
-            }
-        }
-    }
-
-    private suspend fun refreshSilently() {
+    // A12: el bucle de auto-refresh vive en el LaunchedEffect de la pantalla.
+    internal suspend fun refreshSilently() {
         val sport = currentSport
         val tournaments = try {
             when (sport) {

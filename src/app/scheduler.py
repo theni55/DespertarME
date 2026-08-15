@@ -68,6 +68,14 @@ def _football_buffer_for(target: Bout) -> timedelta | None:
     return None
 
 
+def _tennis_buffer_for(target: Bout) -> timedelta | None:
+    """D48/A9: buffer inter-partidos de tenis (15 min). Antes el dispatcher no
+    contemplaba tenis y caia al buffer fijo MMA de 10 min (A9)."""
+    if target.sport != "tennis":
+        return None
+    return timedelta(seconds=settings.buffer_intermatch_tennis_seconds)
+
+
 class PollerScheduler:
     """Ciclo de vida del scheduler + singletons del pipeline de alertas.
 
@@ -89,10 +97,16 @@ class PollerScheduler:
         self._providers[("mma", "")] = EspnUfcProvider(client=http_client)
         self._providers[("tennis", "atp")] = EspnTennisProvider(league="atp", client=http_client)
         self._providers[("tennis", "wta")] = EspnTennisProvider(league="wta", client=http_client)
-        self._providers[("nba", "")] = EspnNbaProvider(league=settings.espn_nba_league, client=http_client)
-        self._providers[("nfl", "")] = EspnNflProvider(league=settings.espn_nfl_league, client=http_client)
+        self._providers[("nba", "")] = EspnNbaProvider(
+            league=settings.espn_nba_league, client=http_client
+        )
+        self._providers[("nfl", "")] = EspnNflProvider(
+            league=settings.espn_nfl_league, client=http_client
+        )
         for league in settings.football_leagues:
-            self._providers[("football", league)] = EspnFootballProvider(league=league, client=http_client)
+            self._providers[("football", league)] = EspnFootballProvider(
+                league=league, client=http_client
+            )
         if settings.app_env == "development":
             import fakeredis.aioredis as fakeredis_aio
 
@@ -124,6 +138,9 @@ class PollerScheduler:
             nfl_result = _nfl_buffer_for(target)
             if nfl_result is not None:
                 return nfl_result
+            tennis_result = _tennis_buffer_for(target)
+            if tennis_result is not None:
+                return tennis_result
             return _football_buffer_for(target)
 
         estimator = EstimatorEngine(

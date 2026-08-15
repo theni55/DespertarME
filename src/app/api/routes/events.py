@@ -37,7 +37,11 @@ from app.providers.base import Provider
 from app.providers.espn_football import EspnFootballProvider
 from app.providers.espn_nba import EspnNbaProvider
 from app.providers.espn_nfl import EspnNflProvider
-from app.providers.espn_tennis import _TOURNAMENT_DISPLAY_NAMES, EspnTennisProvider
+from app.providers.espn_tennis import (
+    _TOURNAMENT_DISPLAY_NAMES,
+    EspnTennisProvider,
+    tennis_event_id_parts,
+)
 from app.providers.espn_ufc import EspnUfcProvider
 from app.providers.models import Bout as ProviderBout
 from app.providers.models import Competitor as ProviderCompetitor
@@ -84,13 +88,21 @@ def _get_provider(sport: str = "mma", league: str = "") -> Provider:
         if sport == "mma":
             _providers[key] = EspnUfcProvider(client=http_client)
         elif sport == "tennis":
-            _providers[key] = EspnTennisProvider(league=league or settings.espn_tennis_league, client=http_client)
+            _providers[key] = EspnTennisProvider(
+                league=league or settings.espn_tennis_league, client=http_client
+            )
         elif sport == "nba":
-            _providers[key] = EspnNbaProvider(league=league or settings.espn_nba_league, client=http_client)
+            _providers[key] = EspnNbaProvider(
+                league=league or settings.espn_nba_league, client=http_client
+            )
         elif sport == "nfl":
-            _providers[key] = EspnNflProvider(league=league or settings.espn_nfl_league, client=http_client)
+            _providers[key] = EspnNflProvider(
+                league=league or settings.espn_nfl_league, client=http_client
+            )
         elif sport == "football":
-            _providers[key] = EspnFootballProvider(league=league or settings.espn_football_league, client=http_client)
+            _providers[key] = EspnFootballProvider(
+                league=league or settings.espn_football_league, client=http_client
+            )
         else:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -274,11 +286,10 @@ async def get_event_detail(
     base_event_id = event_id
     doubles_only = False
     singles_only = False
-    if sport == "tennis" and event_id.endswith("_doubles"):
-        base_event_id = event_id[: -len("_doubles")]
-        doubles_only = True
-    elif sport == "tennis":
-        singles_only = True
+    if sport == "tennis":
+        base_event_id, modalidad = tennis_event_id_parts(event_id)
+        doubles_only = modalidad == "Doubles"
+        singles_only = modalidad == "Singles"
 
     try:
         event = await provider.get_event_card(base_event_id)

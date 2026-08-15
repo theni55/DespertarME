@@ -9,6 +9,7 @@ Cubre los escenarios de esquina del filtro universal de visibilidad (D78):
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -30,10 +31,14 @@ def _load(name: str) -> dict[str, Any]:
 
 
 def _make_tournament(tournament_id: str, name: str, competitions: list[dict]) -> dict:
+    # Fecha dinamica (futuro cercano) para no depender del reloj: el provider
+    # filtra torneos fuera de la ventana de 14 dias, y una fecha fija acabaria
+    # en el pasado con el tiempo (mismo bug que el test NFL de A18).
+    future = (datetime.now(UTC) + timedelta(days=2)).strftime("%Y-%m-%dT%H:%MZ")
     return {
         "id": tournament_id,
         "name": name,
-        "date": "2026-08-01T04:00Z",
+        "date": future,
         "status": {"type": {"state": "in", "completed": False}},
         "competitions": competitions,
     }

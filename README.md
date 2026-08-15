@@ -33,7 +33,7 @@ por teléfono** al usuario.
 ## Stack
 
 Python 3.12 · FastAPI · APScheduler · PostgreSQL · Redis · SQLAlchemy async ·
-httpx · Jinja2 + HTMX · Twilio (llamadas).
+httpx · Firebase Admin (FCM) · Kotlin + Jetpack Compose (app Android).
 
 ## Documentación
 

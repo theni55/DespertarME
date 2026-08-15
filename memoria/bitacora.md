@@ -2,6 +2,35 @@
 
 > Registro cronológico de cada sesión de trabajo: qué se hizo y qué quedó pendiente.
 
+## Sesión 38 — Cierre de auditoría de fiabilidad (A2, A3, A7-A14, A18) (2026-08-15)
+
+**Rama:** `fix/auditoria-fiabilidad` (desde `dev`) · **Máquina:** `pacor` (Windows)
+
+**Contexto:** ejecución del plan `memoria/plan-auditoria-fiabilidad-2026-08-07.md` para corregir de una vez los hallazgos que quedaban abiertos tras la Sesión 37. Tres decisiones de producto confirmadas con el owner vía grilling: fútbol=1 card en Home, arranque con split local/red, y partial unique index para auditoría.
+
+**Hecho:**
+1. **Fase 0 (gates)**: eliminado validador `_normalize_database_url` duplicado en `config.py`; tests NFL y tenis pasan a fecha dinámica/fija (independientes del reloj); `black` formatea 4 ficheros. Baseline 179/179.
+2. **A2 + A7 (poller)**: helper `tennis_event_id_parts()`; `_load_card` y `_process_subscription` deshacen `_doubles` y filtran por modalidad; agrupado por `(sport, league, event_id)`.
+3. **A8 + A11-poller**: `_handle_permanent_fcm` invalida `device.fcm_token`; evento 404 → subs `fired`.
+4. **A9**: `_tennis_buffer_for` (900s) en `scheduler.buffer_for`.
+5. **A10**: `alert_log.message_type` + migración `e533157bd26f` (partial unique index `started`/`cancelled`); `_log_alert` guarda `message_type`.
+6. **A11-route**: allowlist `ALLOWED_SPORTS`/`TENNIS_LEAGUES` + ligas fútbol en `validate_for_sport`.
+7. **A12/A13/A14 (Android)**: auto-refresh en `LaunchedEffect` (se cancela al salir); `refreshSilently` con key inmutable; `selectHomeEvents` agrupa fútbol a 1 card + `.take(MAX_FEATURED)`.
+8. **A3 (Android)**: `AppContainer.ensureDeviceIdLocal()` + `registerWithBackend()`; `MainActivity.onCreate` no bloquea con red.
+9. **A18-docs**: `contexto.md`, `arquitectura.md`, `README.md` actualizados a Device/FCM/Kotlin/multi-sport.
+10. **D93** registrada en `decisiones.md`; plan de auditoría actualizado (hallazgos marcados corregidos); handoff y bitácora actualizados.
+
+**Tests nuevos:** 15 (poller dobles/ligas/FCM-permanente/404/partial-unique, scheduler buffers, API allowlist) + `HomeViewModelTest` (2) Android.
+
+**Verificación:** pytest **194/194** · ruff · black --check · mypy limpios · `alembic upgrade/downgrade` OK en SQLite · Android `testDebugUnitTest` + `assembleDebug` verdes.
+
+**Pendiente:**
+1. Merge `fix/auditoria-fiabilidad` → `dev` y push (Railway redeploy).
+2. Smoke en hardware físico (Redmi MIUI: F6/F7, Doze, dos alarmas consecutivas, suscripción real).
+3. Deuda histórica: sonido `alarm.ogg`, Play Store.
+
+---
+
 ## Sesión 37 — Fiabilidad de alarmas y MIUI F5/F6/F7 (2026-08-07)
 
 **Rama:** `dev` · **Máquina:** `javier.romero` (Windows)

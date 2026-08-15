@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -36,7 +37,9 @@ def _event_url() -> str:
 
 
 def _status_url() -> str:
-    return f"{BASE}/sports/football/leagues/{LEAGUE}/events/{EVENT_ID}/competitions/{EVENT_ID}/status"
+    return (
+        f"{BASE}/sports/football/leagues/{LEAGUE}/events/{EVENT_ID}/competitions/{EVENT_ID}/status"
+    )
 
 
 def _team_url(team_id: str) -> str:
@@ -57,7 +60,7 @@ class TestListEvents:
             mock.get(_events_list_url()).respond(json=_load("event_list.json"))
             mock.get(_event_url()).respond(json=_load("event_401873271.json"))
 
-            events = await provider.list_upcoming_events()
+            events = await provider.list_upcoming_events(min_date=datetime(2020, 1, 1, tzinfo=UTC))
 
         assert len(events) == 1
         assert events[0].id == EVENT_ID

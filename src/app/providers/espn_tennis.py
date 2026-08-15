@@ -50,6 +50,25 @@ def _parse_event_date(raw: str) -> datetime:
     return datetime.fromisoformat(value)
 
 
+_DOUBLES_SUFFIX = "_doubles"
+
+
+def tennis_event_id_parts(event_id: str) -> tuple[str, str | None]:
+    """Separa un `event_id` de tenis en (id base ESPN, modalidad).
+
+    El id publico puede llevar el sufijo sintetico `_doubles` (D61) para
+    distinguir la modalidad en la UI/lista. El poller y el detalle deben
+    consultar ESPN con el id base y filtrar el card por modalidad.
+
+    Devuelve ("<id>_doubles" -> ("<id>", "Doubles"), "<id>" -> ("<id>", "Singles")).
+    Para ids de tenis sin sufijo se asume modalidad Singles (comportamiento
+    historico del detalle). El helper solo aplica a tenis.
+    """
+    if event_id.endswith(_DOUBLES_SUFFIX):
+        return event_id[: -len(_DOUBLES_SUFFIX)], "Doubles"
+    return event_id, "Singles"
+
+
 # Nombres "comunes" de torneos ATP/WTA 2026 (generado via scripts/gen_tennis_names.py).
 # Clave: (league, tournament_id). Si un torneo no esta aqui, se usa el nombre de ESPN.
 _TOURNAMENT_DISPLAY_NAMES: dict[tuple[str, str], str] = {

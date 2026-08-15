@@ -10,7 +10,6 @@ import com.despertarme.app.data.remote.EventSummaryOut
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -141,16 +140,9 @@ class HomeViewModel(
         }
     }
 
-    fun startAutoRefresh() {
-        viewModelScope.launch {
-            while (true) {
-                delay(30_000)
-                refreshSilently()
-            }
-        }
-    }
-
-    private suspend fun refreshSilently() {
+    // A12: el bucle de auto-refresh vive en el LaunchedEffect de la pantalla
+    // (MainActivity) para cancelarse al abandonarla. Este metodo lo invoca.
+    internal suspend fun refreshSilently() {
         val allSummaries = coroutineScope {
             val mmaDeferred = async {
                 runCatching { container.api.listEvents("mma", "") }
@@ -242,11 +234,17 @@ class HomeViewModel(
             all: List<Triple<EventSummaryOut, String, String>>,
         ): List<Triple<EventSummaryOut, String, String>> {
             val sorted = all.sortedBy { (event, _, _) -> parseDateEpoch(event.date) }
-            // 1 destacado (el mas proximo) por sport+league.
+            // A14: 1 destacado (el mas proximo) por combinacion sport+league,
+            // EXCEPTO futbol, que aporta 1 sola card (su partido mas proximo)
+            // para no saturar Home con las 7 ligas. Total natural <= 6
+            // (mma+atp+wta+nba+nfl+futbol); MAX_FEATURED queda como techo.
             return sorted
-                .groupBy { (_, sport, league) -> "$sport-$league" }
+                .groupBy { (_, sport, league) ->
+                    if (sport == "football") "football" else "$sport-$league"
+                }
                 .mapNotNull { (_, events) -> events.firstOrNull() }
                 .sortedBy { (event, _, _) -> parseDateEpoch(event.date) }
+                .take(MAX_FEATURED)
         }
 
         private fun parseDateEpoch(iso: String): Long = runCatching {

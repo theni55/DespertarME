@@ -141,8 +141,7 @@ class EspnNflProvider(_EspnBaseProvider):
         real_comp = competitions[0]
         real_competitors = real_comp.get("competitors") or []
         remapped_competitors = [
-            {**c, "order": 1 if c.get("order") == 0 else 2}
-            for c in real_competitors
+            {**c, "order": 1 if c.get("order") == 0 else 2} for c in real_competitors
         ]
         regulation = (real_comp.get("format") or {}).get("regulation") or {}
         clock_per_quarter = regulation.get("clock", 900.0)

@@ -83,17 +83,6 @@ class Settings(BaseSettings):
                 return v.replace("postgresql://", "postgresql+asyncpg://", 1)
         return v
 
-    @field_validator("database_url", mode="before")
-    @classmethod
-    def _normalize_database_url(cls, v: str) -> str:
-        """Normaliza URLs de PaaS (Railway da `postgresql://`) al driver async."""
-        if isinstance(v, str):
-            if v.startswith("postgres://"):
-                return v.replace("postgres://", "postgresql+asyncpg://", 1)
-            if v.startswith("postgresql://"):
-                return v.replace("postgresql://", "postgresql+asyncpg://", 1)
-        return v
-
 
 @lru_cache
 def get_settings() -> Settings:

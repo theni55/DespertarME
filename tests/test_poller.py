@@ -23,14 +23,26 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime, timedelta
 
+import httpx
+import pytest
 from freezegun import freeze_time
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from app.db.models.alert_log import AlertLog
 from app.db.models.devices import Device
 from app.db.models.subscriptions import BoutSubscription
 from app.engine.poller import MIN_DELTA_SECONDS, Poller
 from app.engine.state import AlertState
+from app.notifiers.base import AlertPayload, PushNotifier, PushResult
+from app.providers.models import Bout as ProviderBout
+from app.providers.models import (
+    CompetitionStatus,
+    CompetitionStatusType,
+    Competitor,
+    Event,
+    WeightClass,
+)
 from tests.conftest import FakeNotifier
 
 # --- Helpers -----------------------------------------------------------------
@@ -348,3 +360,288 @@ async def test_alert_state_remember_transition_anchors_first_observation(fake_re
 
 def test_min_delta_seconds_is_60() -> None:
     assert MIN_DELTA_SECONDS == 60
+
+
+# --- A2/A7: dobles de tenis + agrupado por liga -----------------------------
+
+
+class TennisFakeProvider:
+    """Provider tenis controlado: un bout Singles y uno Doubles con nombres
+    inline (D49), y registro de los `event_id` recibidos para verificar que el
+    poller usa el id base (sin sufijo `_doubles`)."""
+
+    def __init__(self, *, event_id: str = "ev-tennis", event_name: str = "Tennis Test") -> None:
+        self.event_id = event_id
+        self.event_name = event_name
+        self.card_calls: list[str] = []
+        self.status_calls: list[tuple[str, str]] = []
+
+    async def get_event_card(self, event_id: str) -> Event:
+        self.card_calls.append(event_id)
+        singles = ProviderBout(
+            id="singles-1",
+            matchNumber=0,
+            date="2026-07-11T21:00Z",
+            type=WeightClass(text="Men's Singles"),
+            competitors=[
+                Competitor(id="s1r", order=1, name="Player Red"),
+                Competitor(id="s1b", order=2, name="Player Blue"),
+            ],
+        )
+        doubles = ProviderBout(
+            id="doubles-1",
+            matchNumber=0,
+            date="2026-07-11T21:30Z",
+            type=WeightClass(text="Men's Doubles"),
+            competitors=[
+                Competitor(id="d1r", order=1, name="D Red"),
+                Competitor(id="d1b", order=2, name="D Blue"),
+            ],
+        )
+        return Event(
+            id=self.event_id,
+            name=self.event_name,
+            date="2026-07-11T21:00Z",
+            competitions=[singles, doubles],
+        )
+
+    async def get_competition_status(self, event_id: str, competition_id: str) -> CompetitionStatus:
+        self.status_calls.append((event_id, competition_id))
+        return CompetitionStatus(
+            clock=0.0,
+            period=0,
+            type=CompetitionStatusType(state="pre", completed=False),
+        )
+
+
+async def _seed_tennis_sub(
+    session,
+    *,
+    league: str,
+    event_id: str = "ev-tennis",
+    bout_id: str = "doubles-1",
+) -> tuple[Device, BoutSubscription]:
+    device = Device(
+        id=f"dev-{uuid.uuid4().hex[:8]}-bbbb-cccc-dddd-eeeeeeeeeeee",
+        fcm_token="tok-aaaa1111bbbb2222cccc",
+        platform="android",
+        timezone="Europe/Madrid",
+        locale="es-ES",
+        is_active=True,
+    )
+    session.add(device)
+    await session.flush()
+    sub = BoutSubscription(
+        id=str(uuid.uuid4()),
+        device_id=device.id,
+        event_id=event_id,
+        bout_id=bout_id,
+        target_match_number=0,
+        lead_minutes=15,
+        sport="tennis",
+        league=league,
+        status="active",
+    )
+    session.add(sub)
+    await session.commit()
+    return device, sub
+
+
+@freeze_time("2026-07-11T21:26:00+00:00")
+async def test_poller_doubles_uses_base_event_id(db_session, fake_redis) -> None:
+    """A2 — una sub de dobles (event_id `X_doubles`) debe consultar ESPN con el
+    id base `X` (no el sintetico), tanto en get_event_card como en status."""
+    provider = TennisFakeProvider()
+    await _seed_tennis_sub(db_session, league="atp", event_id="ev-tennis_doubles")
+    state = AlertState(client=fake_redis)
+    notifier = FakeNotifier()
+    poller = Poller(
+        providers={("tennis", "atp"): provider},
+        notifier=notifier,
+        state=state,
+        retry_delays=(),
+    )
+
+    await poller.poll_once(db_session, now=datetime.now(UTC))
+
+    assert provider.card_calls == ["ev-tennis"]  # sin sufijo _doubles
+    assert provider.status_calls, "deberia consultar el estado del target"
+    assert all(ev == "ev-tennis" for ev, _ in provider.status_calls)
+
+
+@freeze_time("2026-07-11T21:26:00+00:00")
+async def test_poller_load_card_filters_tennis_by_modalidad(db_session, fake_redis) -> None:
+    """A2 — el card del poller se filtra por modalidad: doubles solo doubles,
+    singles solo singles, para que previous_bout coincida con el detalle."""
+    provider = TennisFakeProvider()
+    poller = Poller(
+        providers={("tennis", "atp"): provider},
+        notifier=FakeNotifier(),
+        state=AlertState(client=fake_redis),
+        retry_delays=(),
+    )
+
+    doubles_card = await poller._load_card(provider, "ev-tennis_doubles", "tennis", "atp")
+    assert [b.id for b in doubles_card.bouts] == ["doubles-1"]
+
+    singles_card = await poller._load_card(provider, "ev-tennis", "tennis", "atp")
+    assert [b.id for b in singles_card.bouts] == ["singles-1"]
+
+
+@freeze_time("2026-07-11T21:26:00+00:00")
+async def test_poller_groups_by_league_not_mixing(db_session, fake_redis) -> None:
+    """A7 — dos subs del mismo event_id en ligas distintas (atp/wta) deben
+    procesarse cada una con su provider, no todas con el de la primera."""
+    atp_provider = TennisFakeProvider()
+    wta_provider = TennisFakeProvider()
+    await _seed_tennis_sub(db_session, league="atp", event_id="ev-tennis", bout_id="singles-1")
+    await _seed_tennis_sub(db_session, league="wta", event_id="ev-tennis", bout_id="singles-1")
+
+    poller = Poller(
+        providers={("tennis", "atp"): atp_provider, ("tennis", "wta"): wta_provider},
+        notifier=FakeNotifier(),
+        state=AlertState(client=fake_redis),
+        retry_delays=(),
+    )
+
+    await poller.poll_once(db_session, now=datetime.now(UTC))
+
+    assert atp_provider.card_calls == ["ev-tennis"]
+    assert wta_provider.card_calls == ["ev-tennis"]
+
+
+# --- A8/A11: error FCM permanente + evento 404 ------------------------------
+
+
+class PermanentNotifier(PushNotifier):
+    """Notifier que falla con error FCM permanente (ej: NotRegistered)."""
+
+    def __init__(self) -> None:
+        self.pushes: list[AlertPayload] = []
+
+    async def send(self, payload: AlertPayload) -> PushResult:
+        self.pushes.append(payload)
+        return PushResult(success=False, error="NotRegistered", is_permanent=True)
+
+
+class NotFoundProvider:
+    """Provider cuyo get_event_card devuelve 404 (evento inexistente)."""
+
+    async def get_event_card(self, event_id: str) -> Event:
+        req = httpx.Request("GET", f"https://example.invalid/{event_id}")
+        raise httpx.HTTPStatusError(
+            "404 Not Found", request=req, response=httpx.Response(404, request=req)
+        )
+
+
+@freeze_time("2026-07-11T21:26:00+00:00")
+async def test_poller_permanent_update_error_invalidates_token_keeps_sub_active(
+    db_session, fake_provider, fake_redis
+) -> None:
+    """A8 — un error FCM permanente en `update` invalida el token del device
+    (pausa todas sus subs) pero NO marca la sub como fired: se reanuda sola
+    cuando la app se re-registre."""
+    device, sub = await _seed_device_and_sub(db_session)
+    fake_provider.set_prev_state("post")
+    fake_provider.set_target_state("pre")
+    poller = Poller(
+        provider=fake_provider,
+        notifier=PermanentNotifier(),
+        state=AlertState(client=fake_redis),
+        retry_delays=(),
+    )
+
+    await poller.poll_once(db_session, now=datetime.now(UTC))
+
+    await db_session.refresh(device)
+    await db_session.refresh(sub)
+    assert device.fcm_token is None
+    assert sub.status == "active"
+
+
+@freeze_time("2026-07-11T21:26:00+00:00")
+async def test_poller_permanent_started_error_fires_sub_and_invalidates_token(
+    db_session, fake_provider, fake_redis
+) -> None:
+    """A8 — error FCM permanente en `started` (terminal): token invalidado y sub
+    marcada fired (ya cumplio su ciclo)."""
+    device, sub = await _seed_device_and_sub(db_session)
+    fake_provider.set_prev_state("post")
+    fake_provider.set_target_state("in")
+    poller = Poller(
+        provider=fake_provider,
+        notifier=PermanentNotifier(),
+        state=AlertState(client=fake_redis),
+        retry_delays=(),
+    )
+
+    await poller.poll_once(db_session, now=datetime.now(UTC))
+
+    await db_session.refresh(device)
+    await db_session.refresh(sub)
+    assert device.fcm_token is None
+    assert sub.status == "fired"
+
+
+@freeze_time("2026-07-11T21:26:00+00:00")
+async def test_poller_404_event_marks_subs_fired(db_session, fake_redis) -> None:
+    """A11 — un evento inexistente (404) marca sus suscripciones como fired en
+    vez de reintentar cada ciclo."""
+    _, sub = await _seed_device_and_sub(db_session)
+    poller = Poller(
+        providers={("mma", ""): NotFoundProvider()},
+        notifier=FakeNotifier(),
+        state=AlertState(client=fake_redis),
+        retry_delays=(),
+    )
+
+    await poller.poll_once(db_session, now=datetime.now(UTC))
+
+    await db_session.refresh(sub)
+    assert sub.status == "fired"
+
+
+# --- A10: idempotencia de auditoria con message_type -------------------------
+
+
+@freeze_time("2026-07-11T21:26:00+00:00")
+async def test_alert_log_partial_unique_allows_update_plus_started(db_session) -> None:
+    """A10 — un `update` y un `started` en la misma hora no colisionan; solo los
+    mensajes terminales (`started`/`cancelled`) son idempotentes por (sub,bout)."""
+    device, sub = await _seed_device_and_sub(db_session)
+    hour = int(datetime.now(UTC).timestamp()) // 3600
+
+    def make_log(msg_type: str, uid: str) -> AlertLog:
+        return AlertLog(
+            id=uid,
+            subscription_id=sub.id,
+            device_id=device.id,
+            bout_id=sub.bout_id,
+            message_type=msg_type,
+            fired_at=datetime.now(UTC),
+            fired_at_epoch_hour=hour,
+            payload=None,
+            notifier_response=None,
+            status="fired",
+            attempts=1,
+        )
+
+    # Varios `update` en la misma hora: todos se guardan (audit puro).
+    db_session.add(make_log("update", str(uuid.uuid4())))
+    await db_session.commit()
+    db_session.add(make_log("update", str(uuid.uuid4())))
+    await db_session.commit()
+
+    # Un `started` en la misma hora ya no colisiona con los `update` previos.
+    db_session.add(make_log("started", str(uuid.uuid4())))
+    await db_session.commit()
+
+    # Un segundo `started` del mismo (sub, bout) si es duplicado → IntegrityError.
+    db_session.add(make_log("started", str(uuid.uuid4())))
+    with pytest.raises(IntegrityError):
+        await db_session.commit()
+    await db_session.rollback()
+
+    logs = (await db_session.execute(select(AlertLog))).scalars().all()
+    assert sum(1 for log in logs if log.message_type == "update") == 2
+    assert sum(1 for log in logs if log.message_type == "started") == 1

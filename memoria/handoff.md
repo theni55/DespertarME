@@ -6,6 +6,28 @@
 
 ## Última sesión
 
+**Fecha:** 2026-08-15 · **Sesión 38 — Cierre de auditoría de fiabilidad (A2, A3, A7–A14, A18). Rama `fix/auditoria-fiabilidad` (sin mergear a `dev`).**
+
+**Hecho (backend + Android):**
+
+1. **A2 (dobles tenis)**: nuevo helper `tennis_event_id_parts()` en `espn_tennis.py`; el poller deshace `_doubles`, consulta ESPN con el id base y filtra la card por modalidad (singles/doubles) en `_load_card` y en `get_competition_status`.
+2. **A7 (ligas)**: el poller agrupa por `(sport, league, event_id)` en vez de `(sport, event_id)`.
+3. **A8 (FCM permanente)**: `_handle_permanent_fcm` invalida `device.fcm_token` (pausa todas las subs del device hasta re-registro); `update` no se marca fired, `started`/`cancelled` sí.
+4. **A11**: allowlist sport/liga en `validate_for_sport` + subs a evento 404 marcadas `fired` en el poller.
+5. **A9**: `_tennis_buffer_for` (900s) cableado en `scheduler.buffer_for`.
+6. **A10**: columna `alert_log.message_type` + migración `e533157bd26f` (drop UNIQUE vieja + partial unique index solo `started`/`cancelled`); `update` es audit puro.
+7. **A12/A13/A14 (Android)**: auto-refresh movido a `LaunchedEffect` de cada pantalla; `refreshSilently` con key inmutable `(eventId, sport, league)`; Home con fútbol=1 card + `.take(MAX_FEATURED)`.
+8. **A3 (Android)**: `AppContainer` partido en `ensureDeviceIdLocal()` (local, síncrono) + `registerWithBackend()` (red, background); `MainActivity.onCreate` ya no bloquea con red.
+9. **A18**: validador duplicado en `config.py`, tests NFL/tenis independientes del reloj, black, docs (`contexto.md`, `arquitectura.md`, `README.md`) actualizadas a Device/FCM/Kotlin/multi-sport.
+
+**Verificación:** pytest **194/194** · ruff · black --check · mypy limpios · migración upgrade/downgrade OK en SQLite · Android `testDebugUnitTest` (AlarmTriggerPolicyTest + nuevo HomeViewModelTest) y `assembleDebug` verdes.
+
+**Pendiente:** merge `fix/auditoria-fiabilidad` → `dev` + deploy Railway; smoke en hardware (Redmi MIUI, Doze, dos alarmas consecutivas).
+
+---
+
+## Última sesión
+
 **Fecha:** 2026-08-07 · **Sesión 37 — Fiabilidad de alarmas Android + MIUI F5/F6/F7 implementada. Rama `dev`.**
 
 **Hecho:**

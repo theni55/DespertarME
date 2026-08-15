@@ -50,6 +50,31 @@ class AppContainer(context: Context) {
     }
 
     suspend fun ensureRegistered(): String {
+        val id = ensureDeviceIdLocal()
+        registerWithBackend()
+        return id
+    }
+
+    /**
+     * A3: resuelve el device_id local (DataStore) y limpia alarmas viejas.
+     * Rápido y sin red: seguro de ejecutar de forma síncrona en el arranque
+     * para dejar el `deviceIdFlow` listo antes de la primera composición.
+     */
+    suspend fun ensureDeviceIdLocal(): String {
+        val id = storage.ensureDeviceId()
+        deviceIdFlow.value = id
+        // Limpiar alarmas viejas del DataStore que puedan sobrevivir
+        // a reinstalaciones (allowBackup). Si el trigger ya pasó o
+        // la alarma ya sonó, cancelarla para evitar fantasmas.
+        AlarmScheduler.cleanupStale(appContext)
+        return id
+    }
+
+    /**
+     * A3: registra el device (y su token FCM) con el backend en segundo plano.
+     * Es la parte con red (timeouts 10/20s) que NO debe bloquear el main thread.
+     */
+    suspend fun registerWithBackend() {
         val id = storage.ensureDeviceId()
         deviceIdFlow.value = id
         val token = freshFcmToken() ?: storage.fcmToken() ?: "no-fcm-yet-$id"
@@ -64,13 +89,8 @@ class AppContainer(context: Context) {
                 ),
             )
         } catch (t: Throwable) {
-            Log.e("DespertarMe", "ensureRegistered failed", t)
+            Log.e("DespertarMe", "registerWithBackend failed", t)
         }
-        // Limpiar alarmas viejas del DataStore que puedan sobrevivir
-        // a reinstalaciones (allowBackup). Si el trigger ya pasó o
-        // la alarma ya sonó, cancelarla para evitar fantasmas.
-        AlarmScheduler.cleanupStale(appContext)
-        return id
     }
 
     suspend fun registerFcmToken(token: String) {

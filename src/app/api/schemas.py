@@ -15,6 +15,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field, field_validator
 
+from app.config import settings
+
 # E2 sigue sin arreglarse del todo en producción (necesita datos reales para
 # calibrar el buffer); para evitar estimaciones "post" inalcanzables con
 # D18=300s, exigimos un lead mínimo de 5 minutos para MMA/Tenis.
@@ -22,6 +24,12 @@ from pydantic import BaseModel, Field, field_validator
 # `est - 60s` con cushion de 1 min sobre lead 0 (mismo patrón D45).
 MIN_LEAD_MINUTES = 5
 NBA_QUARTER_LEAD_MINUTES = 0
+
+# A11: allowlist de deportes/ligas soportados por el poller. Evita suscripciones
+# a deportes/ligas inexistentes que el poller no podria procesar (warnings por
+# sub cada minuto).
+ALLOWED_SPORTS = {"mma", "tennis", "nba", "nfl", "football"}
+TENNIS_LEAGUES = {"atp", "wta"}
 
 
 class DeviceCreate(BaseModel):
@@ -86,8 +94,18 @@ class BoutSubscriptionCreate(BaseModel):
 
     def validate_for_sport(self) -> None:
         """Validacion contextual post-load: la UI debe llamar esta antes de
-        persistir. Permite lead=0 solo para NBA/NFL Q2-Q4.
+        persistir. Permite lead=0 solo para NBA/NFL Q2-Q4. A11: valida que el
+        deporte y la liga existan en el registry del poller.
         """
+        if self.sport not in ALLOWED_SPORTS:
+            raise ValueError(f"Deporte no soportado: {self.sport}")
+        if self.sport == "tennis" and self.league not in TENNIS_LEAGUES:
+            raise ValueError(
+                f"Liga de tenis invalida: {self.league!r} (se espera 'atp' o 'wta')"
+            )
+        if self.sport == "football" and self.league not in set(settings.football_leagues):
+            raise ValueError(f"Liga de futbol invalida: {self.league!r}")
+
         if self.sport in ("nba", "nfl") and self.target_match_number in (2, 3, 4):
             if self.lead_minutes != NBA_QUARTER_LEAD_MINUTES:
                 raise ValueError(f"NBA Q2-Q4 requiere lead_minutes={NBA_QUARTER_LEAD_MINUTES}")
@@ -115,6 +133,7 @@ class AlertLogOut(BaseModel):
     subscription_id: str
     device_id: str
     bout_id: str
+    message_type: str | None = None
     fired_at: datetime
     fired_at_epoch_hour: int
     status: str

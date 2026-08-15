@@ -114,6 +114,61 @@ def test_create_subscription_lead_minutes_minimum(app_client: TestClient) -> Non
     assert resp.status_code == 422
 
 
+def test_create_subscription_rejects_unknown_sport(app_client: TestClient) -> None:
+    """A11 — deporte fuera del registry debe rechazarse con 422."""
+    _register_device(app_client)
+    headers = _headers("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")
+    resp = app_client.post(
+        "/api/subscriptions",
+        json={
+            "event_id": "ev-1",
+            "bout_id": "comp-1",
+            "target_match_number": 1,
+            "lead_minutes": 15,
+            "sport": "rugby",
+        },
+        headers=headers,
+    )
+    assert resp.status_code == 422
+
+
+def test_create_subscription_rejects_tennis_without_league(app_client: TestClient) -> None:
+    """A11 — tenis requiere liga atp/wta."""
+    _register_device(app_client)
+    headers = _headers("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")
+    resp = app_client.post(
+        "/api/subscriptions",
+        json={
+            "event_id": "ev-1",
+            "bout_id": "comp-1",
+            "target_match_number": 1,
+            "lead_minutes": 15,
+            "sport": "tennis",
+        },
+        headers=headers,
+    )
+    assert resp.status_code == 422
+
+
+def test_create_subscription_accepts_valid_tennis(app_client: TestClient) -> None:
+    """A11 — tenis con liga valida se acepta."""
+    _register_device(app_client)
+    headers = _headers("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")
+    resp = app_client.post(
+        "/api/subscriptions",
+        json={
+            "event_id": "ev-1",
+            "bout_id": "comp-1",
+            "target_match_number": 0,
+            "lead_minutes": 15,
+            "sport": "tennis",
+            "league": "atp",
+        },
+        headers=headers,
+    )
+    assert resp.status_code == 201
+
+
 def test_create_subscription_rejects_duplicated_bout(app_client: TestClient) -> None:
     """E6: UNIQUE (device_id, bout_id) impide re-suscribirse al mismo combate."""
     _register_device(app_client)
